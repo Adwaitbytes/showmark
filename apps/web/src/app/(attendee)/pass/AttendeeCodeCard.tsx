@@ -4,8 +4,8 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { listUpcomingEvents, type EventListItem } from "@/lib/checkin/api-passport";
 import { recentEvents, type RecentEvent } from "@/lib/checkin/local-records";
 import { useLocale } from "@/lib/checkin/locale";
+import { ensurePassKey, PassStorageError } from "@/lib/checkin/pass-key";
 import { attendeeCode } from "@/lib/checkin/sign";
-import { ensurePass, PassUnavailableError } from "@/lib/wallet/pass";
 import { Button } from "@/ui/Button";
 import { Select } from "@/ui/Field";
 import { formatShortDate } from "@/ui/format";
@@ -72,8 +72,7 @@ export function AttendeeCodeCard() {
     let cancelled = false;
     (async () => {
       try {
-        const pass = ensurePass();
-        const code = await attendeeCode(pass, BigInt(selectedId));
+        const code = await attendeeCode(ensurePassKey(), BigInt(selectedId));
         const QRCode = await import("qrcode");
         const markup = await QRCode.toString(code, { type: "svg", margin: 0, errorCorrectionLevel: "M", color: { dark: "#141311", light: "#00000000" } });
         if (!cancelled) {
@@ -81,7 +80,7 @@ export function AttendeeCodeCard() {
           setFailed(null);
         }
       } catch (error) {
-        if (!cancelled) setFailed(error instanceof PassUnavailableError ? t.errors.storage.action : t.errors.unknown.action);
+        if (!cancelled) setFailed(error instanceof PassStorageError ? t.errors.storage.action : t.errors.unknown.action);
       }
     })();
     return () => {

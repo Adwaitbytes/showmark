@@ -8,7 +8,8 @@ import { doorPath, domainForTests, ERRORS, mockApi, submitted, TX_CHECK_IN } fro
 test.describe("check-in from a door code", () => {
   test("checks in on load, shows the pending stamp, then the pressed stamp with the receipt", async ({ page }) => {
     const { checkIns } = await mockApi(page, { tx: ["pending", "pending", "success"] });
-    await page.goto(await doorPath(12n));
+    const path = await doorPath(12n);
+    await page.goto(path);
 
     await expect(page.getByText("Builders evening at the library", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("heading", { level: 1, name: "Recording your stamp on QIE" })).toBeVisible();
@@ -20,18 +21,31 @@ test.describe("check-in from a door code", () => {
     await expect(page.getByRole("link", { name: "Open my passport" })).toBeVisible();
     await expect(page.getByText("Lattice Labs pays each verified guest")).toBeVisible();
 
-    // The app signed CheckIn(eventId, attendee) with a pass it created on the spot.
+    // The app signed CheckIn(eventId, attendee, 1) with a pass it created on the spot, and Ticket(eventId, attendee)
+    // with the ticket key from the QR, whose address it sends as `ticket`.
     expect(checkIns).toHaveLength(1);
-    const body = checkIns[0] as { eventId: string; attendee: Address; mode: number; attendeeSig: Hex };
+    const body = checkIns[0] as { eventId: string; attendee: Address; mode: number; ticket: Address; attendeeSig: Hex; ticketSig: Hex };
     expect(body).toMatchObject({ eventId: "12", mode: 1 });
     const signer = await recoverTypedDataAddress({
       domain: domainForTests,
-      types: { CheckIn: [{ name: "eventId", type: "uint256" }, { name: "attendee", type: "address" }] },
+      types: { CheckIn: [{ name: "eventId", type: "uint256" }, { name: "attendee", type: "address" }, { name: "mode", type: "uint8" }] },
       primaryType: "CheckIn",
-      message: { eventId: 12n, attendee: body.attendee },
+      message: { eventId: 12n, attendee: body.attendee, mode: 1 },
       signature: body.attendeeSig,
     });
     expect(signer).toBe(body.attendee);
+    const ticketSigner = await recoverTypedDataAddress({
+      domain: domainForTests,
+      types: { Ticket: [{ name: "eventId", type: "uint256" }, { name: "attendee", type: "address" }] },
+      primaryType: "Ticket",
+      message: { eventId: 12n, attendee: body.attendee },
+      signature: body.ticketSig,
+    });
+    expect(ticketSigner).toBe(body.ticket);
+    // The ticket key itself never leaves the page or lands in storage.
+    expect(JSON.stringify(body)).not.toContain(path.split(".").pop());
+    const stored = await page.evaluate(() => JSON.stringify({ ...window.localStorage }));
+    expect(stored).not.toContain(path.split(".").pop());
 
     // First stamp on a guest pass: suggest linking a wallet, without blocking anything.
     await expect(page.getByRole("link", { name: "Link QIE Wallet" })).toBeVisible();

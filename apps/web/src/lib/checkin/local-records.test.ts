@@ -25,8 +25,10 @@ const request = (eventId: string, doorTime = "1"): CheckInRequest => ({
   attendee: "0x7aE3b1c9D4f20a8E6B5c3D1f9A2e4B6c8D0f1A3b",
   mode: 1,
   doorTime,
+  ticket: "0x3333333333333333333333333333333333333333",
   attendeeSig: `0x${"11".repeat(65)}`,
   doorSig: `0x${"22".repeat(65)}`,
+  ticketSig: `0x${"44".repeat(65)}`,
 });
 
 const stamp = (eventId: string, at: string): Stamp => ({ eventId, eventName: `Event ${eventId}`, city: "Pune", at, mode: 1, tx: `0x${"ab".repeat(32)}`, streak: 0 });

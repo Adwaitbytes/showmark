@@ -85,7 +85,7 @@ const shots: Shot[] = [
     mock: { passport: "full" },
     setup: async (page) => {
       await page.addInitScript((attendee) => {
-        const request = { eventId: "14", attendee, mode: 1, doorTime: "1764245000", attendeeSig: `0x${"11".repeat(65)}`, doorSig: `0x${"22".repeat(65)}` };
+        const request = { eventId: "14", attendee, mode: 1, doorTime: "1764245000", ticket: `0x${"33".repeat(20)}`, attendeeSig: `0x${"11".repeat(65)}`, doorSig: `0x${"22".repeat(65)}`, ticketSig: `0x${"44".repeat(65)}` };
         window.localStorage.setItem("showmark.outbox.v1", JSON.stringify([{ request, eventName: "Solidity study circle", savedAt: Date.now() }]));
       }, TEST_PASS);
     },

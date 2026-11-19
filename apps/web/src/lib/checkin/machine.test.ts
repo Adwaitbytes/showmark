@@ -12,8 +12,10 @@ const request: CheckInRequest = {
   attendee: "0x7aE3b1c9D4f20a8E6B5c3D1f9A2e4B6c8D0f1A3b",
   mode: 1,
   doorTime: "1764245000",
+  ticket: "0x3333333333333333333333333333333333333333",
   attendeeSig: `0x${"11".repeat(65)}`,
   doorSig: `0x${"22".repeat(65)}`,
+  ticketSig: `0x${"44".repeat(65)}`,
 };
 
 const fail = (failure: ApiFailure): ApiResult<never> => ({ ok: false, failure });

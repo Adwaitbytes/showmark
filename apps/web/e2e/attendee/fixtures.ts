@@ -17,17 +17,25 @@ export const TX_WITHDRAW: Hex = "0x1111aaaa2222bbbb3333cccc4444dddd5555eeee6666f
 
 const domain = { name: "Showmark", version: "1", chainId: CHAIN_ID, verifyingContract: REGISTRY } as const;
 
-/** A door code path signed by a throwaway door key, issued now. */
+/** A door code path signed by a throwaway door key, issued now, carrying a fresh ticket key. */
 export async function doorPath(eventId = 12n): Promise<string> {
   const door = privateKeyToAccount(generatePrivateKey());
+  const ticketKey = generatePrivateKey();
+  const ticket = privateKeyToAccount(ticketKey).address;
   const issuedAt = BigInt(Math.floor(Date.now() / 1000));
   const doorSig = await door.signTypedData({
     domain,
-    types: { DoorPass: [{ name: "eventId", type: "uint256" }, { name: "issuedAt", type: "uint64" }] },
+    types: {
+      DoorPass: [
+        { name: "eventId", type: "uint256" },
+        { name: "issuedAt", type: "uint64" },
+        { name: "ticket", type: "address" },
+      ],
+    },
     primaryType: "DoorPass",
-    message: { eventId, issuedAt },
+    message: { eventId, issuedAt, ticket },
   });
-  return new URL(doorPassUrl("http://test.local", { eventId, issuedAt, doorSig })).pathname;
+  return new URL(doorPassUrl("http://test.local", { eventId, issuedAt, doorSig, ticketKey })).pathname;
 }
 
 export const domainForTests = domain;

@@ -40,8 +40,11 @@ function isCheckInRequest(value: unknown): value is CheckInRequest {
     value.mode === 1 &&
     typeof value.doorTime === "string" &&
     /^\d+$/.test(value.doorTime) &&
+    isHex(value.ticket) &&
+    value.ticket.length === 42 &&
     isHex(value.attendeeSig) &&
-    isHex(value.doorSig)
+    isHex(value.doorSig) &&
+    isHex(value.ticketSig)
   );
 }
 
