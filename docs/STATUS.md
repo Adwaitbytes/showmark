@@ -1,28 +1,28 @@
 # Status
 
-Updated 19 Nov 2026, 13:40 IST. Read this first to catch up in two minutes.
+Updated 19 Nov 2026, 16:25 IST. Read this first to catch up in two minutes.
 
 ## Where we are
 
-Gate 0 in progress (target: Fri 20 Nov morning).
+Gate 0 is met and Gate 1 is mostly met, two days early. The full product is live on https://showmark.vercel.app against QIE testnet, and the first real check-in and payout went through it end to end (see EVIDENCE.md).
 
-| Workstream | State |
+| Area | State |
 |---|---|
-| Lead | Brief saved, rules in CLAUDE.md, name chosen (Showmark), chain probed, interfaces written, repo and Vercel project created |
-| A Protocol | Building contracts and tests in `packages/contracts` |
-| B Backend | Building relayer, indexer, API, database in `apps/web/src/server` and `src/app/api` |
-| C Design and public pages | Building tokens, primitives, landing, traction, passport and docs pages |
-| G SDK and MCP | Building `@showmark/sdk`, React components and the MCP server |
-| Phase 0 research | Verifying QIE facts into `docs/PHASE0.md` |
-| D, E, F (attendee, organizer, sponsor) | Start once the design primitives land |
-| H Verification | Contract audit and QA start when A and the first screens are done |
+| Contracts | Done and audited twice. 218 tests, 100% coverage. A third bond fix (N2-01, N2-02) is being made, then a final audit pass |
+| Testnet deployment | Live and source-verified on testnet.qie.digital (all nine contracts) |
+| Relayer, indexer, API | Live on Vercel with Neon and Upstash. Indexer caught up, cron every 2 minutes |
+| Attendee app | Live. Check-in to stamp in about 8 s on testnet. One bug: passport stuck after "Open my passport"; fix in progress |
+| Organizer console and door screen | Built and tested with mocks; needs a live run with a real wallet |
+| Sponsor console, reports, Safe App, QIEDEX funding | Built and tested with mocks; needs a live run with a real wallet |
+| SDK and MCP server | Done: 85 and 15 tests, MCP live at /api/mcp |
+| Docs | Architecture, security, SDK, Phase 0, decisions, launch kit drafts done; README pending |
+| QA | Independent sweep of every production page at 390 and 1440 in progress |
 
 ## Blocked, and on whom
 
-- Push to GitHub: needs the `workflow` scope on the gh token (Yathu, see NEEDS item 1).
-- Neon and Upstash: need Yathu to run two provisioning commands (NEEDS item 2).
-- Testnet deploy: needs testnet QIE on the deployer (NEEDS item 3). Until then contracts are proven on a local anvil chain with chain id 1983.
-- Mainnet deploy: needs mainnet QIE and the Safe (NEEDS items 4 and 5), plus a clean security review.
+- Mainnet deployment: needs mainnet QIE on the deployer and relayer, and the protocol Safe (Yathu, NEEDS items 4 and 5).
+- Real events and traction: event calendar and any outside sponsor (Yathu, NEEDS items 10 and 11).
+- Wallet journeys on a phone: someone with QIE Wallet on a phone to test linking and withdrawing (Yathu, NEEDS item 9).
 
 ## Wallets
 
@@ -33,9 +33,13 @@ Gate 0 in progress (target: Fri 20 Nov morning).
 
 ## Links
 
-- Repo: https://github.com/Adwaitbytes/showmark (push pending)
+- App: https://showmark.vercel.app
+- Repo: https://github.com/Adwaitbytes/showmark
 - Vercel project: showmark (team adwaitbytes-projects), root `apps/web`
 
-## Next gate
+## Next
 
-Gate 0: Phase 0 written up, interfaces done, a contract on testnet, one relayed check-in end to end.
+1. Final bond fix, final audit pass, redeploy testnet with `scripts/set-vercel-env.sh 1983`.
+2. Fix QA findings; live runs of organizer and sponsor journeys with a wallet.
+3. README with live links and integrations table.
+4. Mainnet deploy the moment funds and the Safe exist.
