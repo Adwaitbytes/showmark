@@ -1,0 +1,23 @@
+/* Door screen motion. Kept here because only the door uses it. Reduced motion is handled globally in globals.css. */
+
+@keyframes door-code-in {
+  from {
+    opacity: 0.25;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@keyframes door-result-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
