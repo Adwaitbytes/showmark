@@ -684,3 +684,110 @@ Because the contracts are immutable:
 - **Otherwise:** deploy, hide bonding and open campaigns in the app, and document N2-01 and N2-02 as v1
   limitations together with a Safe runbook: when several challenges are open against one organizer, never dismiss
   one before checking that the others have locks covering their claims.
+
+---
+
+# Third re-review
+
+## Scope
+
+- Commits `3dc4109` (claim-based challenges) and `badc608` (ABIs, docs). Reviewed `OrganizerBond` and its vault
+  interface (`exposureOf`, `releaseExposure`, `optedIn`) at HEAD `d96ad0f`; `src/` is unchanged since `badc608`.
+- Questions asked: how claims are sized and when (front-running a challenge, exposure changing after filing,
+  races with `releaseExposure`); whether the `claimedOf` / `lockedOf` / `completeUnbond` / `resolve` math holds in
+  any order; slash bounds; deposits; reentrancy.
+- New tests are in `test/audit/ThirdReReviewPoC.t.sol`: `N3-*` pass while an issue exists, `U-*` pin down attacks
+  that fail. The fix workstream also added `test/invariant/BondInvariants.t.sol` (claim identity and holdings).
+
+## Status
+
+| ID | Status | Evidence |
+|---|---|---|
+| N2-01 | **Fixed.** A claim is the campaign's own `exposureOf`, and all exposures share one bond room, so the open claims never sum above the bond at the time of payout. Locks are computed live as `min(stake, claimedOf)`, so dismissing one challenge never frees stake another open claim needs. Slashes are bounded by `min(claim, current stake)`. | `test_U01_sockChallengeNoLongerShieldsStake`, `test_U02_slashBoundedByStakeInAnyOrder`, the fix workstream's `test_N2_01_*`, `BondInvariants` |
+| N2-02 | **Fixed.** Approved-event campaigns and token campaigns (open campaigns are native-only) have no claim (`NoBondClaim`). | `test_U03_noChallengeFromApprovedOrTokenCampaign`, the fix workstream's `test_N2_02_*` |
+
+## Math checked under any order
+
+- **The stake identity.** `bond` adds to bonded. `requestUnbond` moves bonded to pending. `completeUnbond` pays
+  `pending - max(0, min(stake, claimed) - bonded)` and keeps the rest in pending, so afterwards
+  `bonded + pending >= min(stake, claimed)`. `resolve` removes at most `min(claim, stake)` from bonded, then from
+  pending, without underflow.
+- **`claimedOf`.** It equals the sum of open claims: it is added in `challenge` and subtracted exactly once in
+  `resolve`, which `resolved` and `_openFor` guard against replay.
+- **Holdings.** Bond holdings equal the sum of bonded + pending + deposits of open challenges + `depositOwed`, so
+  nothing is stranded (U-01, U-02).
+- **Front-running a challenge.** The organizer cannot shrink `exposureOf` before the grace period ends (release
+  reverts) and cannot move stake out faster than `UNBOND_DELAY`. Bonded eligibility uses bonded stake only, so at
+  every payout `exposure <= bonded`. An organizer who requests unbond after draining needs 7 days to leave, and
+  any claim filed in that time is held back from the pending amount.
+- **Reentrancy.** `resolve`, `completeUnbond` and `claimDeposit` share one guard and update state before
+  `sendValue`. `challenge` only makes view calls to the immutable vault. A re-entering recipient finds nothing
+  left to take.
+- **Deposits.** The exact value is required. Each resolution credits the deposit once, by pull payment, to the
+  sponsor after a slash or to the organizer after a dismissal.
+
+## New findings
+
+| ID | Severity | Title | PoC |
+|---|---|---|---|
+| N3-01 | Low | A claim is a snapshot of exposure at filing; exposure added afterwards is not covered | `test_N3_01_claimSnapshotMissesLaterExposure` |
+| N3-02 | Low | The sponsor's challenge window ends at `endsAt + SETTLE_GRACE`; anyone can then release exposure and void any later challenge | `test_N3_02_releaseClosesChallengeWindowAtGrace` |
+
+### N3-01 Low: claim snapshot
+
+**Location:** `src/OrganizerBond.sol` `challenge` (`claim = exposureOf(...)` stored in the challenge).
+
+**Description and scenario.** A sponsor challenges at the first suspicious payout (claim 1 QIE). The organizer
+keeps settling presences it had already recorded. `closeCampaign` does not stop them, because presences up to the
+close stay payable during the grace period. Exposure reaches 10 QIE. A second challenge reverts with
+`DuplicateChallenge`, the organizer unbonds 9 QIE after 7 days, and only 1 QIE is slashable. The sponsor can avoid
+this by challenging late instead of early, but nothing in the contract or the UI tells them so.
+
+**Fix.** Release is blocked while a challenge for the pair is open, so `exposureOf` can only grow during that
+time. Let anyone raise a claim to the current exposure:
+
+```solidity
+function refreshClaim(uint256 challengeId) external {
+    Challenge storage c = _challenges[challengeId];
+    if (c.organizer == address(0) || c.resolved) revert ChallengeNotOpen();
+    uint256 current = ICampaignVault(vault).exposureOf(c.campaignId, c.organizer);
+    if (current > c.claim) { claimedOf[c.organizer] += current - c.claim; c.claim = current; }
+}
+```
+
+Alternatively, read the exposure live in `resolve` and `completeUnbond`. At minimum, tell sponsors in the UI to
+challenge after the last settlement.
+
+### N3-02 Low: the challenge window closes at grace
+
+**Location:** `src/CampaignVault.sol` `releaseExposure` (permissionless at `endsAt + SETTLE_GRACE + 1`);
+`OrganizerBond.challenge` (`NoBondClaim` once exposure is 0).
+
+**Description and scenario.** A sponsor has until `endsAt + 3 days` to notice fraud. After that, the organizer
+releases the exposure in one transaction, or front-runs the sponsor's challenge with it, and the sponsor has no
+claim at all. A short campaign leaves 3 days for review. A sponsor's own `closeCampaign` shortens the window
+further.
+
+**Fix.** Add a separate review period before release, for example
+`block.timestamp > endsAt + SETTLE_GRACE + CHALLENGE_PERIOD` with `CHALLENGE_PERIOD = 7 days`. Bond room is then
+held a week longer, which is the tradeoff. Show the deadline on the sponsor's campaign page.
+
+## Tool results (third re-review)
+
+- `forge test`: 232 passed, 0 failed, 1 skipped (fork test), 16 suites, including 30 tests in `test/audit` and the
+  new bond invariants.
+- `slither .`: 30 results, the same 7 benign detector classes. None is a vulnerability.
+
+## Verdict (third re-review): GO for mainnet
+
+No open finding allows theft or locking of sponsor escrow, attendee or organizer claimables, or bonded stake. The
+Critical and Medium findings from every round are fixed and covered by meaningful regression tests and
+invariants. Bond claims are now independent of the order in which challenges are opened or resolved, and slashes
+are bounded correctly.
+
+Two Low findings remain. Both only narrow how much a sponsor can recover through a challenge depending on when it
+files: N3-01 if it files too early, N3-02 if it files too late. Neither moves money that is not otherwise owed.
+They are cheap to fix (one function, one constant). Because the contracts are immutable, I recommend including
+them if another deploy candidate is cut. If not, ship with sponsor-UI guidance: "challenge after the last
+settlement and before endsAt + 3 days". Keep the trust items already documented in the README: QUSDC issuer burn
+power, the QIE/USDT feed and the Safe's discretionary arbitration.
