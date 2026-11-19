@@ -18,7 +18,7 @@ import { Notice } from "@/ui/Notice";
 import { Sheet, SheetSection } from "@/ui/Sheet";
 import { LoadingRegion, Skeleton } from "@/ui/Skeleton";
 import { StatusMark } from "@/ui/StatusMark";
-import { statusMark } from "./campaign";
+import { countOf, statusMark } from "./campaign";
 import { CampaignFacts } from "./CampaignFacts";
 import { EventsPanel } from "./EventsPanel";
 import { ManageCampaign } from "./ManageCampaign";
@@ -76,12 +76,12 @@ function Reach({ d, chain }: { d: SponsorCampaignDetail; chain: OnChainCampaign 
     { label: "Verified people paid", value: formatCount(d.settledCount), unit: "", note: "One explorer transaction each" },
     { label: "Settled", value: formatTokenAmount(d.settledAmount, d.tokenSymbol), unit: d.tokenSymbol, note: "Including the protocol fee" },
     { label: "Left in escrow", value: formatTokenAmount(balance.toString(), d.tokenSymbol), unit: d.tokenSymbol, note: chain ? "Read from the vault just now" : "From the index" },
-    { label: "Pays for", value: more, unit: "more people", note: d.pricing === 1 ? "At today's QIE price" : "At the current amount per person" },
+    { label: "Pays for", value: more, unit: more === "1" ? "more person" : "more people", note: d.pricing === 1 ? "At today's QIE price" : "At the current amount per person" },
   ];
   return (
     <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-doc bg-rule-soft lg:grid-cols-[1.4fr_1fr_1fr_1fr] [&>*]:bg-sheet">
       {cells.map((c, i) => (
-        <div key={c.label} className={i === 0 ? "col-span-2 flex flex-col gap-1 px-5 py-5 lg:col-span-1" : "flex flex-col gap-1 px-5 py-5"}>
+        <div key={c.label} className={i === 0 || i === cells.length - 1 ? "col-span-2 flex flex-col gap-1 px-5 py-5 lg:col-span-1" : "flex flex-col gap-1 px-5 py-5"}>
           <dt className="text-sm text-ink-soft">{c.label}</dt>
           <dd className="flex flex-wrap items-baseline gap-x-2 leading-none text-ink">
             <span className={i === 0 ? "font-mono text-5xl tracking-[-0.02em] text-vermilion-ink" : "font-mono text-xl sm:text-2xl"}>{c.value}</span>
@@ -126,7 +126,7 @@ function SoftSignals({ d }: { d: SponsorCampaignDetail }) {
     >
       {signals.length === 0 ? (
         <p className="text-base text-ink-soft">
-          {d.settlements.length === 0 ? "Nothing to look at until the first payout." : `Nothing unusual in the latest ${formatCount(d.settlements.length)} payouts.`}
+          {d.settlements.length === 0 ? "Nothing to look at until the first payout." : `Nothing unusual in the latest ${countOf(d.settlements.length, "payout", "payouts")}.`}
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
@@ -187,7 +187,7 @@ function Detail({ id }: { id: string }) {
       <header className="flex flex-col gap-5">
         <div className="flex flex-col gap-3">
           <p className="flex flex-wrap items-center gap-3 text-sm text-ink-soft">
-            <span className="font-medium text-vermilion-ink">Campaign #{d.id}</span>
+            <span className="font-medium whitespace-nowrap text-ink-soft">Campaign #{d.id}</span>
             <StatusMark tone={mark.tone}>{mark.label}</StatusMark>
             {state.status === "ready" && state.refreshing ? <span className="text-xs text-ink-faint">Updating</span> : null}
           </p>

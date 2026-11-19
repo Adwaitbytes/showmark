@@ -1,5 +1,5 @@
 import type { CampaignSummary } from "@/lib/api/types";
-import { formatTokenAmount, formatUsd, type TokenSymbol } from "@/ui/format";
+import { formatCount, formatTokenAmount, formatUsd, type TokenSymbol } from "@/ui/format";
 import type { StatusTone } from "@/ui/StatusMark";
 
 export function statusMark(status: CampaignSummary["status"]): { tone: StatusTone; label: string } {
@@ -41,3 +41,10 @@ export const PROOF_MODE_COPY = {
       "Door staff scan each attendee's own code and the door signs an attestation bound to that one person. Nobody outside the room can get one. It needs staff with a phone or laptop at the door, and it works offline.",
   },
 } as const;
+
+const plurals = new Intl.PluralRules("en-US");
+
+/** "1 payout", "42 payouts": the count formatted, with the right form of the noun. */
+export function countOf(n: number, one: string, many: string): string {
+  return `${formatCount(n)} ${plurals.select(n) === "one" ? one : many}`;
+}

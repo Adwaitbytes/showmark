@@ -207,6 +207,14 @@ export const CAMPAIGN_DETAIL: SponsorCampaignDetail = {
   settlements: SETTLED,
 };
 
+/** Open to bonded organizers, so the challenge deadline shows. */
+export const BONDED_DETAIL: SponsorCampaignDetail = {
+  ...CAMPAIGN_DETAIL,
+  openToBonded: true,
+  minBond: (100n * 10n ** 18n).toString(),
+  challengeDeadline: iso(now + 27 * DAY),
+};
+
 export const EMPTY_DETAIL: SponsorCampaignDetail = {
   ...CAMPAIGN_SUMMARY,
   balance: FUNDED.toString(),

@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { zeroAddress, type Address } from "viem";
-import { aggregatorAbi, erc20Abi } from "@/lib/chain/abi";
+import { aggregatorAbi, erc20Abi, vaultAbi } from "@/lib/chain/abi";
 import { addresses } from "@/lib/chain/addresses";
 import { publicClient } from "@/lib/chain/clients";
-import { vaultSponsorAbi } from "./abi";
 
 // Live reads straight from the chain for numbers that move: the oracle price, the vault's fee snapshot source,
 // balances and allowances. Nothing here is cached server side, so what the sponsor sees is what the vault sees.
@@ -59,8 +58,8 @@ export function useVaultConfig(): Read<VaultConfig> {
     if (addresses.vault === zeroAddress) return;
     let live = true;
     Promise.all([
-      publicClient.readContract({ address: addresses.vault, abi: vaultSponsorAbi, functionName: "feeBps" }),
-      publicClient.readContract({ address: addresses.vault, abi: vaultSponsorAbi, functionName: "maxOracleAge" }),
+      publicClient.readContract({ address: addresses.vault, abi: vaultAbi, functionName: "feeBps" }),
+      publicClient.readContract({ address: addresses.vault, abi: vaultAbi, functionName: "maxOracleAge" }),
     ])
       .then(([feeBps, maxOracleAge]) => {
         if (live) setState({ status: "ready", value: { feeBps, maxOracleAge: Number(maxOracleAge) } });
@@ -141,7 +140,7 @@ export function useOnChainCampaign(id: string): Read<OnChainCampaign> & { reload
     if (!readable) return;
     let live = true;
     publicClient
-      .readContract({ address: addresses.vault, abi: vaultSponsorAbi, functionName: "campaign", args: [BigInt(id)] })
+      .readContract({ address: addresses.vault, abi: vaultAbi, functionName: "campaign", args: [BigInt(id)] })
       .then((c) => {
         if (!live) return;
         setState({

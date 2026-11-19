@@ -13,7 +13,7 @@ import { ArrowRightIcon, RetryIcon } from "@/ui/icons";
 import { Ledger, LedgerRow } from "@/ui/Ledger";
 import { LoadingRegion, Skeleton } from "@/ui/Skeleton";
 import { Wordmark } from "@/ui/Wordmark";
-import { amountText, statusMark } from "./campaign";
+import { amountText, countOf, statusMark } from "./campaign";
 import { CampaignFacts } from "./CampaignFacts";
 import { CsvLink } from "./CampaignConsole";
 import { SettlementsTable } from "./SettlementsTable";
@@ -117,7 +117,7 @@ export function SponsorReport({ id }: { id: string }) {
         <div>
           <H2>Verified reach</H2>
           <Ledger label="Totals">
-            <LedgerRow label="Verified people paid" value={formatCount(c.settledCount)} note={`${formatCount(attendees)} distinct passes`} />
+            <LedgerRow label="Verified people paid" value={formatCount(c.settledCount)} note={countOf(attendees, "distinct pass", "distinct passes")} />
             <LedgerRow label="Paid to attendees" value={amountText(toAttendees, sym)} />
             <LedgerRow label="Paid to organizers" value={amountText(toOrganizers, sym)} />
             <LedgerRow label="Protocol fee" value={amountText(fees, sym)} />
@@ -149,7 +149,7 @@ export function SponsorReport({ id }: { id: string }) {
         {events.length === 0 ? (
           <p className="text-sm text-ink-soft">No events approved and no payouts yet.</p>
         ) : (
-          <div className="relative -mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible">
+          <div tabIndex={0} role="region" aria-label="Events table, scrolls sideways" className="relative -mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible">
           <table className="w-full min-w-[32rem] border-collapse text-left text-sm print:min-w-0">
             <thead>
               <tr className="border-b border-rule text-xs text-ink-soft">
@@ -187,7 +187,7 @@ export function SponsorReport({ id }: { id: string }) {
         <H2>Soft signals</H2>
         <p className="mb-3 max-w-prose text-sm text-ink-soft">Patterns computed from the payouts. They are hints for a second look, not evidence.</p>
         {signals.length === 0 ? (
-          <p className="text-sm">None found in {formatCount(c.settlements.length)} payouts.</p>
+          <p className="text-sm">None found in {countOf(c.settlements.length, "payout", "payouts")}.</p>
         ) : (
           <ul className="flex flex-col gap-2 text-sm">
             {signals.map((s) => (

@@ -30,7 +30,7 @@ function Intro({ signIn }: { signIn: React.ReactNode }) {
   return (
     <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:gap-16">
       <div className="flex flex-col gap-5">
-        <p className="text-sm font-medium text-vermilion-ink">Sponsor console</p>
+        <p className="text-sm font-medium text-ink-soft">Sponsor console</p>
         <h1 className="font-display text-3xl sm:text-4xl">Pay for the people who showed up, and nothing else</h1>
         <p className="max-w-prose text-md text-ink-soft">
           Lock a budget in escrow on QIE. Each verified check-in at an event you fund pays the attendee and the
@@ -171,7 +171,7 @@ function Campaigns({ seat }: { seat: SponsorSeat }) {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-3">
-          <p className="text-sm font-medium text-vermilion-ink">Sponsor console</p>
+          <p className="text-sm font-medium text-ink-soft">Sponsor console</p>
           <h1 className="font-display text-3xl sm:text-4xl">Your campaigns</h1>
           <p className="flex flex-wrap items-center gap-2 text-sm text-ink-soft">
             {seat.safe ? "Funding from Safe" : "Signed in as"} <AddressChip address={seat.account} name={seat.name} />

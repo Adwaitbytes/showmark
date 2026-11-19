@@ -17,10 +17,10 @@ const challengeSchema = z.object({
   expiresAt: z.string(),
 });
 
-/** The current session, or null when signed out (401). Other failures throw ApiRequestError. */
+/** The current session, or null when signed out (200 with null, or 401 from older servers). Other failures throw. */
 export async function readSession(): Promise<Session | null> {
   try {
-    return await apiGet("/api/auth/session", sessionSchema, { cache: "no-store" });
+    return await apiGet("/api/auth/session", sessionSchema.nullable(), { cache: "no-store" });
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 401) return null;
     throw error;

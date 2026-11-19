@@ -49,6 +49,13 @@ export function CampaignFacts({ c, chain }: { c: CampaignSummary; chain: OnChain
         value={<Word>{c.openToBonded ? "Paid" : "Not paid"}</Word>}
         note={c.openToBonded ? `Organizers with a bond of ${formatUnits(BigInt(c.minBond), 18)} QIE or more are paid without approval` : "Only events the sponsor approved are paid"}
       />
+      {c.openToBonded && c.challengeDeadline ? (
+        <LedgerRow
+          label="Challenges"
+          value={when(Math.floor(Date.parse(c.challengeDeadline) / 1000))}
+          note="Open until this moment. If a bonded organizer's check-ins look fake, the sponsor can challenge them before then; the protocol Safe reviews each challenge and can slash the organizer's bond. That review is centralized in this version."
+        />
+      ) : null}
     </Ledger>
   );
 }

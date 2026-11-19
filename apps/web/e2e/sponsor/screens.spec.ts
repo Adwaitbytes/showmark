@@ -4,7 +4,7 @@
  */
 import path from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { CAMPAIGN_DETAIL, CAMPAIGNS, EMPTY_DETAIL, EVENTS, onChainCampaign } from "./fixtures";
+import { BONDED_DETAIL, CAMPAIGN_DETAIL, CAMPAIGNS, EMPTY_DETAIL, EVENTS, onChainCampaign } from "./fixtures";
 import { chainState, installWallet, mockApi, mockChain, type ApiMocks, type ChainState } from "./harness";
 
 const here = path.join(process.cwd(), "e2e", "sponsor");
@@ -187,6 +187,14 @@ const screens: Screen[] = [
     run: async (page) => {
       await asSponsor(page, "/sponsor/7");
       await expect(page.getByRole("heading", { name: "Manage" })).toBeVisible();
+    },
+  },
+  {
+    name: "campaign-bonded",
+    setup: { api: { signedIn: true, campaign: BONDED_DETAIL, events: EVENTS }, chain: { campaign: onChainCampaign({ openToBonded: true, minBond: 100n * 10n ** 18n }) } },
+    run: async (page) => {
+      await asSponsor(page, "/sponsor/7");
+      await expect(page.getByText("Challenges", { exact: true })).toBeVisible();
     },
   },
   {

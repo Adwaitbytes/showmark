@@ -6,7 +6,7 @@ import {
   isHex,
   UserRejectedRequestError,
 } from "viem";
-import { vaultSponsorAbi } from "./abi";
+import { vaultAbi } from "@/lib/chain/abi";
 
 /** What happened and what to do next. Never a raw revert string. */
 export interface PlainError {
@@ -94,7 +94,7 @@ function rpcCode(error: unknown): number | undefined {
 
 function revertName(data: `0x${string}`): string | null {
   try {
-    return decodeErrorResult({ abi: vaultSponsorAbi, data }).errorName;
+    return decodeErrorResult({ abi: vaultAbi, data }).errorName;
   } catch {
     // Not one of the vault's errors; the caller falls back to generic copy.
     return null;

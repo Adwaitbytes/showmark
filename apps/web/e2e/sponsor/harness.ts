@@ -18,7 +18,6 @@ import {
 } from "viem";
 import { createSiweMessage } from "viem/siwe";
 import { aggregatorAbi, erc20Abi, vaultAbi } from "../../src/lib/chain/abi";
-import { vaultSponsorAbi } from "../../src/lib/sponsor/abi";
 
 /** E2E_CHAIN=1990 runs against a mainnet build (QIEDEX funding); the default is testnet. */
 export const MAINNET = process.env.E2E_CHAIN === "1990";
@@ -175,15 +174,15 @@ const campaignCreatedTopics = (id: bigint, sponsor: Address, token: Address) =>
 function callResult(state: ChainState, to: string, data: Hex): Hex {
   const target = getAddress(to);
   if (target === ADDR.vault) {
-    const call = decodeFunctionData({ abi: [...vaultAbi, ...vaultSponsorAbi], data });
+    const call = decodeFunctionData({ abi: vaultAbi, data });
     switch (call.functionName) {
       case "feeBps":
-        return encodeFunctionResult({ abi: vaultSponsorAbi, functionName: "feeBps", result: FEE_BPS });
+        return encodeFunctionResult({ abi: vaultAbi, functionName: "feeBps", result: FEE_BPS });
       case "maxOracleAge":
-        return encodeFunctionResult({ abi: vaultSponsorAbi, functionName: "maxOracleAge", result: 172_800n });
+        return encodeFunctionResult({ abi: vaultAbi, functionName: "maxOracleAge", result: 172_800n });
       case "campaign":
         if (!state.campaign) throw new Error("UnknownCampaign");
-        return encodeFunctionResult({ abi: vaultSponsorAbi, functionName: "campaign", result: state.campaign });
+        return encodeFunctionResult({ abi: vaultAbi, functionName: "campaign", result: state.campaign });
       default:
         // Simulations of writes succeed.
         return "0x";
@@ -354,7 +353,8 @@ export async function mockApi(page: Page, mocks: ApiMocks = {}): Promise<{ signe
       signedIn = false;
       return json(route, 200, { signedOut: true });
     }
-    if (path === "/api/auth/session") return signedIn ? json(route, 200, session()) : json(route, 401, { error: { code: "unauthorized", message: "Not signed in.", action: "Sign in." } });
+    // Signed out is 200 with null (the API before that answered 401; the console accepts both).
+    if (path === "/api/auth/session") return json(route, 200, signedIn ? session() : null);
     if (path === "/api/auth/nonce") {
       const nonce = "testnonce12345";
       const message = createSiweMessage({

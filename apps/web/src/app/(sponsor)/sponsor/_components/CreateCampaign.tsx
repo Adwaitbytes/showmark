@@ -27,7 +27,7 @@ import { Ledger, LedgerRow } from "@/ui/Ledger";
 import { Notice } from "@/ui/Notice";
 import { Perforation } from "@/ui/Perforation";
 import { Sheet, SheetSection } from "@/ui/Sheet";
-import { PROOF_MODE_COPY } from "./campaign";
+import { countOf, PROOF_MODE_COPY } from "./campaign";
 import { CheckRow, ChoiceCard } from "./ChoiceCard";
 import { FundingSteps } from "./FundingSteps";
 import { DEFAULT_MAX_ORACLE_AGE, OraclePanel } from "./OraclePanel";
@@ -475,7 +475,7 @@ function Form({ seat }: { seat: SponsorSeat }) {
             error={errors.deposit}
             hint={
               preview.covered !== null && preview.covered > 0n
-                ? `Pays for ${formatCount(Number(preview.covered))} verified people${values.pricing === "usd" ? " at today's price" : ""}. You can top up later while the campaign runs.`
+                ? `Pays for ${countOf(Number(preview.covered), "verified person", "verified people")}${values.pricing === "usd" ? " at today's price" : ""}. You can top up later while the campaign runs.`
                 : "You can top up later while the campaign runs."
             }
             fieldClassName="max-w-xs"
@@ -545,7 +545,7 @@ export function CreateCampaign() {
   return (
     <>
       <div className="mb-10 flex flex-col gap-3">
-        <p className="text-sm font-medium text-vermilion-ink">New campaign</p>
+        <p className="text-sm font-medium text-ink-soft">New campaign</p>
         <h1 className="font-display text-3xl sm:text-4xl">Fund real attendance</h1>
         <p className="max-w-prose text-md text-ink-soft">
           Six short parts. The summary shows exactly what each person receives and how many people your deposit pays for, using the

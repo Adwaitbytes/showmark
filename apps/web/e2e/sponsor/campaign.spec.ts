@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { decodeFunctionData, getAddress } from "viem";
 import { vaultAbi } from "../../src/lib/chain/abi";
-import { CAMPAIGN_DETAIL, CAMPAIGN_SUMMARY, EVENTS, onChainCampaign } from "./fixtures";
+import { BONDED_DETAIL, CAMPAIGN_DETAIL, CAMPAIGN_SUMMARY, EVENTS, onChainCampaign } from "./fixtures";
 import { ADDR, chainState, installWallet, mockApi, mockChain, type ChainState } from "./harness";
 
 async function openAsSponsor(page: Page, state: ChainState, detail = CAMPAIGN_DETAIL) {
@@ -85,5 +85,15 @@ test.describe("campaign console", () => {
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByRole("button", { name: "Connect QIE Wallet" })).toBeVisible();
     expect(api.signedIn()).toBe(false);
+  });
+
+  test("an open-to-bonded campaign shows the challenge deadline with a plain explanation", async ({ page }) => {
+    await installWallet(page);
+    await mockChain(page, chainState({ campaign: onChainCampaign({ openToBonded: true, minBond: 100n * 10n ** 18n }) }));
+    await mockApi(page, { campaign: BONDED_DETAIL });
+    await page.goto("/sponsor/7");
+    await expect(page.getByText("Challenges", { exact: true })).toBeVisible();
+    await expect(page.getByText(/can challenge them before then/)).toBeVisible();
+    await expect(page.getByText(/bond of 100 QIE or more/)).toBeVisible();
   });
 });
