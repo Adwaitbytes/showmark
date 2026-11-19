@@ -35,7 +35,7 @@ Pending: needs mainnet QIE and the protocol Safe (see NEEDS_FROM_YATHU.md).
 | SDK | 85 passed | 19 Nov |
 | MCP | 15 passed | 19 Nov |
 
-Independent security review: `packages/contracts/docs/AUDIT.md` (three rounds).
+Independent security review: `packages/contracts/docs/AUDIT.md` (four rounds, final verdict go for mainnet).
 
 ## Journeys on the production URL against the real chain
 
