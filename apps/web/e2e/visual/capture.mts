@@ -63,6 +63,8 @@ async function main() {
         for (const route of routes) {
           const response = await page.goto(new URL(route, baseUrl).toString(), { waitUntil: "networkidle" });
           await page.evaluate(() => document.fonts.ready);
+          // Hide the Next.js dev indicator so screenshots show only the product.
+          await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
           const file = path.join(outDir, `${slug(route)}--${viewport.name}--${theme}.png`);
           await page.screenshot({ path: file, fullPage: true });
           console.log(`${response?.status() ?? "???"} ${route} ${viewport.name} ${theme} -> ${path.relative(process.cwd(), file)}`);
