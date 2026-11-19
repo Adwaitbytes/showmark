@@ -1,7 +1,8 @@
 // Testnet load test for the gasless check-in relayer.
 //
-// Generates N throwaway pass keys, has each one sign a CheckIn for one event, signs a rotating DoorPass with a door
-// key exactly like the door screen does (re-signed every 15 seconds), and posts the check-ins to
+// Generates N throwaway pass keys, has each one sign a CheckIn for one event, and does what the door screen does:
+// every 15 seconds a fresh throwaway ticket key, a DoorPass over it signed by the door key, and (as the phone does
+// after scanning) a Ticket signature from that key over each attendee. The check-ins are posted to
 // /api/relay/check-in at a fixed rate. Prints latency percentiles, failures by error code, and how many check-ins
 // shared each transaction (the batching factor).
 //
@@ -33,6 +34,7 @@ export const checkInTypes = {
   CheckIn: [
     { name: "eventId", type: "uint256" },
     { name: "attendee", type: "address" },
+    { name: "mode", type: "uint8" },
   ],
 } as const;
 
@@ -40,6 +42,14 @@ export const doorPassTypes = {
   DoorPass: [
     { name: "eventId", type: "uint256" },
     { name: "issuedAt", type: "uint64" },
+    { name: "ticket", type: "address" },
+  ],
+} as const;
+
+export const ticketTypes = {
+  Ticket: [
+    { name: "eventId", type: "uint256" },
+    { name: "attendee", type: "address" },
   ],
 } as const;
 
@@ -146,11 +156,12 @@ async function run(config: LoadTestConfig, chainId: number): Promise<Sample[]> {
   const door = privateKeyToAccount(config.doorKey);
   const domain = { name: "Showmark", version: "1", chainId, verifyingContract: config.registry } as const;
 
-  let doorPass = { issuedAt: 0n, sig: "0x" as Hex };
+  let doorPass = { issuedAt: 0n, sig: "0x" as Hex, ticket: privateKeyToAccount(generatePrivateKey()) };
   const rotate = async () => {
     const issuedAt = BigInt(Math.floor(Date.now() / 1000));
-    const sig = await door.signTypedData({ domain, types: doorPassTypes, primaryType: "DoorPass", message: { eventId: config.eventId, issuedAt } });
-    doorPass = { issuedAt, sig };
+    const ticket = privateKeyToAccount(generatePrivateKey());
+    const sig = await door.signTypedData({ domain, types: doorPassTypes, primaryType: "DoorPass", message: { eventId: config.eventId, issuedAt, ticket: ticket.address } });
+    doorPass = { issuedAt, sig, ticket };
   };
   await rotate();
   const timer = setInterval(() => {
@@ -161,7 +172,7 @@ async function run(config: LoadTestConfig, chainId: number): Promise<Sample[]> {
   const passes = await Promise.all(
     Array.from({ length: config.count }, async () => {
       const pass = privateKeyToAccount(generatePrivateKey());
-      const sig = await pass.signTypedData({ domain, types: checkInTypes, primaryType: "CheckIn", message: { eventId: config.eventId, attendee: pass.address } });
+      const sig = await pass.signTypedData({ domain, types: checkInTypes, primaryType: "CheckIn", message: { eventId: config.eventId, attendee: pass.address, mode: 1 } });
       return { address: pass.address, sig };
     }),
   );
@@ -171,13 +182,17 @@ async function run(config: LoadTestConfig, chainId: number): Promise<Sample[]> {
   const inflight = passes.map(async (pass, i) => {
     const due = started + (i * 1000) / config.rate;
     await new Promise((r) => setTimeout(r, Math.max(0, due - Date.now())));
+    const { issuedAt, sig: doorSig, ticket } = doorPass;
+    const ticketSig = await ticket.signTypedData({ domain, types: ticketTypes, primaryType: "Ticket", message: { eventId: config.eventId, attendee: pass.address } });
     const body = {
       eventId: config.eventId.toString(),
       attendee: pass.address,
       mode: 1,
-      doorTime: doorPass.issuedAt.toString(),
+      doorTime: issuedAt.toString(),
+      ticket: ticket.address,
       attendeeSig: pass.sig,
-      doorSig: doorPass.sig,
+      doorSig,
+      ticketSig,
     };
     const t0 = performance.now();
     let sample: Sample;

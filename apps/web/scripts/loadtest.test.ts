@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import * as shared from "@/lib/chain/eip712";
-import { assertNotMainnet, checkInTypes, doorPassTypes, percentile, summarize } from "./loadtest";
+import { assertNotMainnet, checkInTypes, doorPassTypes, percentile, summarize, ticketTypes } from "./loadtest";
 
 describe("load test script", () => {
   it("uses the same EIP-712 types as the app", () => {
     expect(checkInTypes).toEqual(shared.checkInTypes);
     expect(doorPassTypes).toEqual(shared.doorPassTypes);
+    expect(ticketTypes).toEqual(shared.ticketTypes);
   });
 
   it("refuses QIE mainnet", () => {
