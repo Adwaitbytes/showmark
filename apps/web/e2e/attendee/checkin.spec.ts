@@ -9,6 +9,10 @@ test.describe("check-in from a door code", () => {
   test("checks in on load, shows the pending stamp, then the pressed stamp with the receipt", async ({ page }) => {
     const { checkIns } = await mockApi(page, { tx: ["pending", "pending", "success"] });
     const path = await doorPath(12n);
+    const serverUrls: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().startsWith("http://localhost")) serverUrls.push(r.url() + (r.postData() ?? ""));
+    });
     await page.goto(path);
 
     await expect(page.getByText("Builders evening at the library", { exact: true }).first()).toBeVisible();
@@ -42,10 +46,16 @@ test.describe("check-in from a door code", () => {
       signature: body.ticketSig,
     });
     expect(ticketSigner).toBe(body.ticket);
-    // The ticket key itself never leaves the page or lands in storage.
-    expect(JSON.stringify(body)).not.toContain(path.split(".").pop());
+    // The ticket key lives only in the fragment: never in a request to our server, never in storage,
+    // and gone from the address bar once read.
+    const ticketKey = path.split("#")[1];
+    expect(JSON.stringify(body)).not.toContain(ticketKey);
+    expect(serverUrls.length).toBeGreaterThan(0);
+    for (const url of serverUrls) expect(url).not.toContain(ticketKey);
     const stored = await page.evaluate(() => JSON.stringify({ ...window.localStorage }));
-    expect(stored).not.toContain(path.split(".").pop());
+    expect(stored).not.toContain(ticketKey);
+    expect(await page.evaluate(() => window.location.hash)).toBe("");
+    expect(page.url()).not.toContain(ticketKey);
 
     // First stamp on a guest pass: suggest linking a wallet, without blocking anything.
     await expect(page.getByRole("link", { name: "Link QIE Wallet" })).toBeVisible();
@@ -114,6 +124,25 @@ test.describe("check-in from a door code", () => {
     await context.setOffline(false);
     await expect(page.getByRole("heading", { level: 1, name: "You are checked in" })).toBeVisible();
     expect(attempts).toBe(2);
+  });
+
+  test("says the link lost part of the door code when the fragment is missing", async ({ page }) => {
+    const { checkIns } = await mockApi(page);
+    const path = await doorPath(12n);
+    await page.goto(path.split("#")[0]);
+    await expect(page.getByRole("heading", { level: 1, name: "This link is missing part of the door code." })).toBeVisible();
+    await expect(page.getByText("Scan the code on the door screen again.")).toBeVisible();
+    expect(checkIns).toHaveLength(0);
+  });
+
+  test("checks in after an in-app navigation that carries the fragment, as the scanner does", async ({ page }) => {
+    await mockApi(page);
+    await page.goto("/scan");
+    const path = await doorPath(12n);
+    // The scanner calls router.push(`/c/${encodeDoorPass(door)}`), which keeps the #ticketKey.
+    await page.evaluate((p) => (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push(p), path);
+    await expect(page.getByRole("heading", { level: 1, name: "You are checked in" })).toBeVisible();
+    expect(await page.evaluate(() => window.location.hash)).toBe("");
   });
 
   test("explains a link that is not a door code", async ({ page }) => {

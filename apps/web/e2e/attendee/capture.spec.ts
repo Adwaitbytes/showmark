@@ -71,6 +71,7 @@ const shots: Shot[] = [
   },
   { name: "checkin--event-failed", url: () => doorPath(), mock: { event: "fail" }, ready: heading("You are checked in") },
   { name: "checkin--invalid", url: async () => "/c/not-a-door-code", ready: heading(/not a Showmark door code/) },
+  { name: "checkin--missing-key", url: async () => (await doorPath()).split("#")[0], ready: heading(/missing part of the door code/) },
 
   { name: "pass--no-pass", url: async () => "/pass", ready: heading("Your passport") },
   { name: "pass--empty", url: async () => "/pass", pass: true, mock: { passport: "empty" }, ready: async (page) => void (await page.getByText("No stamps yet").waitFor()) },

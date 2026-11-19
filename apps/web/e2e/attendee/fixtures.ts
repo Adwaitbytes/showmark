@@ -17,7 +17,7 @@ export const TX_WITHDRAW: Hex = "0x1111aaaa2222bbbb3333cccc4444dddd5555eeee6666f
 
 const domain = { name: "Showmark", version: "1", chainId: CHAIN_ID, verifyingContract: REGISTRY } as const;
 
-/** A door code path signed by a throwaway door key, issued now, carrying a fresh ticket key. */
+/** A door code path (`/c/{token}#{ticketKey}`) signed by a throwaway door key, issued now, with a fresh ticket key. */
 export async function doorPath(eventId = 12n): Promise<string> {
   const door = privateKeyToAccount(generatePrivateKey());
   const ticketKey = generatePrivateKey();
@@ -35,7 +35,8 @@ export async function doorPath(eventId = 12n): Promise<string> {
     primaryType: "DoorPass",
     message: { eventId, issuedAt, ticket },
   });
-  return new URL(doorPassUrl("http://test.local", { eventId, issuedAt, doorSig, ticketKey })).pathname;
+  const url = new URL(doorPassUrl("http://test.local", { eventId, issuedAt, doorSig, ticketKey }));
+  return url.pathname + url.hash;
 }
 
 export const domainForTests = domain;

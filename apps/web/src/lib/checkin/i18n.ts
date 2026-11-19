@@ -79,6 +79,10 @@ const english = {
       message: "This link is not a Showmark door code.",
       action: "Scan the QR code on the door screen again with your camera.",
     },
+    missingKey: {
+      message: "This link is missing part of the door code.",
+      action: "Scan the code on the door screen again.",
+    },
     storage: {
       message: "This browser does not let Showmark save a pass.",
       action: "Open this page in your normal browser, not a private window.",

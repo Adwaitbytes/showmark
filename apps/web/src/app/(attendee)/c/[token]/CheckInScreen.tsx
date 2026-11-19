@@ -19,7 +19,7 @@ import { useLocale } from "@/lib/checkin/locale";
 import { createWaiter, runCheckIn, type CheckInDeps, type CheckInPhase } from "@/lib/checkin/machine";
 import type { SignResult } from "@/lib/checkin/pass-signer";
 import type { CheckInRequest } from "@/lib/checkin/sign";
-import { decodeDoorPass } from "@/lib/qr/payload";
+import { useDoorCode } from "@/lib/checkin/door-fragment";
 import { Amount } from "@/ui/Amount";
 import { Button } from "@/ui/Button";
 import { ErrorState } from "@/ui/ErrorState";
@@ -35,7 +35,7 @@ import { StampPress } from "@/ui/stamp/StampPress";
 import { TxLink } from "@/ui/TxLink";
 import { useNow } from "../../_components/useNow";
 
-type ScreenPhase = { kind: "starting" } | { kind: "invalid" } | { kind: "storage" } | CheckInPhase;
+type ScreenPhase = { kind: "starting" } | { kind: "invalid" } | { kind: "missing-key" } | { kind: "storage" } | CheckInPhase;
 
 type EventState = { status: "loading" } | { status: "ready"; event: CheckInEvent } | { status: "failed" };
 
@@ -50,15 +50,6 @@ const CHECK_IN_MARGIN_MS = 60 * 60_000;
 // Start fetching the signing code as soon as this module runs in the browser, alongside hydration.
 const signer = typeof window === "undefined" ? null : import("@/lib/checkin/pass-signer");
 
-function decodeToken(raw: string | string[] | undefined) {
-  if (typeof raw !== "string") return null;
-  try {
-    return decodeDoorPass(decodeURIComponent(raw));
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The door QR opens here. The check-in starts on load: scanning the code is the intent, a tap
  * would only cost a second of the door code's short life, and checking in twice is harmless
@@ -66,11 +57,16 @@ function decodeToken(raw: string | string[] | undefined) {
  */
 export function CheckInScreen() {
   const params = useParams<{ token: string }>();
-  const door = useMemo(() => decodeToken(params.token), [params.token]);
+  const code = useDoorCode(typeof params.token === "string" ? params.token : "");
+  const door = code.status === "ok" ? code.door : null;
   const eventId = door ? door.eventId.toString() : null;
   const { t, errors } = useLocale();
 
-  const [phase, setPhase] = useState<ScreenPhase>(() => (door ? { kind: "starting" } : { kind: "invalid" }));
+  // Starts as "starting" everywhere, including the server render, so a valid code never flashes an error.
+  const [checkInPhase, setPhase] = useState<ScreenPhase>({ kind: "starting" });
+  const phase: ScreenPhase =
+    code.status === "invalid" ? { kind: "invalid" } : code.status === "missing-key" ? { kind: "missing-key" } : checkInPhase;
+  const badCode = phase.kind === "invalid" || phase.kind === "missing-key";
   const [event, setEvent] = useState<EventState>({ status: "loading" });
   const [pass, setPass] = useState<Address | null>(null);
   const [prior, setPrior] = useState<PriorStamp | null>(null);
@@ -216,10 +212,10 @@ export function CheckInScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-[32rem] flex-col gap-6 px-4 pt-6 sm:pt-10">
-      <EventHeading event={event} eventName={eventName} done={done} hidden={phase.kind === "invalid"} />
+      <EventHeading event={event} eventName={eventName} done={done} hidden={badCode} />
 
       <Sheet as="section" aria-labelledby="check-in-status" className="overflow-hidden">
-        {phase.kind === "invalid" || phase.kind === "storage" || phase.kind === "failed" ? (
+        {badCode || phase.kind === "storage" || phase.kind === "failed" ? (
           <SheetSection>
             <FailedState phase={phase} eventStartsAt={loadedEvent?.startsAt ?? null} onRetry={retry} />
           </SheetSection>
@@ -252,7 +248,7 @@ export function CheckInScreen() {
         )}
       </Sheet>
 
-      {phase.kind !== "invalid" ? <Rewards event={event} /> : null}
+      {badCode ? null : <Rewards event={event} />}
 
       {done && showLinkPrompt ? (
         <Notice
@@ -288,14 +284,14 @@ export function CheckInScreen() {
 function FailedState({ phase, eventStartsAt, onRetry }: { phase: ScreenPhase; eventStartsAt: string | null; onRetry: () => void }) {
   const { t, errors } = useLocale();
   const [shownAt] = useState(Date.now);
-  if (phase.kind === "invalid" || phase.kind === "storage") {
-    const copy = phase.kind === "invalid" ? t.errors.invalidCode : t.errors.storage;
+  if (phase.kind === "invalid" || phase.kind === "missing-key" || phase.kind === "storage") {
+    const copy = phase.kind === "invalid" ? t.errors.invalidCode : phase.kind === "missing-key" ? t.errors.missingKey : t.errors.storage;
     return (
       <ErrorState
         as="h1"
         title={copy.message}
         action={
-          phase.kind === "invalid" ? (
+          phase.kind !== "storage" ? (
             <Button href="/scan" variant="primary">
               {t.checkIn.scanAgain}
             </Button>
