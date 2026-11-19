@@ -1,8 +1,9 @@
 import type { Traction } from "@/lib/api/types";
 import { addresses, isDeployed } from "@/lib/chain/addresses";
 import { activeChain, explorerAddress } from "@/lib/chain/chains";
+import { judgesDeskEventId } from "@/lib/copy/site";
 import { Button } from "@/ui/Button";
-import { formatCount, formatPercent, formatTime, formatTokenAmount, formatUsd } from "@/ui/format";
+import { formatCount, formatPercent, formatTime, formatTokenAmount, formatUsd, plural } from "@/ui/format";
 import { Ledger, LedgerRow } from "@/ui/Ledger";
 import { Sheet, SheetSection } from "@/ui/Sheet";
 import { RubberMark } from "@/ui/stamp/RubberMark";
@@ -19,6 +20,13 @@ export const DEFINITIONS = [
   ["Share of chain activity", "Showmark transactions in the last day divided by the chain's daily total from the explorer's stats API."],
 ] as const;
 
+/** The explorer's latest complete UTC day: the day before this read. */
+function chainDay(updatedAt: string): string {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(
+    new Date(Date.parse(updatedAt) - 24 * 60 * 60 * 1000),
+  );
+}
+
 function totalOf(row: Traction["settled"][number]): string {
   return (BigInt(row.teamFunded) + BigInt(row.external)).toString();
 }
@@ -26,12 +34,12 @@ function totalOf(row: Traction["settled"][number]): string {
 function ExplorerLinks() {
   if (!isDeployed()) return null;
   return (
-    <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+    <p className="-my-3 flex flex-wrap gap-x-6 text-sm">
       <a
         href={explorerAddress(addresses.registry)}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-stamp-blue underline decoration-stamp-blue/35 underline-offset-4 hover:decoration-stamp-blue"
+        className="inline-flex min-h-11 items-center text-stamp-blue underline decoration-stamp-blue/35 underline-offset-4 hover:decoration-stamp-blue"
       >
         Check-ins on the explorer
       </a>
@@ -39,7 +47,7 @@ function ExplorerLinks() {
         href={explorerAddress(addresses.vault)}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-stamp-blue underline decoration-stamp-blue/35 underline-offset-4 hover:decoration-stamp-blue"
+        className="inline-flex min-h-11 items-center text-stamp-blue underline decoration-stamp-blue/35 underline-offset-4 hover:decoration-stamp-blue"
       >
         Settlements on the explorer
       </a>
@@ -101,7 +109,7 @@ export function TractionEmpty() {
             : `The Showmark contracts are not live on ${activeChain.name} yet. Once they are, this ledger counts every real check-in and payout straight from the chain.`}
         </p>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button href="/#judges-desk" variant="primary">
+          <Button href={judgesDeskEventId() ? "/judges" : "/#judges-desk"} variant="primary">
             Check in at the judges&apos; desk
           </Button>
           <Button href="/docs/organizers" variant="quiet">
@@ -127,8 +135,9 @@ export function TractionView({ traction }: { traction: Traction }) {
           {formatCount(traction.verifiedAttendees)}
         </p>
         <p className="max-w-xl pb-1 text-lg text-ink-soft">
-          people have checked in at {formatCount(traction.eventsWithCheckIns)} real events run by{" "}
-          {formatCount(traction.organizers)} organizers, each one recorded on {activeChain.name}.
+          {traction.verifiedAttendees === 1 ? "person has" : "people have"} checked in at{" "}
+          {plural(traction.eventsWithCheckIns, "real event")} run by {plural(traction.organizers, "organizer")}, each
+          one recorded on {activeChain.name}.
         </p>
       </div>
       <ExplorerLinks />
@@ -252,19 +261,19 @@ export function TractionView({ traction }: { traction: Traction }) {
           )}
           <Ledger label="Activity" className="max-w-2xl">
             <LedgerRow label="Showmark transactions" value={formatCount(traction.showmarkTransactions)} />
-            <LedgerRow
-              label="QIE transactions in the last day"
-              value={traction.chainDailyTransactions === null ? "Not available" : formatCount(traction.chainDailyTransactions)}
-            />
-            <LedgerRow
-              label="Showmark's share of that day"
-              value={traction.shareOfChainDaily === null ? "Not available" : formatPercent(traction.shareOfChainDaily, 1)}
-              note={
-                traction.shareOfChainDaily === null
-                  ? "The explorer's stats API did not answer this time. It is asked again on the next read."
-                  : undefined
-              }
-            />
+            {traction.shareOfChainDaily !== null && traction.chainDailyTransactions !== null ? (
+              <>
+                <LedgerRow
+                  label={`QIE transactions on ${chainDay(traction.updatedAt)}, UTC`}
+                  value={formatCount(traction.chainDailyTransactions)}
+                />
+                <LedgerRow
+                  label={`Showmark share on ${chainDay(traction.updatedAt)}`}
+                  value={formatPercent(traction.shareOfChainDaily, 1)}
+                  note="Showmark transactions as a share of all QIE transactions that day, the explorer's latest complete day in UTC."
+                />
+              </>
+            ) : null}
           </Ledger>
         </SheetSection>
       </Sheet>
