@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SITE } from "@/lib/copy/site";
+import { CodeBlock } from "@/ui/CodeBlock";
 import { Prose } from "@/ui/Prose";
 import { DocPager } from "../DocPager";
 
@@ -20,41 +21,41 @@ export default function SdkDoc() {
         </p>
 
         <h2>Install</h2>
-        <pre>pnpm add @showmark/sdk viem</pre>
+        <CodeBlock label="Install command">pnpm add @showmark/sdk viem</CodeBlock>
 
         <h2>Check someone in</h2>
-        <pre>
+        <CodeBlock label="Check someone in, TypeScript">
           {`import { ShowmarkClient } from "@showmark/sdk";
 
 const showmark = new ShowmarkClient({
   chain: 1983,
   addresses: { registry },
-  relayUrl: "https://showmark.app",
+  relayUrl: "${SITE.appUrl}",
 });
 
 // doorPass is the link the phone camera opened, or the bare token
 const { txHash } = await showmark.checkIn({ doorPass, signer: passKey });
 await showmark.waitForTx(txHash);`}
-        </pre>
+        </CodeBlock>
 
         <h2>Read presence</h2>
-        <pre>
+        <CodeBlock label="Read presence, TypeScript">
           {`await showmark.hasAttended(42n, "0x...");  // true for the pass or its linked wallet
 await showmark.presenceOf(42n, "0x...");   // { present, mode, at }
 await showmark.streakOf(3n, "0x...");      // { current, best }
 await showmark.quote(7n);                  // what one presence pays right now`}
-        </pre>
+        </CodeBlock>
 
         <h2>Drop in the React components</h2>
-        <pre>
+        <CodeBlock label="React components">
           {`import { CheckInButton, DoorQR, PresenceBadge } from "@showmark/sdk/react";
 
-<CheckInButton doorPass={token} account={passKey} relayUrl="https://showmark.app"
+<CheckInButton doorPass={token} account={passKey} relayUrl="${SITE.appUrl}"
   chainId={1983} registry={registry} />
 <PresenceBadge client={showmark} eventId={42n} account={address} />
 <DoorQR doorKey={doorKey} eventId={42n} chainId={1983} registry={registry}
-  origin="https://showmark.app" />`}
-        </pre>
+  origin="${SITE.appUrl}" />`}
+        </CodeBlock>
         <p>
           The components ship unstyled, with <code>className</code> hooks, a <code>data-state</code> attribute for CSS
           and accessible markup, so they take on your product&apos;s look.
@@ -64,9 +65,9 @@ await showmark.quote(7n);                  // what one presence pays right now`}
         <p>
           Any QIE contract can ask whether an account was at an event through the <code>IPresence</code> interface:
         </p>
-        <pre>
+        <CodeBlock label="Solidity presence gate">
           {`if (!presence.hasAttended(eventId, msg.sender)) revert NotPresent();`}
-        </pre>
+        </CodeBlock>
         <p>
           The repository includes <code>PresenceGatedMint</code>, a minimal contract that lets an account claim one
           thing per event attended.

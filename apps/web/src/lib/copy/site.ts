@@ -11,6 +11,8 @@ export const SITE = {
   repoUrl: "https://github.com/Adwaitbytes/showmark",
   sdkReadmeUrl: "https://github.com/Adwaitbytes/showmark/tree/main/packages/sdk#readme",
   hackathon: "QIE Hackathon 3.0",
+  /** The production app. Docs and code samples use this, never a guessed domain. */
+  appUrl: "https://showmark.vercel.app",
 } as const;
 
 export type NavKey = "home" | "how" | "traction" | "docs" | "sponsor" | "organize" | "passport" | "event" | "none";

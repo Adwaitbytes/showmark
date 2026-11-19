@@ -74,7 +74,7 @@ export default async function UiGallery() {
   // A design tool, never shipped to production visitors.
   if (process.env.NODE_ENV === "production") notFound();
 
-  const qr = await QRCode.toString("https://showmark.app/c/12.1764245000.sample", {
+  const qr = await QRCode.toString("https://showmark.vercel.app/c/12.1764245000.sample", {
     type: "svg",
     margin: 0,
     errorCorrectionLevel: "M",

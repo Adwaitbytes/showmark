@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CodeBlock } from "@/ui/CodeBlock";
 import { Prose } from "@/ui/Prose";
 import { DocPager } from "../DocPager";
 
@@ -74,14 +75,14 @@ export default function SponsorGuide() {
 
         <h2>How one payout is worked out</h2>
         <p>For every verified person at an eligible event, the vault computes, in this order:</p>
-        <pre>
+        <CodeBlock label="How one payout is worked out">
           {`gross        = price of one person, in the token
 fee          = gross * fee rate
                (the rate is fixed when the campaign is created, at most 5%)
 net          = gross - fee
 to attendee  = net * attendee share
 to organizer = net - to attendee`}
-        </pre>
+        </CodeBlock>
         <p>
           For example, at 2 QUSDC per person with a 2.5% fee and 60% to the attendee, each check-in moves 1.17 QUSDC
           to the attendee, 0.78 QUSDC to the organizer and 0.05 QUSDC in fees. If 140 people come from a 500 QUSDC
