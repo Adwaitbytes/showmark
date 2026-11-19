@@ -3,7 +3,7 @@
 Run from `packages/contracts` with `slither .` (Slither 0.11.6, 102 detectors). `slither.config.json` limits the
 report to `src/` by filtering `lib/`, `test/` and `script/`.
 
-Result on 19 Nov 2026: 29 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
+Result on 19 Nov 2026, after the audit fixes: 28 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
 below with the reason it is accepted. Two lint-level items found earlier by `forge lint` were fixed in code: the
 `CheckedIn` event is emitted before the stamp mint, and the `uint64(block.timestamp)` cast is annotated.
 
@@ -15,14 +15,13 @@ below with the reason it is accepted. Two lint-level items found earlier by `for
 | `ShowmarkRegistry._record` `streak` | Zero is the specified streak for an event without a series. |
 | `ShowmarkRegistry.createEvent` `seriesIndex` | Zero is the specified index for an event without a series. |
 
-## unused-return (2)
+## unused-return (1)
 
 | Location | Justification |
 |---|---|
-| `CampaignVault._quote` ignores `startedAt` from `latestRoundData` | Freshness is judged by `updatedAt` and `answeredInRound`; `startedAt` carries no extra safety signal. |
 | `ShowmarkRegistry._recover` ignores `errArg` from `ECDSA.tryRecover` | Only the error kind matters; any error maps to "no signer" and a rejected check-in. |
 
-## calls-loop (12)
+## calls-loop (11)
 
 | Location | Justification |
 |---|---|
@@ -31,7 +30,6 @@ below with the reason it is accepted. Two lint-level items found earlier by `for
 | `CampaignVault._settle` calls `bond.bondOf` | Immutable Showmark bond; plain storage read. |
 | `CampaignVault._holdsQieId` calls `registry.walletOf` | Immutable registry; plain storage read. |
 | `CampaignVault._holdsQieId` calls `qieIdCheck.hasQieId` | Wrapped in try/catch; QieIdCheck itself never reverts and caps the registry call at 100k gas, so one item cannot stall a batch. |
-| `CampaignVault._quote` calls `oracle.latestRoundData` | Wrapped in try/catch; a reverting feed yields status 9 (`PriceStale`) for that item only. |
 | `PresenceLens.attendedCount` calls `registry.hasAttended` per id | View helper; the caller chooses the list length. |
 | `ShowmarkRegistry._record` calls `stamp.mint` (2) | The stamp is deployed by the registry, has no receiver hook and cannot revert for a fresh presence. |
 | `ShowmarkRegistry.linkWallet` calls `stamp.relocate` per id | Same stamp; ids the pass does not hold are skipped, so a stale list cannot block a link. |
@@ -52,10 +50,11 @@ below with the reason it is accepted. Two lint-level items found earlier by `for
 | `ShowmarkRegistry.linkWallet` | Signature deadline chosen by the signer, minutes long. |
 | `ShowmarkRegistry._validate` | Check-in freshness and windows are the product's core rule and are defined against block time by the spec; a 30 second clock-skew allowance is built in, and the residual risk (a relayed rotating QR) is documented in the threat model. |
 
-## assembly (1)
+## assembly (2)
 
 | Location | Justification |
 |---|---|
+| `CampaignVault._readOracle` | Deliberate (audit L-02): a gas-capped `staticcall` to the feed that copies exactly five words and checks their size and ranges, so a reverting, gas-burning or malformed feed defers USD items with status 9 instead of reverting `settleBatch`. Covered by `test_oracle_malformedAnswersDeferWithoutRevertingTheBatch` and the audit regression `test_L02_*`. |
 | `QieIdCheck.hasQieId` | Deliberate: a gas-capped `staticcall` that copies at most 64 bytes of return data, so an upgraded or hostile name registry cannot revert settlement, burn the caller's gas or return-bomb it. Every malformed answer is covered by `test/QieIdCheck.t.sol`. |
 
 ## unindexed-event-address (2)

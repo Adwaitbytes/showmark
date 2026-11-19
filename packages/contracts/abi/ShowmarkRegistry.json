@@ -134,6 +134,19 @@
   },
   {
     "type": "function",
+    "name": "TICKET_TYPEHASH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "WINDOW_SLACK",
     "inputs": [],
     "outputs": [
@@ -205,12 +218,22 @@
             "internalType": "uint64"
           },
           {
+            "name": "ticket",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
             "name": "attendeeSig",
             "type": "bytes",
             "internalType": "bytes"
           },
           {
             "name": "doorSig",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "ticketSig",
             "type": "bytes",
             "internalType": "bytes"
           }
@@ -256,12 +279,22 @@
             "internalType": "uint64"
           },
           {
+            "name": "ticket",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
             "name": "attendeeSig",
             "type": "bytes",
             "internalType": "bytes"
           },
           {
             "name": "doorSig",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "ticketSig",
             "type": "bytes",
             "internalType": "bytes"
           }
@@ -693,7 +726,7 @@
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -1211,6 +1244,11 @@
   },
   {
     "type": "error",
+    "name": "BadTicketSig",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadWalletSig",
     "inputs": []
   },
@@ -1310,6 +1348,11 @@
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "RenounceDisabled",
+    "inputs": []
   },
   {
     "type": "error",
