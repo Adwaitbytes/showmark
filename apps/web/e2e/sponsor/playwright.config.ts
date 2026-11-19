@@ -9,7 +9,7 @@ import { BASE_URL, ENV, PORT } from "./harness";
 // SCREENSHOTS=1 also runs screens.spec.ts, which writes every screen and state to e2e/sponsor/screenshots/.
 export default defineConfig({
   testDir: ".",
-  testMatch: process.env.SCREENSHOTS ? ["*.spec.ts"] : ["create.spec.ts", "campaign.spec.ts"],
+  testMatch: process.env.SCREENSHOTS ? ["*.spec.ts"] : ["create.spec.ts", "campaign.spec.ts", "safe.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
