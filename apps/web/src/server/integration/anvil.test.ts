@@ -21,7 +21,10 @@ import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { registryAbi, vaultAbi } from "@/lib/chain/abi";
 import { qieTestnet } from "@/lib/chain/chains";
-import { checkInTypes, doorPassTypes, linkWalletTypes } from "@/lib/chain/eip712";
+import { checkInTypes, doorPassTypes, linkWalletTypes, ticketTypes } from "@/lib/chain/eip712";
+import { NextRequest } from "next/server";
+import type { TxStatus } from "@/lib/api/types";
+import { GET as txRoute } from "@/app/api/tx/[hash]/route";
 import { setChainContext, type ChainContext } from "../chain";
 import { setDatabase } from "../db/client";
 import { checkInStatusCopy } from "../errors";
@@ -106,11 +109,14 @@ describe.skipIf(missing.length > 0)("relayer, indexer and queries against anvil 
     return receipt;
   };
 
-  async function signedCheckIn(pass: PrivateKeyAccount): Promise<CheckInData> {
+  /** What the door screen and the attendee's phone produce together for a mode 1 check-in. */
+  async function signedCheckIn(pass: PrivateKeyAccount, ticketSigner?: PrivateKeyAccount): Promise<CheckInData> {
     const { timestamp } = await client.getBlock();
-    const attendeeSig = await pass.signTypedData({ domain: domain(), types: checkInTypes, primaryType: "CheckIn", message: { eventId, attendee: pass.address } });
-    const doorSig = await door.signTypedData({ domain: domain(), types: doorPassTypes, primaryType: "DoorPass", message: { eventId, issuedAt: timestamp } });
-    return { eventId, attendee: pass.address, mode: 1, doorTime: timestamp, attendeeSig, doorSig };
+    const ticket = privateKeyToAccount(generatePrivateKey());
+    const attendeeSig = await pass.signTypedData({ domain: domain(), types: checkInTypes, primaryType: "CheckIn", message: { eventId, attendee: pass.address, mode: 1 } });
+    const doorSig = await door.signTypedData({ domain: domain(), types: doorPassTypes, primaryType: "DoorPass", message: { eventId, issuedAt: timestamp, ticket: ticket.address } });
+    const ticketSig = await (ticketSigner ?? ticket).signTypedData({ domain: domain(), types: ticketTypes, primaryType: "Ticket", message: { eventId, attendee: pass.address } });
+    return { eventId, attendee: pass.address, mode: 1, doorTime: timestamp, ticket: ticket.address, attendeeSig, doorSig, ticketSig };
   }
 
   const index = () => syncOnce({ maxChunks: 100, budgetMs: 30_000 }, { ctx, database, team: new Set([sponsor.address]) });
@@ -231,21 +237,37 @@ describe.skipIf(missing.length > 0)("relayer, indexer and queries against anvil 
 
   it("batches concurrent check-ins into one checkInBatch", async () => {
     const passes = Array.from({ length: 4 }, () => privateKeyToAccount(generatePrivateKey()));
-    const items = await Promise.all(passes.map(signedCheckIn));
+    const items = await Promise.all(passes.map((p) => signedCheckIn(p)));
     const results = await Promise.all(items.map((item) => relayCheckIns(deps, [item])));
     const hashes = new Set(results.map(([r]) => (r.ok ? r.txHash : "failed")));
     expect(hashes.has("failed")).toBe(false);
     expect(hashes.size).toBe(1);
-    const tx = await client.getTransaction({ hash: [...hashes][0] as Hex });
+    const batchHash = [...hashes][0] as Hex;
+    const tx = await client.getTransaction({ hash: batchHash });
     const call = decodeFunctionData({ abi: registryAbi, data: tx.input });
     expect(call.functionName).toBe("checkInBatch");
     expect((call.args?.[0] as readonly CheckInData[]).length).toBe(4);
+
+    // The per-attendee view of the batch: recorded for someone in it, "reverted" for someone who is not.
+    setChainContext(ctx);
+    const ask = async (attendee: Address) => {
+      const url = `http://localhost/api/tx/${batchHash}?event=${eventId}&attendee=${attendee}`;
+      const res = await txRoute(new NextRequest(url), { params: Promise.resolve({ hash: batchHash }) });
+      return (await res.json()) as TxStatus;
+    };
+    expect(await ask(passes[2].address)).toMatchObject({ status: "success", checkIn: { recorded: true, status: 0 } });
+    expect(await ask(firstPass.address)).toMatchObject({ status: "reverted", checkIn: { recorded: false } });
   });
 
-  it("explains a repeated check-in with the registry's status", async () => {
+  it("explains a repeated check-in and a forged ticket with the registry's status", async () => {
     const [status] = await simulateCheckIns(deps.chain, [await signedCheckIn(firstPass)]);
     expect(status).toBe(1);
     expect(checkInStatusCopy(status).code).toBe("already_present");
+    // Someone who read the door pass from calldata but never saw the QR cannot sign for the ticket key.
+    const outsider = privateKeyToAccount(generatePrivateKey());
+    const [forged] = await simulateCheckIns(deps.chain, [await signedCheckIn(outsider, privateKeyToAccount(generatePrivateKey()))]);
+    expect(forged).toBe(11);
+    expect(checkInStatusCopy(forged).code).toBe("bad_ticket_sig");
   });
 
   it("serves the indexed result through the server queries, catching up on read", async () => {
