@@ -21,7 +21,7 @@ runs = 2000
 
 [invariant]
 runs = 256
-depth = 64
+depth = 128
 fail_on_revert = false
 
 [rpc_endpoints]
