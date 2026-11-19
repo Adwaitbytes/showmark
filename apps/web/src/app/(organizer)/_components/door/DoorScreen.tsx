@@ -56,9 +56,18 @@ export function DoorScreen() {
       {setup.phase.kind !== "not-deployed" && setup.phase.kind !== "invalid-id" ? <DoorSignals setup={setup} wake={ready ? wake : undefined} /> : null}
       {ready && setup.eventId !== null ? (
         <>
-          <Button href={`/door/${setup.eventId}/scan`}>Scan attendee codes</Button>
-          {fullscreen.supported ? <Button onClick={fullscreen.toggle}>{fullscreen.active ? "Exit full screen" : "Full screen"}</Button> : null}
-          <Button onClick={() => setSettingsOpen(true)}>Settings</Button>
+          <Button href={`/door/${setup.eventId}/scan`} className="px-3 sm:px-5">
+            <span className="sm:hidden">Scan codes</span>
+            <span className="hidden sm:inline">Scan attendee codes</span>
+          </Button>
+          {fullscreen.supported ? (
+            <Button onClick={fullscreen.toggle} className="px-3 sm:px-5">
+              {fullscreen.active ? "Exit full screen" : "Full screen"}
+            </Button>
+          ) : null}
+          <Button onClick={() => setSettingsOpen(true)} className="px-3 sm:px-5">
+            Settings
+          </Button>
         </>
       ) : null}
     </DoorBar>
@@ -80,12 +89,23 @@ export function DoorScreen() {
       <DoorWarnings setup={setup} wake={wake} />
       <div
         className={cn(
-          "mx-auto grid w-full max-w-[110rem] flex-1 items-center gap-[4vmin] px-[4vmin] py-[3vmin]",
-          // Portrait (tablet on a stand): name, code, count stacked. Landscape (laptop, projector): code beside the count.
-          "grid-cols-1 landscape:grid-cols-[minmax(0,auto)_minmax(0,1fr)]",
+          "mx-auto grid w-full max-w-[110rem] flex-1 content-center gap-x-[5vmin] gap-y-[3vmin] px-[4vmin] py-[3vmin]",
+          // Portrait (a tablet or phone on a stand): name, code, then the count. Landscape (laptop, projector): the code
+          // on the left, the name above the count on the right.
+          "grid-cols-1 landscape:grid-cols-[minmax(0,auto)_minmax(0,1fr)] landscape:grid-rows-[auto_auto]",
         )}
       >
-        <div className="order-2 mx-auto w-full max-w-[min(92vw,62vh)] landscape:order-1 landscape:max-w-[min(48vw,78vh)]">
+        <div className="flex min-w-0 flex-col gap-[1vmin] landscape:col-start-2 landscape:row-start-1 landscape:self-end">
+          <h1 className="font-display text-[clamp(1.75rem,6vmin,5rem)] leading-[1.02] text-balance text-ink" data-testid="door-event-name">
+            {name}
+          </h1>
+          <p className="text-[clamp(0.95rem,2vmin,1.5rem)] text-ink-soft">
+            {place ? `${place}. ` : ""}
+            {formatEventWindow(new Date(Number(event.startsAt) * 1000).toISOString(), new Date(Number(event.endsAt) * 1000).toISOString())}
+          </p>
+        </div>
+
+        <div className="mx-auto w-full max-w-[min(88vw,52vh)] landscape:col-start-1 landscape:row-span-2 landscape:row-start-1 landscape:max-w-[min(48vw,80vh)] landscape:self-center">
           {checkIn === "open" ? (
             <RotatingCode doorKey={doorKey} eventId={eventId} registry={addresses.registry} clock={setup.clock.clock} />
           ) : (
@@ -93,25 +113,15 @@ export function DoorScreen() {
           )}
         </div>
 
-        <div className="order-1 flex min-w-0 flex-col gap-[3vmin] landscape:order-2">
-          <div className="flex flex-col gap-[1vmin]">
-            <h1 className="font-display text-[clamp(2rem,6vmin,5rem)] leading-[1.02] text-balance text-ink" data-testid="door-event-name">
-              {name}
-            </h1>
-            <p className="text-[clamp(0.95rem,2vmin,1.5rem)] text-ink-soft">
-              {place ? `${place}. ` : ""}
-              {formatEventWindow(new Date(Number(event.startsAt) * 1000).toISOString(), new Date(Number(event.endsAt) * 1000).toISOString())}
-            </p>
-          </div>
-          <div className="h-px w-full bg-rule-soft" aria-hidden="true" />
+        <div className="flex min-w-0 flex-col gap-[2.5vmin] landscape:col-start-2 landscape:row-start-2 landscape:self-start landscape:border-t landscape:border-rule-soft landscape:pt-[3vmin]">
           <LiveCount value={event.checkedIn} capacity={event.capacity} stale={setup.countStale} />
           {checkIn === "open" ? (
-            <p className="max-w-[28ch] font-display text-[clamp(1.5rem,4.4vmin,3.5rem)] leading-[1.08] text-ink">
-              Open your camera and point it here<span className="text-vermilion">.</span>
-            </p>
-          ) : null}
-          {checkIn === "open" ? (
-            <p className="text-[clamp(0.95rem,1.9vmin,1.4rem)] text-ink-soft">No app, no wallet and nothing to pay. Tap the link, then tap Check in.</p>
+            <div className="flex flex-col gap-[1vmin]">
+              <p className="max-w-[28ch] font-display text-[clamp(1.4rem,4.4vmin,3.5rem)] leading-[1.08] text-ink">
+                Open your camera and point it here<span className="text-vermilion">.</span>
+              </p>
+              <p className="text-[clamp(0.95rem,1.9vmin,1.4rem)] text-ink-soft">No app, no wallet and nothing to pay. Tap the link, then tap Check in.</p>
+            </div>
           ) : null}
         </div>
       </div>

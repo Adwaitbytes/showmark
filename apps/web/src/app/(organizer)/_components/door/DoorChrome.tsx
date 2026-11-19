@@ -58,8 +58,9 @@ export function DoorSignals({ setup, wake }: { setup: DoorSetup; wake?: string }
         <li
           key={item.text}
           className={cn(
-            "inline-flex h-8 items-center gap-2 rounded-pill px-3 text-sm shadow-[inset_0_0_0_1px_var(--rule-soft)]",
-            item.tone === "warn" ? "text-ink" : "text-ink-soft",
+            "h-8 items-center gap-2 rounded-pill px-3 text-sm shadow-[inset_0_0_0_1px_var(--rule-soft)]",
+            // On a phone only problems earn space in the bar.
+            item.tone === "warn" ? "inline-flex text-ink" : "hidden text-ink-soft sm:inline-flex",
           )}
         >
           <span aria-hidden="true" className={cn("size-1.5 rounded-pill", item.tone === "warn" ? "bg-vermilion" : "bg-ledger-green")} />

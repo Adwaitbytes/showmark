@@ -30,7 +30,8 @@ test("shows a signed code that rotates every 15 seconds and the live count", asy
   await expect(page.getByText("Open your camera and point it here")).toBeVisible();
 
   const qr = page.getByTestId("door-qr");
-  await expect(qr).toHaveAttribute("data-url", /\/c\/1\.\d+\.[A-Za-z0-9_-]{87}$/);
+  // The first code appears straight away, not at the next rotation.
+  await expect(qr).toHaveAttribute("data-url", /\/c\/1\.\d+\.[A-Za-z0-9_-]{87}$/, { timeout: 4_000 });
   const firstUrl = (await qr.getAttribute("data-url")) ?? "";
   const first = decodeDoorPass(firstUrl);
   expect(first).not.toBeNull();

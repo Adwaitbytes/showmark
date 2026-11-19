@@ -66,6 +66,8 @@ export function RotatingCode({ doorKey, eventId, registry, clock, className }: P
     return () => {
       cancelled = true;
       clearInterval(id);
+      // A signature still in flight belongs to this run; let the next run sign the current slot itself.
+      signingSlot.current = null;
     };
   }, [doorKey, eventId, registry, clock]);
 

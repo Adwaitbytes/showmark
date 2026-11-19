@@ -456,7 +456,7 @@ function ConsoleBody({ eventId, account }: { eventId: string; account: Address }
             </p>
           </div>
           {isOrganizer && status.tone !== "ended" ? (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex shrink-0 flex-wrap gap-3">
               <Button href={`/door/${event.id}`} variant="primary" size="lg" trailing={<ArrowRightIcon className="size-4" />}>
                 Open the door screen
               </Button>
@@ -488,7 +488,7 @@ function ConsoleBody({ eventId, account }: { eventId: string; account: Address }
           <Sheet edge="stub-bottom">
             <SheetSection className="flex flex-col gap-3">
               <p className="text-sm font-medium tracking-[0.12em] text-ink-soft uppercase">Checked in</p>
-              <p className="font-display text-6xl leading-none text-ink" data-testid="console-count">
+              <p className="font-display text-5xl leading-none text-ink" data-testid="console-count">
                 {formatCount(event.checkedIn)}
               </p>
               <Ledger label="Event numbers">
