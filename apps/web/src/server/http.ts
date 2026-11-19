@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import type { z } from "zod";
 import type { ApiError } from "@/lib/api/types";
 import { ConfigError } from "./env";
@@ -68,6 +69,9 @@ export async function handle(route: string, fn: () => Promise<Response>): Promis
   try {
     return await fn();
   } catch (error) {
+    // Next signals "this route is dynamic, stop prerendering" by throwing; swallowing it would bake an error
+    // response into the build as a static page.
+    unstable_rethrow(error);
     return errorResponse(error, route);
   }
 }
