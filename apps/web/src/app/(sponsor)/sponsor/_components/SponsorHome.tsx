@@ -26,7 +26,7 @@ import { SponsorGate, type SponsorSeat } from "./SponsorGate";
 
 const campaignsSchema = listOf(campaignSummarySchema, "campaigns");
 
-function Intro() {
+function Intro({ signIn }: { signIn: React.ReactNode }) {
   return (
     <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:gap-16">
       <div className="flex flex-col gap-5">
@@ -36,11 +36,12 @@ function Intro() {
           Lock a budget in escrow on QIE. Each verified check-in at an event you fund pays the attendee and the
           organizer from it, and whatever is not earned comes back to you.
         </p>
+        <div className="pt-4">{signIn}</div>
       </div>
-      <Ledger label="What the contract guarantees" className="self-end">
-        <LedgerRow label="Every payout" value="On the explorer" note="Headcount you can audit, one transaction per person" />
+      <Ledger label="What the contract guarantees" className="lg:self-start lg:pt-24">
+        <LedgerRow label="Every payout" value={<span className="font-sans">On the explorer</span>} note="Headcount you can audit, one transaction per person" />
         <LedgerRow label="Protocol fee" value="5% cap" note="Hard coded in the vault and fixed when you create the campaign" />
-        <LedgerRow label="Unspent budget" value="Yours" note="Refund opens 3 days after the campaign ends, even if Showmark is paused" />
+        <LedgerRow label="Unspent budget" value={<span className="font-sans">Yours</span>} note="Refund opens 3 days after the campaign ends, even if Showmark is paused" />
       </Ledger>
     </div>
   );
@@ -240,5 +241,5 @@ function Campaigns({ seat }: { seat: SponsorSeat }) {
 }
 
 export function SponsorHome() {
-  return <SponsorGate intro={<Intro />}>{(seat) => <Campaigns seat={seat} />}</SponsorGate>;
+  return <SponsorGate intro={(signIn) => <Intro signIn={signIn} />}>{(seat) => <Campaigns seat={seat} />}</SponsorGate>;
 }

@@ -8,7 +8,8 @@ import { CAMPAIGN_DETAIL, CAMPAIGNS, EMPTY_DETAIL, EVENTS, onChainCampaign } fro
 import { chainState, installWallet, mockApi, mockChain, type ApiMocks, type ChainState } from "./harness";
 
 const here = path.join(process.cwd(), "e2e", "sponsor");
-const out = (name: string) => path.join(here, "screenshots", `${name}.png`);
+// JPEG at quality 80: the paper grain makes PNGs about 2 MB each, and these live in the repository.
+const out = (name: string) => path.join(here, "screenshots", `${name}.jpg`);
 
 const viewports = [
   { name: "390", width: 390, height: 844 },
@@ -244,7 +245,7 @@ for (const theme of themes) {
         const page = await open(browser, vp, theme, screen.setup);
         await screen.run(page);
         await settle(page);
-        await page.screenshot({ path: out(`${screen.name}--${vp.name}--${theme}`), fullPage: true });
+        await page.screenshot({ path: out(`${screen.name}--${vp.name}--${theme}`), fullPage: true, type: "jpeg", quality: 80 });
         await page.context().close();
       }
     });
@@ -257,7 +258,7 @@ test("printed report", async ({ browser }) => {
   await expect(page.getByRole("heading", { name: /Every payout/ })).toBeVisible();
   await settle(page);
   await page.emulateMedia({ media: "print" });
-  await page.screenshot({ path: out("report--print"), fullPage: true });
+  await page.screenshot({ path: out("report--print"), fullPage: true, type: "jpeg", quality: 80 });
   await page.pdf({ path: path.join(here, "screenshots", "report.pdf"), format: "A4", printBackground: true, preferCSSPageSize: true });
   await page.context().close();
 });

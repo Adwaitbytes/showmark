@@ -15,6 +15,11 @@ function perPerson(c: CampaignSummary): string {
   return c.pricing === 1 ? `${formatUsd(Number(c.amountPerPresence) / 1e6)} in QIE` : amountText(c.amountPerPresence, c.tokenSymbol);
 }
 
+/** Words in a ledger read as words, not code: the ledger sets figures in mono. */
+function Word({ children }: { children: React.ReactNode }) {
+  return <span className="font-sans">{children}</span>;
+}
+
 /** The terms of a campaign as the vault holds them, in plain words. */
 export function CampaignFacts({ c, chain }: { c: CampaignSummary; chain: OnChainCampaign | null }) {
   const gross = BigInt(c.amountPerPresence);
@@ -33,17 +38,17 @@ export function CampaignFacts({ c, chain }: { c: CampaignSummary; chain: OnChain
         note={`${basisPointsToPercent(c.attendeeShareBps)} of what is left after the ${basisPointsToPercent(c.feeBps)} protocol fee`}
       />
       <LedgerRow label="Organizer gets" value={each(split.toOrganizer)} />
-      <LedgerRow label="Proof" value={PROOF_MODE_COPY[c.minProofMode].short} note={PROOF_MODE_COPY[c.minProofMode].title} />
-      <LedgerRow label="QIE ID needed" value={c.requireQieId ? "Yes" : "No"} />
+      <LedgerRow label="Proof" value={<Word>{PROOF_MODE_COPY[c.minProofMode].title}</Word>} note={PROOF_MODE_COPY[c.minProofMode].short} />
+      <LedgerRow label="QIE ID needed" value={<Word>{c.requireQieId ? "Yes" : "No"}</Word>} />
       <LedgerRow label="From" value={when(startsAt)} />
       <LedgerRow label="Until" value={when(endsAt)} note={chain && chain.endsAt < Math.floor(Date.parse(c.endsAt) / 1000) ? "Closed early by the sponsor" : undefined} />
       {chain ? (
         <>
-          <LedgerRow label="Per event cap" value={chain.maxPerEvent === 0 ? "None" : formatCount(chain.maxPerEvent)} />
-          <LedgerRow label="Total cap" value={chain.maxTotal === 0 ? "None" : formatCount(chain.maxTotal)} />
+          <LedgerRow label="Per event cap" value={chain.maxPerEvent === 0 ? <Word>None</Word> : formatCount(chain.maxPerEvent)} />
+          <LedgerRow label="Total cap" value={chain.maxTotal === 0 ? <Word>None</Word> : formatCount(chain.maxTotal)} />
           <LedgerRow
             label="Bonded organizers"
-            value={chain.openToBonded ? "Paid" : "Not paid"}
+            value={<Word>{chain.openToBonded ? "Paid" : "Not paid"}</Word>}
             note={chain.openToBonded ? `Organizers with a bond of ${formatUnits(chain.minBond, 18)} QIE or more are paid without approval` : "Only events the sponsor approved are paid"}
           />
         </>

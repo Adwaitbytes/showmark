@@ -69,7 +69,7 @@ test("buys the missing QUSDC through the QIEDEX router, with price impact called
       (document.activeElement as HTMLElement | null)?.blur();
       window.scrollTo(0, 0);
     });
-    await page.screenshot({ path: path.join(process.cwd(), "e2e/sponsor/screenshots/new-qiedex--1440--light.png"), fullPage: true });
+    await page.screenshot({ path: path.join(process.cwd(), "e2e/sponsor/screenshots/new-qiedex--1440--light.jpg"), fullPage: true, type: "jpeg", quality: 80 });
   }
 
   await page.getByRole("button", { name: "Swap QIE for 400.00 QUSDC" }).click();

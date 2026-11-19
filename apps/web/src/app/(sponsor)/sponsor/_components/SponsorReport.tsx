@@ -8,7 +8,7 @@ import { useApi } from "@/lib/sponsor/use-api";
 import { useOnChainCampaign } from "@/lib/sponsor/use-chain";
 import { Button } from "@/ui/Button";
 import { ErrorState } from "@/ui/ErrorState";
-import { formatCount, formatDate, formatEventWindow, formatTime } from "@/ui/format";
+import { formatCount, formatDate, formatEventWindow, formatTime, shortAddress } from "@/ui/format";
 import { ArrowRightIcon, RetryIcon } from "@/ui/icons";
 import { Ledger, LedgerRow } from "@/ui/Ledger";
 import { LoadingRegion, Skeleton } from "@/ui/Skeleton";
@@ -107,7 +107,8 @@ export function SponsorReport({ id }: { id: string }) {
           </p>
           <h1 className="font-display text-4xl print:text-3xl">{c.name}</h1>
           <p className="text-base text-ink-soft">
-            Funded by {c.sponsorName}, <span className="font-mono text-sm break-all">{c.sponsor}</span>
+            Funded by {c.sponsorName}, <span className="font-mono text-sm print:hidden">{shortAddress(c.sponsor)}</span>
+            <span className="hidden font-mono text-sm break-all print:inline">{c.sponsor}</span>
           </p>
         </div>
       </header>
@@ -148,7 +149,8 @@ export function SponsorReport({ id }: { id: string }) {
         {events.length === 0 ? (
           <p className="text-sm text-ink-soft">No events approved and no payouts yet.</p>
         ) : (
-          <table className="w-full border-collapse text-left text-sm">
+          <div className="-mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible">
+          <table className="w-full min-w-[32rem] border-collapse text-left text-sm print:min-w-0">
             <thead>
               <tr className="border-b border-rule text-xs text-ink-soft">
                 <th scope="col" className="py-2 pr-4 font-medium">Event</th>
@@ -177,6 +179,7 @@ export function SponsorReport({ id }: { id: string }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
@@ -211,15 +214,15 @@ export function SponsorReport({ id }: { id: string }) {
 
 export function ReportToolbar({ id }: { id: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-      <Button variant="quiet" href={`/sponsor/${id}`}>
+    <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
+      <Button variant="quiet" href={`/sponsor/${id}`} className="self-start">
         Back to the campaign
       </Button>
       <div className="flex flex-wrap gap-3">
-        <CsvLink id={id} />
         <Button variant="secondary" onClick={() => window.print()} trailing={<ArrowRightIcon className="size-4" />}>
           Print or save as PDF
         </Button>
+        <CsvLink id={id} />
       </div>
     </div>
   );

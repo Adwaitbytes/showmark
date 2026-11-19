@@ -49,7 +49,8 @@ test.describe("campaign console", () => {
     await openAsSponsor(page, waiting, { ...CAMPAIGN_DETAIL, status: "ended" });
     const opens = new Date((Number(endedAgo(1)) + 3 * 86_400 + 1) * 1000);
     const day = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(opens);
-    await expect(page.getByRole("button", { name: `Refund opens ${day}` })).toBeDisabled();
+    await expect(page.getByText(`Refund opens ${day}`)).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Refund / })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Top up" })).toHaveCount(0);
   });
 

@@ -96,12 +96,14 @@ function Receipt({
   symbol,
   errors,
   feeUnreadable,
+  idPrefix,
 }: {
   values: CampaignFormValues;
   preview: Preview;
   symbol: "QIE" | "QUSDC";
   errors: FormErrors;
   feeUnreadable: boolean;
+  idPrefix: string;
 }) {
   const deposit = parseAmount(values.deposit, TOKEN_DECIMALS[symbol]);
   const split = preview.gross !== null && preview.feeBps !== null ? splitPayout(preview.gross, preview.feeBps, values.attendeeShareBps) : null;
@@ -113,10 +115,10 @@ function Receipt({
   const maxTotal = /^\d+$/.test(values.maxTotal.trim()) ? Number(values.maxTotal) : null;
 
   return (
-    <Sheet edge="stub-bottom" aria-labelledby="receipt-title">
+    <Sheet edge="stub-bottom" aria-labelledby={`${idPrefix}-receipt-title`}>
       <SheetSection className="flex flex-col gap-4 pb-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 id="receipt-title" className="font-display text-xl">
+          <h2 id={`${idPrefix}-receipt-title`} className="font-display text-xl">
             What this pays for
           </h2>
           <span className="font-mono text-xs text-ink-faint">chain {activeChainId}</span>
@@ -176,10 +178,10 @@ function Receipt({
 
 function Created({ id, hash }: { id: string | null; hash: string }) {
   return (
-    <Sheet className="mx-auto max-w-2xl">
+    <Sheet className="max-w-2xl">
       <SheetSection className="flex flex-col items-start gap-5">
-        <p className="text-sm font-medium text-ledger-green">Funded and live on {activeChain.name}</p>
-        <h1 className="font-display text-3xl">{id ? `Campaign #${id} is in escrow` : "Your campaign is in escrow"}</h1>
+        <p className="text-sm font-medium text-ledger-green">Funded on {activeChain.name}</p>
+        <h2 className="font-display text-3xl">{id ? `Campaign #${id} is in escrow` : "Your campaign is in escrow"}</h2>
         <p className="text-base text-ink-soft">
           Next, approve the events it should pay for. Until you do, it only pays bonded organizers if you allowed that.
         </p>
@@ -458,6 +460,9 @@ function Form({ seat }: { seat: SponsorSeat }) {
         </Part>
 
         <Part n={6} title="Deposit" intro="Locked in the vault from the moment you create the campaign. Whatever is not paid out comes back to you.">
+          <div className="lg:hidden">
+            <Receipt values={values} preview={preview} symbol={symbol} errors={errors} feeUnreadable={vault.status === "error"} idPrefix="inline" />
+          </div>
           <TextField
             id="deposit"
             label={`Deposit in ${symbol}`}
@@ -514,8 +519,8 @@ function Form({ seat }: { seat: SponsorSeat }) {
         ) : null}
       </form>
 
-      <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="Campaign summary">
-        <Receipt values={values} preview={preview} symbol={symbol} errors={errors} feeUnreadable={vault.status === "error"} />
+      <aside className="hidden lg:sticky lg:top-24 lg:block lg:self-start" aria-label="Campaign summary">
+        <Receipt values={values} preview={preview} symbol={symbol} errors={errors} feeUnreadable={vault.status === "error"} idPrefix="side" />
       </aside>
     </div>
   );

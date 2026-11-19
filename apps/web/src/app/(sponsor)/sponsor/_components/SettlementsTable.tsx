@@ -4,16 +4,13 @@ import { formatDate, formatTime, shortAddress, type TokenSymbol } from "@/ui/for
 import { TxLink } from "@/ui/TxLink";
 import { amountText } from "./campaign";
 
-function Who({ address, name, plain }: { address: string; name?: string | null; plain: boolean }) {
-  if (plain) {
-    return (
-      <span className="flex flex-col">
-        {name ? <span className="font-medium">{name}</span> : null}
-        <span className="font-mono text-xs">{shortAddress(address)}</span>
-      </span>
-    );
-  }
-  return <AddressChip address={address} name={name} copy={false} />;
+function Who({ address, name }: { address: string; name?: string | null; plain: true }) {
+  return (
+    <span className="flex flex-col" title={address}>
+      {name ? <span className="font-medium">{name}</span> : null}
+      <span className="font-mono text-xs">{shortAddress(address)}</span>
+    </span>
+  );
 }
 
 /**
@@ -23,8 +20,8 @@ function Who({ address, name, plain }: { address: string; name?: string | null; 
 export function SettlementsTable({ settlements, symbol, plain = false }: { settlements: SponsorSettlement[]; symbol: TokenSymbol; plain?: boolean }) {
   return (
     <>
-      <div className={plain ? "" : "hidden overflow-x-auto md:block print:block"}>
-        <table className="w-full border-collapse text-left text-sm">
+      <div className={plain ? "-mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible" : "hidden overflow-x-auto md:block print:block"}>
+        <table className={plain ? "w-full min-w-[46rem] border-collapse text-left text-sm print:min-w-0" : "w-full border-collapse text-left text-sm"}>
           <caption className="sr-only">Payouts, newest first</caption>
           <thead>
             <tr className="border-b border-ink text-xs text-ink-soft">
@@ -49,10 +46,10 @@ export function SettlementsTable({ settlements, symbol, plain = false }: { settl
                   <span className="block font-mono text-xs text-ink-faint">#{s.eventId}</span>
                 </td>
                 <td className="py-2.5 pr-4">
-                  <Who address={s.attendee} name={s.attendeeName} plain={plain} />
+                  <Who address={s.attendee} name={s.attendeeName} plain />
                 </td>
                 <td className="py-2.5 pr-4">
-                  <Who address={s.organizer} name={s.organizerName} plain={plain} />
+                  <Who address={s.organizer} name={s.organizerName} plain />
                 </td>
                 <td className="py-2.5 pr-4 text-right font-mono whitespace-nowrap">{amountText(s.toAttendee, symbol)}</td>
                 <td className="py-2.5 pr-4 text-right font-mono whitespace-nowrap">{amountText(s.toOrganizer, symbol)}</td>
@@ -74,17 +71,17 @@ export function SettlementsTable({ settlements, symbol, plain = false }: { settl
                   {formatDate(s.at)}, {formatTime(s.at)}
                 </span>
               </div>
-              <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1.5 text-sm">
+              <dl className="grid grid-cols-[4.75rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 text-sm">
                 <dt className="text-ink-soft">Attendee</dt>
-                <dd className="flex flex-wrap items-center justify-between gap-2">
+                <dd className="min-w-0">
                   <AddressChip address={s.attendee} name={s.attendeeName} copy={false} />
-                  <span className="font-mono">{amountText(s.toAttendee, symbol)}</span>
                 </dd>
+                <dd className="text-right font-mono">{amountText(s.toAttendee, symbol)}</dd>
                 <dt className="text-ink-soft">Organizer</dt>
-                <dd className="flex flex-wrap items-center justify-between gap-2">
+                <dd className="min-w-0">
                   <AddressChip address={s.organizer} name={s.organizerName} copy={false} />
-                  <span className="font-mono">{amountText(s.toOrganizer, symbol)}</span>
                 </dd>
+                <dd className="text-right font-mono">{amountText(s.toOrganizer, symbol)}</dd>
               </dl>
               <TxLink hash={s.tx} />
             </li>

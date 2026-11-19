@@ -182,7 +182,7 @@ export function ManageCampaign({
             </div>
           ) : (
             <div>
-              <Button variant="quiet" onClick={() => setConfirmClose(true)}>
+              <Button variant="quiet" className="text-vermilion-ink" onClick={() => setConfirmClose(true)}>
                 Close early
               </Button>
             </div>
@@ -201,11 +201,17 @@ export function ManageCampaign({
                 ? `${amountText(chain.balance, symbol)} is waiting. The refund goes to ${seat.safe ? "this Safe" : "this wallet"}.`
                 : `${amountText(chain.balance, symbol)} is still in escrow. The refund opens on ${formatDate(opensIso)} at ${formatTime(opensIso)}, three days after the campaign ends, so late check-ins can still be paid. Refunds work even if Showmark is paused.`}
             </p>
-            <div>
-              <Button variant={refundOpen ? "primary" : "quiet"} disabled={!refundOpen || refund.phase === "success"} pending={isBusy(refund)} onClick={() => void sendRefund()}>
-                {refundOpen ? `Refund ${amountText(chain.balance, symbol)}` : `Refund opens ${formatDate(opensIso)}`}
-              </Button>
-            </div>
+            {refundOpen ? (
+              <div>
+                <Button variant="primary" disabled={refund.phase === "success"} pending={isBusy(refund)} onClick={() => void sendRefund()}>
+                  {`Refund ${amountText(chain.balance, symbol)}`}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-base text-ink">
+                Refund opens <span className="font-mono">{formatDate(opensIso)}</span>
+              </p>
+            )}
           </>
         )}
         <TxStatus phase={refund} via={seat.signer.kind} successText="Refunded" />

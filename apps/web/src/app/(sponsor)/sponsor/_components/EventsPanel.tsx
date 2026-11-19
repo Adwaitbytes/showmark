@@ -55,7 +55,7 @@ function EventLine({ e, action, phase, via, successText }: { e: Row; action?: Re
         ) : null}
       </dl>
       {action ? (
-        <div className="flex flex-col gap-2 sm:w-44 sm:items-end">
+        <div className="flex flex-col items-start gap-2 sm:w-44 sm:items-end">
           {action}
           {phase ? <TxStatus phase={phase} via={via} successText={successText} /> : null}
         </div>
@@ -108,7 +108,7 @@ function AddEvents({ seat, campaignId, already, onChanged }: { seat: SponsorSeat
         <Input
           id="event-search"
           type="search"
-          placeholder="Name, city, organizer, .qie name or event number"
+          placeholder="Name, city, organizer or #id"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-describedby="event-search-hint"

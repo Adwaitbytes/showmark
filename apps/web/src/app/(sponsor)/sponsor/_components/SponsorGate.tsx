@@ -46,7 +46,7 @@ function SignInSheet({ title, children }: { title: string; children: ReactNode }
  * Puts the sponsor console behind a wallet. Inside safe.qie.digital the Safe is the sponsor. Elsewhere the person
  * connects QIE Wallet and signs a free sign-in message. `intro` is what a signed-out visitor reads first.
  */
-export function SponsorGate({ intro, children }: { intro?: ReactNode; children: (seat: SponsorSeat) => ReactNode }) {
+export function SponsorGate({ intro, children }: { intro?: (signIn: ReactNode) => ReactNode; children: (seat: SponsorSeat) => ReactNode }) {
   const who = useSponsorIdentity();
 
   if (who.status === "detecting") return <GateSkeleton />;
@@ -90,28 +90,26 @@ export function SponsorGate({ intro, children }: { intro?: ReactNode; children: 
 
   const { wallet } = who;
   const busy = wallet.status === "connecting" || wallet.status === "discovering";
-  return (
-    <div className="flex flex-col gap-10">
-      {intro}
-      <SignInSheet title="Connect the wallet that will fund campaigns">
-        <p className="text-base text-ink-soft">
-          Showmark works with QIE Wallet on {activeChain.name}. Your deposit goes from this wallet straight into the
-          vault contract; Showmark never holds it.
-        </p>
-        {wallet.error ? (
-          <Notice tone={wallet.status === "wrong-chain" ? "warning" : "danger"} title={wallet.error.message}>
-            {wallet.error.action}
-          </Notice>
-        ) : null}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="primary" onClick={() => void connect()} pending={busy}>
-            {busy ? "Opening QIE Wallet" : "Connect QIE Wallet"}
-          </Button>
-          <Button variant="quiet" href="https://qiewallet.me" external>
-            Get QIE Wallet
-          </Button>
-        </div>
-      </SignInSheet>
-    </div>
+  const sheet = (
+    <SignInSheet title="Connect the wallet that will fund campaigns">
+      <p className="text-base text-ink-soft">
+        Showmark works with QIE Wallet on {activeChain.name}. Your deposit goes from this wallet straight into the
+        vault contract; Showmark never holds it.
+      </p>
+      {wallet.error ? (
+        <Notice tone={wallet.status === "wrong-chain" ? "warning" : "danger"} title={wallet.error.message}>
+          {wallet.error.action}
+        </Notice>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="primary" onClick={() => void connect()} pending={busy}>
+          {busy ? "Opening QIE Wallet" : "Connect QIE Wallet"}
+        </Button>
+        <Button variant="quiet" href="https://qiewallet.me" external>
+          Get QIE Wallet
+        </Button>
+      </div>
+    </SignInSheet>
   );
+  return <>{intro ? intro(sheet) : sheet}</>;
 }

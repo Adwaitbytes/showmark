@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { campaignDetailSchema, sponsorApi, type SponsorCampaignDetail } from "@/lib/sponsor/api";
 import { findSoftSignals } from "@/lib/sponsor/anomalies";
@@ -78,18 +79,40 @@ function Reach({ d, chain }: { d: SponsorCampaignDetail; chain: OnChainCampaign 
     { label: "Pays for", value: more, unit: "more people", note: d.pricing === 1 ? "At today's QIE price" : "At the current amount per person" },
   ];
   return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-doc bg-rule-soft lg:grid-cols-4 [&>*]:bg-sheet">
-      {cells.map((c) => (
-        <div key={c.label} className="flex flex-col gap-1 px-5 py-5">
+    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-doc bg-rule-soft lg:grid-cols-[1.4fr_1fr_1fr_1fr] [&>*]:bg-sheet">
+      {cells.map((c, i) => (
+        <div key={c.label} className={i === 0 ? "col-span-2 flex flex-col gap-1 px-5 py-5 lg:col-span-1" : "flex flex-col gap-1 px-5 py-5"}>
           <dt className="text-sm text-ink-soft">{c.label}</dt>
-          <dd className="flex flex-wrap items-baseline gap-x-2 leading-tight text-ink">
-            <span className="font-mono text-xl sm:text-2xl">{c.value}</span>
+          <dd className="flex flex-wrap items-baseline gap-x-2 leading-none text-ink">
+            <span className={i === 0 ? "font-mono text-5xl tracking-[-0.02em] text-vermilion-ink" : "font-mono text-xl sm:text-2xl"}>{c.value}</span>
             {c.unit ? <span className="text-sm text-ink-soft">{c.unit}</span> : null}
           </dd>
-          <dd className="text-xs text-ink-faint">{c.note}</dd>
+          <dd className="mt-1 text-sm text-ink-faint">{c.note}</dd>
         </div>
       ))}
     </dl>
+  );
+}
+
+const PAGE = 15;
+
+/** Payouts in pages, so a long campaign does not push everything else off the screen. */
+function PagedSettlements({ d }: { d: SponsorCampaignDetail }) {
+  const [shown, setShown] = useState(PAGE);
+  const rows = d.settlements.slice(0, shown);
+  const left = d.settlements.length - rows.length;
+  return (
+    <div className="flex flex-col gap-4">
+      <SettlementsTable settlements={rows} symbol={d.tokenSymbol} />
+      {left > 0 ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <Button variant="quiet" onClick={() => setShown((n) => n + PAGE * 2)}>
+            Show {Math.min(left, PAGE * 2)} more
+          </Button>
+          <span className="text-sm text-ink-soft">The CSV and the printable report list every one.</span>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -184,7 +207,8 @@ function Detail({ id }: { id: string }) {
 
       <div className="flex flex-col gap-3">
         <Reach d={d} chain={onChain} />
-        <p className="text-xs text-ink-faint" aria-live="off">
+        <p className="flex items-center gap-2 text-sm text-ink-faint" aria-live="off">
+          <span aria-hidden="true" className="size-1.5 rounded-pill bg-ledger-green" />
           Live. Refreshes every 15 seconds{state.status === "error" ? "; the last refresh failed, so these may be a little behind" : ""}. Read at{" "}
           {formatTime(new Date(now * 1000).toISOString())}.
         </p>
@@ -241,7 +265,7 @@ function Detail({ id }: { id: string }) {
             The first one appears here a few seconds after someone checks in at an approved event, with its transaction.
           </EmptyState>
         ) : (
-          <SettlementsTable settlements={d.settlements} symbol={d.tokenSymbol} />
+          <PagedSettlements d={d} />
         )}
       </Section>
     </div>
