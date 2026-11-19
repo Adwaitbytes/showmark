@@ -1,0 +1,12 @@
+# Decisions
+
+One line of reasoning per decision. Newest at the bottom.
+
+- **D-001 Name: Showmark.** "Haazir" was hard to say for a global jury. Showmark means the mark you get for showing up and echoes "hallmark", the official stamp that certifies something is genuine, which matches the passport-and-ink design. Collision checks on 19 Nov 2026: no product or crypto project of that name, `showmark` and `@showmark/*` free on npm, `showmark.qie` free on the Zone contract. Rejected: Countersign (e-signature SaaS and taken npm scope), Muster (existing attendance app), Stamped (reviews platform), Hereby (popular npm tool), Turnout (event analytics company), Rollcall (newspaper).
+- **D-002 EVM target: shanghai.** PUSH0 executed on mainnet and testnet via eth_call; TSTORE (0x5d) is an invalid opcode on mainnet, so no Cancun features and no transient-storage reentrancy guard.
+- **D-003 Oracle staleness is a constructor parameter.** The QIE/USDT feed is deviation-triggered (7 rounds inside 50 minutes, then a 23 hour gap), so the limit is chosen at deploy from measured history and a stale price defers settlement instead of failing a check-in.
+- **D-004 Check-in and settlement are separate transactions.** The registry never calls the vault, so a campaign problem can never block a check-in (invariant 2). The relayer sends settlement right behind the check-in with the next nonce, so both usually land in the same block.
+- **D-005 Event metadata lives in event logs, not a database.** Name, venue and city are emitted as a JSON string in `EventCreated`/`EventMetadataUpdated`. At 1 gwei this costs fractions of a cent and keeps every public page derivable from the chain.
+- **D-006 Attendee identity is a pass key, linked once to a wallet.** The app holds a local key that signs check-ins without any wallet popup, which is what makes scan-to-stamp under 10 seconds possible. Linking requires signatures from both the pass and the wallet and is one-to-one, so one QIE ID holder cannot farm QIE-ID-gated campaigns with many passes.
+- **D-007 QIE ID gating is checked at settlement.** A gated campaign pays only once the pass is linked to a wallet holding a QIE ID; settlement is permissionless and retryable until the grace period ends, so linking later still pays out.
+- **D-008 No wagmi.** QIE Wallet needs custom EIP-6963 handling (isMetaMask is true, no disconnect event) and the check-in route has a 170 kB budget, so the app uses viem directly with a small EIP-6963 store.
