@@ -21,7 +21,6 @@ const en = {
   nav: {
     passport: "Passport",
     scan: "Scan",
-    home: "Showmark, home",
     attendee: "Attendee",
   },
   common: {
@@ -66,6 +65,11 @@ const en = {
     notNow: "Not now",
     opensAt: (time: string) => `Check-in for this event opens at ${time}.`,
     scanAgain: "Scan the door code",
+    receiptLabel: "Check-in receipt",
+    receiptEvent: "Event",
+    receiptTime: "Time",
+    receiptTx: "Transaction",
+    receiptPending: "Waiting for the block",
   },
   errors: {
     invalidCode: {
@@ -242,7 +246,6 @@ const hi: Dictionary = {
   nav: {
     passport: "पासपोर्ट",
     scan: "स्कैन",
-    home: "Showmark, होम",
     attendee: "अटेंडी",
   },
   common: {
@@ -287,6 +290,11 @@ const hi: Dictionary = {
     notNow: "अभी नहीं",
     opensAt: (time) => `इस इवेंट का चेक इन ${time} पर खुलेगा।`,
     scanAgain: "दरवाज़े का कोड स्कैन करें",
+    receiptLabel: "चेक इन की रसीद",
+    receiptEvent: "इवेंट",
+    receiptTime: "समय",
+    receiptTx: "ट्रांज़ैक्शन",
+    receiptPending: "ब्लॉक का इंतज़ार है",
   },
   errors: {
     invalidCode: {
