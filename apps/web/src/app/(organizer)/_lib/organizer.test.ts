@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 import { byteLength, DEFAULT_PASS_AGE, encodeMetadata, parseLocalDateTime, toLocalDateTimeValue, validateEventForm, type EventFormValues } from "./event-form";
 import { attendeesCsv } from "./csv";
-import { signInMessage } from "./siwe";
 import { formatQie } from "./tx";
 
 const NOW = new Date(2026, 10, 20, 10, 0);
@@ -101,25 +100,6 @@ describe("gas amounts", () => {
     expect(formatQie(123_456_789_000_000n)).toBe("0.000123");
     expect(formatQie(1_250_000_000_000_000_000n)).toBe("1.25");
     expect(formatQie(0n)).toBe("0");
-  });
-});
-
-describe("sign-in message", () => {
-  it("follows the EIP-4361 layout with chain and nonce", () => {
-    const message = signInMessage({
-      domain: "showmark.app",
-      origin: "https://showmark.app",
-      address: getAddress("0xa8c849c243ba940102d2deb99971e4c713411926"),
-      chainId: 1990,
-      nonce: "abc12345",
-      issuedAt: new Date("2026-11-20T10:00:00Z"),
-    });
-    const lines = message.split("\n");
-    expect(lines[0]).toBe("showmark.app wants you to sign in with your Ethereum account:");
-    expect(lines[1]).toBe("0xA8C849C243BA940102d2deB99971e4c713411926");
-    expect(message).toContain("Chain ID: 1990");
-    expect(message).toContain("Nonce: abc12345");
-    expect(message).toContain("Issued At: 2026-11-20T10:00:00.000Z");
   });
 });
 

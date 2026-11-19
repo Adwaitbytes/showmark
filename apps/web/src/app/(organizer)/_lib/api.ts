@@ -158,7 +158,9 @@ export const api = {
   campaignToken: (id: string) =>
     requestJson(`/api/campaigns/${encodeURIComponent(id)}`, z.object({ tokenSymbol: z.enum(["QIE", "QUSDC"]), name: z.string() }).passthrough()),
   session: () => requestJson("/api/auth/session", sessionSchema),
-  nonce: () => requestJson("/api/auth/nonce", z.object({ nonce: z.string().min(8) }), { method: "GET" }),
+  /** The server writes the exact sign-in message, bound to this address and a single-use nonce. */
+  challenge: (address: Address) =>
+    requestJson(`/api/auth/nonce?address=${address}`, z.object({ nonce: z.string().min(8), message: z.string().min(1) }), { method: "GET" }),
   verify: (message: string, signature: Hex) =>
     requestJson("/api/auth/verify", sessionSchema, { method: "POST", body: JSON.stringify({ message, signature }) }),
   signOut: () => requestJson("/api/auth/session", z.unknown(), { method: "DELETE" }),

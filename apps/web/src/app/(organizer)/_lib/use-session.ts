@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { isAddressEqual, type Address } from "viem";
 import type { Session } from "@/lib/api/types";
-import { activeChainId } from "@/lib/chain/chains";
 import { toWalletError, type WalletError } from "@/lib/wallet/wallet-store";
 import { connect, useWallet, walletClient } from "@/lib/wallet/use-wallet";
 import { api, ApiRequestError, errorCopy, type ErrorCopy } from "./api";
-import { signInMessage } from "./siwe";
 
 export type SessionStatus = "checking" | "signed-out" | "signing-in" | "signed-in";
 
@@ -82,15 +80,7 @@ export function useOrganizerSession(): SessionState {
         setStatus("signed-out");
         return;
       }
-      const { nonce } = await api.nonce();
-      const message = signInMessage({
-        domain: window.location.host,
-        origin: window.location.origin,
-        address,
-        chainId: activeChainId,
-        nonce,
-        issuedAt: new Date(),
-      });
+      const { message } = await api.challenge(address);
       const signature = await client.signMessage({ account: address, message });
       const next = await api.verify(message, signature);
       setSession(next);
