@@ -25,14 +25,23 @@ export interface LedgerRowProps {
 }
 
 export function LedgerRow({ label, value, note, total = false, className }: LedgerRowProps) {
+  // A <dl> group must be one <div> holding only <dt> and <dd>, so the dotted leader lives inside the
+  // <dt> and the note is a second <dd>. Screen readers keep the term and value paired.
   return (
-    <div className={cn("py-2.5", total && "mt-1 border-t border-ink pt-3.5", className)}>
-      <div className="flex items-baseline gap-3">
-        <dt className={cn("min-w-0 text-base text-ink-soft", total && "font-medium text-ink")}>{label}</dt>
+    <div className={cn("flex flex-wrap items-baseline py-2.5", total && "mt-1 border-t border-ink pt-3.5", className)}>
+      <dt className={cn("flex min-w-0 flex-1 items-baseline gap-3 text-base text-ink-soft", total && "font-medium text-ink")}>
+        <span className="min-w-0">{label}</span>
         <span aria-hidden="true" className="leader" />
-        <dd className={cn("shrink-0 text-right font-mono text-base whitespace-nowrap text-ink", total && "text-md font-medium")}>{value}</dd>
-      </div>
-      {note ? <p className="mt-0.5 text-sm text-ink-faint">{note}</p> : null}
+      </dt>
+      <dd
+        className={cn(
+          "shrink-0 pl-3 text-right font-mono text-base whitespace-nowrap text-ink",
+          total && "text-md font-medium",
+        )}
+      >
+        {value}
+      </dd>
+      {note ? <dd className="mt-0.5 basis-full text-sm text-ink-faint">{note}</dd> : null}
     </div>
   );
 }
