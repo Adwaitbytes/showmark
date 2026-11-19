@@ -54,7 +54,13 @@ describe("door pass codec", () => {
     const p = { eventId: 42n, issuedAt: 1795073006n, doorSig: sig, ticketKey };
     expect(decodeDoorPass(encodeDoorPass(p))).toEqual(p);
     expect(decodeDoorPass(doorPassUrl("https://showmark.example/", p))).toEqual(p);
-    expect(decodeDoorPass(`${doorPassUrl("https://showmark.example", p)}?utm=poster#top`)).toEqual(p);
+    // The key lives in the fragment, so a query string before it is ignored and a URL without it is rejected.
+    const url = doorPassUrl("https://showmark.example", p);
+    expect(url).toMatch(/^https:\/\/showmark\.example\/c\/42\.1795073006\.[A-Za-z0-9_-]{87}#[A-Za-z0-9_-]{43}$/);
+    const [path, fragment] = url.split("#");
+    expect(decodeDoorPass(`${path}?utm=poster#${fragment}`)).toEqual(p);
+    expect(decodeDoorPass(path ?? "")).toBeNull();
+    expect(new URL(url).pathname).not.toContain(fragment ?? "-");
     expect(decodeDoorPass(`  ${encodeDoorPass(p)}\n`)).toEqual(p);
   });
 
@@ -66,20 +72,23 @@ describe("door pass codec", () => {
     const bad = [
       "",
       "1.2",
-      "x.2.abc.def",
-      `1.2.!!!.${goodKey}`,
-      `1.2.${"A".repeat(10)}.${goodKey}`,
+      "x.2.abc#def",
+      `1.2.!!!#${goodKey}`,
+      `1.2.${"A".repeat(10)}#${goodKey}`,
       "https://x/c/1.2",
       `1.2.${goodSig}`,
-      `1.2.${toBase64Url(new Uint8Array(64))}.${goodKey}`,
-      `1.2.${toBase64Url(new Uint8Array(66))}.${goodKey}`,
-      `1.2.${goodSig}.${toBase64Url(new Uint8Array(31).fill(7))}`,
-      `1.2.${goodSig}.${toBase64Url(new Uint8Array(33).fill(7))}`,
-      `1.2.${goodSig}.${toBase64Url(new Uint8Array(32))}`,
-      `-1.2.${goodSig}.${goodKey}`,
-      `1.2.3.${goodSig}.${goodKey}`,
-      `123456789012345678901.2.${goodSig}.${goodKey}`,
-      `1.2.${goodSig}.${goodKey}=`,
+      `1.2.${goodSig}.${goodKey}`,
+      `https://x/c/1.2.${goodSig}`,
+      `1.2.${toBase64Url(new Uint8Array(64))}#${goodKey}`,
+      `1.2.${toBase64Url(new Uint8Array(66))}#${goodKey}`,
+      `1.2.${goodSig}#${toBase64Url(new Uint8Array(31).fill(7))}`,
+      `1.2.${goodSig}#${toBase64Url(new Uint8Array(33).fill(7))}`,
+      `1.2.${goodSig}#${toBase64Url(new Uint8Array(32))}`,
+      `1.2.${goodSig}#`,
+      `-1.2.${goodSig}#${goodKey}`,
+      `1.2.3.${goodSig}#${goodKey}`,
+      `123456789012345678901.2.${goodSig}#${goodKey}`,
+      `1.2.${goodSig}#${goodKey}=`,
     ];
     for (const input of bad) expect(decodeDoorPass(input), input).toBeNull();
   });

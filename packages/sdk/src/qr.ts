@@ -5,9 +5,10 @@ import { ShowmarkInputError } from "./errors";
 // apps/web/src/lib/qr/payload.ts exactly; test/qr.test.ts runs both on the same inputs to prove it.
 //
 // Door pass (mode 1), shown on the door screen and opened by any phone camera:
-//   {origin}/c/{eventId}.{issuedAt}.{doorSig base64url}.{ticketKey base64url}
+//   {origin}/c/{eventId}.{issuedAt}.{doorSig base64url}#{ticketKey base64url}
 // The ticket key is a throwaway private key for one 15 second rotation. Only people who see the QR hold it, and
-// the chain only ever sees its signatures, so a door pass read from calldata cannot admit anyone else.
+// the chain only ever sees its signatures, so a door pass read from calldata cannot admit anyone else. It rides in
+// the URL fragment, which browsers never send to a server, so it stays out of hosting logs (audit N-03).
 // Attendee code (mode 2, door scans you), shown on the attendee's phone and scanned by the door app:
 //   SM2.{eventId}.{attendee}.{attendeeSig base64url}
 
@@ -74,9 +75,9 @@ function decodeKey(text: string): Hex | null {
   return bytesToHex(bytes);
 }
 
-/** The token part of a door pass: `{eventId}.{issuedAt}.{doorSig}.{ticketKey}`. Throws ShowmarkInputError for bad bytes. */
+/** The token part of a door pass: `{eventId}.{issuedAt}.{doorSig}#{ticketKey}`. Throws ShowmarkInputError for bad bytes. */
 export function encodeDoorPass(p: DoorPassPayload): string {
-  return `${p.eventId}.${p.issuedAt}.${encodeSig(p.doorSig)}.${encodeKey(p.ticketKey)}`;
+  return `${p.eventId}.${p.issuedAt}.${encodeSig(p.doorSig)}#${encodeKey(p.ticketKey)}`;
 }
 
 /** The full URL a phone camera opens: `{origin}/c/{token}`. */
@@ -84,14 +85,20 @@ export function doorPassUrl(origin: string, p: DoorPassPayload): string {
   return `${origin.replace(/\/$/, "")}/c/${encodeDoorPass(p)}`;
 }
 
-/** Accepts the bare token or a full URL containing /c/{token}. Returns null for anything malformed and never throws. */
+/**
+ * Accepts the bare token (`{eventId}.{issuedAt}.{sig}#{key}`) or a full URL containing /c/{token}#{key}.
+ * Returns null for anything malformed, including a pass without its #key, and never throws.
+ */
 export function decodeDoorPass(input: string): DoorPassPayload | null {
   const trimmed = input.trim();
-  const token = trimmed.includes("/c/") ? trimmed.slice(trimmed.lastIndexOf("/c/") + 3).split(/[?#]/)[0] : trimmed;
-  if (token === undefined) return null;
+  const afterPath = trimmed.includes("/c/") ? trimmed.slice(trimmed.lastIndexOf("/c/") + 3) : trimmed;
+  const hashAt = afterPath.indexOf("#");
+  if (hashAt < 0) return null;
+  const token = afterPath.slice(0, hashAt).split("?")[0] ?? "";
+  const key = afterPath.slice(hashAt + 1);
   const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [eventId, issuedAt, sig, key] = parts as [string, string, string, string];
+  if (parts.length !== 3) return null;
+  const [eventId, issuedAt, sig] = parts as [string, string, string];
   if (!DECIMAL.test(eventId) || !DECIMAL.test(issuedAt)) return null;
   const doorSig = decodeSig(sig);
   const ticketKey = decodeKey(key);

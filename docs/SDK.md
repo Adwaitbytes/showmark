@@ -22,7 +22,7 @@ The packages are not on npm yet. Inside this monorepo, depend on them with `"@sh
 
 ## Check in from a scanned door pass
 
-The door screen shows a QR that opens `https://<site>/c/{eventId}.{issuedAt}.{doorSig}.{ticketKey}`. The attendee's pass key signs `CheckIn`, the ticket key from the QR signs `Ticket` for that attendee, and the relayer pays the gas.
+The door screen shows a QR that opens `https://<site>/c/{eventId}.{issuedAt}.{doorSig}#{ticketKey}`. The attendee's pass key signs `CheckIn`, the ticket key from the QR signs `Ticket` for that attendee, and the relayer pays the gas.
 
 ```ts
 import { ShowmarkClient } from "@showmark/sdk";
@@ -132,7 +132,7 @@ const walletSig = await signLinkWallet({ ...domain, ...link, signer: walletClien
 
 #### Why ticket keys
 
-A rotating door pass used to be a door signature over `(eventId, issuedAt)`. Once one attendee checked in, that signature sat in public calldata, and anyone watching the chain could pair it with their own pass and check in from home for the rest of the pass window. Now every 15 second rotation, `createDoorPass` generates a throwaway ticket key, the door signs its address inside `DoorPass`, and the private key travels only inside the QR. A mode 1 check-in must also carry a `Ticket` signature from that key over the specific attendee. The chain only ever sees the ticket's address and signatures, never its key, so a pass read from calldata admits nobody else. Seeing the QR is still enough, which is why streaming the door screen remains the documented residual risk and campaigns that need more can require mode 2. Treat `DoorPassPayload.ticketKey` like the QR itself: show it, never log or store it.
+A rotating door pass used to be a door signature over `(eventId, issuedAt)`. Once one attendee checked in, that signature sat in public calldata, and anyone watching the chain could pair it with their own pass and check in from home for the rest of the pass window. Now every 15 second rotation, `createDoorPass` generates a throwaway ticket key, the door signs its address inside `DoorPass`, and the private key travels only inside the QR. A mode 1 check-in must also carry a `Ticket` signature from that key over the specific attendee. The chain only ever sees the ticket's address and signatures, never its key, so a pass read from calldata admits nobody else. Seeing the QR is still enough, which is why streaming the door screen remains the documented residual risk and campaigns that need more can require mode 2. The key rides in the URL fragment after `#`, which browsers never send to a server, so it never reaches Showmark's servers or hosting logs; the phone reads it locally and only the `Ticket` signature travels to the relayer. Treat `DoorPassPayload.ticketKey` like the QR itself: show it, never log or store it.
 
 ### QR codes
 
@@ -141,13 +141,13 @@ Byte-for-byte the same codec the Showmark app uses.
 ```ts
 import { decodeDoorPass, encodeAttendeeCode, decodeAttendeeCode } from "@showmark/sdk";
 
-decodeDoorPass("https://showmark.app/c/42.1795073006.q8vL....zX3a...");
+decodeDoorPass("https://showmark.app/c/42.1795073006.q8vL...#zX3a...");
 // { eventId: 42n, issuedAt: 1795073006n, doorSig: "0x...", ticketKey: "0x..." }, or null for anything malformed
 
 encodeAttendeeCode({ eventId: 42n, attendee, attendeeSig }); // "SM2.42.0xA8C8....{sig}"
 ```
 
-Decoders never throw. Encoders throw `ShowmarkInputError` for a signature that is not 65 bytes or a ticket key that is not 32 bytes.
+Decoders never throw, and a door pass without its `#key` fragment decodes to null. Encoders throw `ShowmarkInputError` for a signature that is not 65 bytes or a ticket key that is not 32 bytes.
 
 ### Building check-ins
 
