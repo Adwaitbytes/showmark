@@ -1,0 +1,4 @@
+dist/
+test/foundry/out/
+test/foundry/cache/
+.forge-out/

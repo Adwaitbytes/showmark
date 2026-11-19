@@ -1,0 +1,15 @@
+# Standalone Foundry project that computes Showmark EIP-712 digests and signatures in Solidity, so the SDK tests
+# compare viem against the EVM rather than against themselves. Run with `pnpm --filter @showmark/sdk digests`.
+[profile.default]
+src = "src"
+script = "script"
+out = "out"
+cache_path = "cache"
+libs = ["../../../contracts/lib"]
+solc_version = "0.8.38"
+evm_version = "shanghai"
+optimizer = true
+remappings = [
+  "forge-std/=../../../contracts/lib/forge-std/src/",
+]
+fs_permissions = [{ access = "write", path = "../fixtures" }]

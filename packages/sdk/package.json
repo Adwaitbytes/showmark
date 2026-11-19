@@ -1,0 +1,83 @@
+{
+  "name": "@showmark/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript client and React components for Showmark, presence-conditional sponsorship on QIE.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react/index.d.ts",
+        "default": "./dist/react/index.js"
+      },
+      "require": {
+        "types": "./dist/react/index.d.cts",
+        "default": "./dist/react/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "examples": "node scripts/run-examples.mjs",
+    "digests": "node scripts/forge-digests.mjs",
+    "sync-abi": "node scripts/sync-abi.mjs"
+  },
+  "keywords": [
+    "showmark",
+    "qie",
+    "presence",
+    "eip-712",
+    "viem"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0",
+    "viem": "^2.58.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "26.6.6",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "jsdom": "31.0.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tsup": "9.0.0",
+    "typescript": "5.9.3",
+    "viem": "2.58.1",
+    "vitest": "5.1.1"
+  }
+}
