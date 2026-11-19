@@ -53,7 +53,7 @@ describe("relay requests", () => {
       Response.json({ txHash }),
     );
     const options = { baseUrl: "https://showmark.example", fetch };
-    expect(await relayCheckInBatch(options, [data, { ...data, mode: 2 }])).toEqual({ txHash, accepted: 2 });
+    expect(await relayCheckInBatch(options, [data, { ...data, mode: 2 }])).toEqual({ txHash, accepted: 2, rejected: [] });
     expect(
       await relayLinkWallet(options, { pass: alice, wallet: zeroAddress, deadline: 99n, passSig: sig, walletSig: sig, relocateEventIds: [1n, 2n] }),
     ).toEqual({ txHash });
@@ -67,6 +67,19 @@ describe("relay requests", () => {
       { pass: alice, wallet: zeroAddress, deadline: "99", passSig: sig, walletSig: sig, relocateEventIds: ["1", "2"] },
     ]);
     expect(bodies[2]).toEqual(["https://showmark.example/api/relay/withdraw", { token: zeroAddress, account: alice }]);
+  });
+
+  it("returns per-item rejections from a batch, including a batch where nothing was sent", async () => {
+    const already = { index: 0, code: "AlreadyPresent", message: "This pass is already checked in.", action: "Nothing to do." };
+    const fetch = fetchReturning(
+      Response.json({ txHash: null, accepted: 0, rejected: [already] }),
+      Response.json({ txHash, accepted: 1, rejected: [{ ...already, index: 1 }] }),
+      Response.json({ txHash, accepted: 1, rejected: [{ index: "x" }] }),
+    );
+    const options = { baseUrl: "https://showmark.example", fetch };
+    expect(await relayCheckInBatch(options, [data])).toEqual({ txHash: null, accepted: 0, rejected: [already] });
+    expect((await relayCheckInBatch(options, [data, data])).rejected[0]?.index).toBe(1);
+    await expect(relayCheckInBatch(options, [data])).rejects.toBeInstanceOf(ShowmarkNetworkError);
   });
 
   it("surfaces the API error copy as ShowmarkRelayError", async () => {

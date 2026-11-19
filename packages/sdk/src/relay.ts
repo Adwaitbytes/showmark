@@ -48,9 +48,21 @@ export interface RelaySubmitted {
   status: "submitted";
 }
 
+export interface RelayBatchRejection {
+  /** Position of the item in the batch you sent. */
+  index: number;
+  /** Check-in status name from the registry, for example "AlreadyPresent". */
+  code: string;
+  message: string;
+  action: string;
+}
+
 export interface RelayBatchSubmitted {
-  txHash: Hex;
+  /** The checkInBatch transaction, or null when no item needed sending. */
+  txHash: Hex | null;
   accepted: number;
+  /** Items the registry would reject, with copy. They were not sent. */
+  rejected: RelayBatchRejection[];
 }
 
 export interface RelayTx {
@@ -174,10 +186,15 @@ export async function relayCheckInBatch(options: RelayOptions, items: readonly C
   }
   const path = "/api/relay/check-in/batch";
   const body = await request(options, path, { method: "POST", body: { items: items.map(serializeCheckIn) } });
-  if (isRecord(body) && isTxHash(body.txHash) && typeof body.accepted === "number") {
-    return { txHash: body.txHash, accepted: body.accepted };
+  if (!isRecord(body) || !(body.txHash === null || isTxHash(body.txHash)) || typeof body.accepted !== "number") throw malformed(path);
+  const rejected: RelayBatchRejection[] = [];
+  for (const entry of Array.isArray(body.rejected) ? body.rejected : []) {
+    if (!isRecord(entry) || typeof entry.index !== "number") throw malformed(path);
+    const { index, code, message, action } = entry;
+    if (typeof code !== "string" || typeof message !== "string" || typeof action !== "string") throw malformed(path);
+    rejected.push({ index, code, message, action });
   }
-  throw malformed(path);
+  return { txHash: body.txHash, accepted: body.accepted, rejected };
 }
 
 /** POST /api/relay/link-wallet. Needs the LinkWallet signature from both the pass key and the wallet. */

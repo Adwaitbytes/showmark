@@ -95,7 +95,7 @@ Relay calls go to the Showmark API (`/api/relay/*`, `/api/tx/*`). Bigints travel
 |---|---|
 | `checkIn({ doorPass, signer })` | signs `CheckIn` for a scanned door pass and relays it |
 | `relayCheckIn(data)` | one `CheckInData`, after you built it yourself |
-| `relayCheckInBatch(items)` | up to 50 check-ins, for the door-scans-you offline queue |
+| `relayCheckInBatch(items)` | up to 50 check-ins, for the door-scans-you offline queue; items the registry would reject come back in `rejected` with copy and are not sent |
 | `relayLinkWallet({ pass, wallet, deadline, passSig, walletSig, relocateEventIds })` | links a pass to a wallet |
 | `relayWithdraw({ token, account })` | pays out claimable rewards to the linked wallet |
 | `txStatus(hash)` and `waitForTx(hash)` | `{ status, blockNumber }` |

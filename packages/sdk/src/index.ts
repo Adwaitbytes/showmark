@@ -65,6 +65,7 @@ export {
   type WithdrawRequest,
   type RelaySubmitted,
   type RelayBatchSubmitted,
+  type RelayBatchRejection,
   type RelayTx,
   type TxState,
   type TxStatus,
