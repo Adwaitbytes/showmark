@@ -29,6 +29,9 @@ const DEFAULT_ROUTES = [
   "/docs/security",
   "/docs/sdk",
   "/dev/ui",
+  "/dev/ui/traction",
+  "/dev/ui/event",
+  "/dev/ui/passport",
   "/this-page-does-not-exist",
 ];
 
