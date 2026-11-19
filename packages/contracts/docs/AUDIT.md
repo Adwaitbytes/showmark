@@ -791,3 +791,38 @@ They are cheap to fix (one function, one constant). Because the contracts are im
 them if another deploy candidate is cut. If not, ship with sponsor-UI guidance: "challenge after the last
 settlement and before endsAt + 3 days". Keep the trust items already documented in the README: QUSDC issuer burn
 power, the QIE/USDT feed and the Safe's discretionary arbitration.
+
+---
+
+# Fourth re-review
+
+**Scope:** `cc82f9b` and `e5b598e` (`refreshClaim`, refresh inside `resolve`, `REVIEW_PERIOD`,
+`challengeDeadline`), at HEAD `e5b598e`. Tests: `test/audit/FourthReReviewPoC.t.sol`.
+
+| Item | Result | Evidence |
+|---|---|---|
+| N3-01 | **Fixed.** `refreshClaim` raises a claim to the live `exposureOf`, and `resolve` refreshes before bounding the slash. | `test_V01_refreshOnlyRaisesAndNeverOverLocks`, `test_V02_resolveRefreshesBeforeBounding` |
+| N3-02 | **Fixed.** Release waits until `endsAt + SETTLE_GRACE + REVIEW_PERIOD` (10 days after the campaign ends). | `test_V03_reviewPeriodHoldsOnlyExposure` |
+| Can refresh lower a claim? | No. It only acts when `current > claim`. Exposure cannot fall while the challenge is open, because release is blocked for that pair. | V-01 |
+| Can it over-lock beyond the stake? | No. The hold is `min(stake, claimedOf)`; `claimedOf` may exceed the stake by design. | V-01 |
+| Can it block `resolve`? | No. The extra call is a mapping read on the immutable vault and cannot revert or be made expensive. | V-02 |
+| Can it be griefed? | No. It is permissionless but can only make the claim match the true exposure; the organizer cannot lower it. A resolved challenge reverts with `ChallengeNotOpen`. | V-01 |
+| New lock-up from the review period? | None for funds. Refund and withdraw timing is unchanged. Stake without a claim unbonds on its normal schedule. Only the organizer's bond room (eligibility for new open payouts) is held 7 days longer, which is the intended tradeoff. | V-03 |
+
+**I4-01 Informational (residual).** `completeUnbond` reads the stored claims. It cannot iterate challenges to
+refresh them. If later bonded payouts happen and nobody calls `refreshClaim` before the organizer's 7-day unbond
+delay ends, the unrefreshed part can leave the bond (`test_I4_01_unrefreshedClaimLetsStakeLeave`). Bonded payouts
+need bonded stake, so the organizer must drain first and then request unbond. That leaves at least 7 days in which
+anyone can refresh. Mitigation: the relayer, or the sponsor UI, calls `refreshClaim` after every bonded settlement
+for a pair with an open challenge. No contract change is needed.
+
+**Tools:** `forge test`: 242 passed, 0 failed, 1 skipped (fork test), 17 suites, including 34 tests in
+`test/audit`.
+
+## Final verdict: GO for mainnet
+
+All Critical, Medium and Low findings from the four rounds are fixed or explicitly accepted and documented (L-01,
+L-04). What remains is informational: I4-01 is handled operationally by refreshing claims, and the trust
+assumptions are documented in the README (QUSDC issuer burn power, the QIE/USDT feed, discretionary arbitration
+by the Safe). Deploy with the mainnet guards in `Deploy.s.sol` (Safe and fee recipient required, decimals checked),
+then have the Safe accept ownership of all four contracts.
