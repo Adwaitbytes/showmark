@@ -205,7 +205,7 @@ export const profiles = pgTable("profiles", {
   firstSeenBlock: blockNumber("first_seen_block").notNull(),
   /** Null until the explorer has been asked whether the address had any activity before first_seen_block. */
   firstSeenViaShowmark: boolean("first_seen_via_showmark"),
-  /** Not in the spec: Zone.balanceOf > 0 at the last check. */
+  /** Not in the spec: the root registry recorded a QIE ID (userDomain non-empty) at the last check. */
   holdsQieId: boolean("holds_qie_id"),
   updatedAt: time("updated_at").notNull(),
 });

@@ -5,13 +5,13 @@ import { setChainContext } from "./chain";
 import { setDatabase } from "./db/client";
 import { AppError } from "./errors";
 import { MemoryStore, setStore } from "./kv";
-import { zoneNamesAbi } from "./qie/names";
+import { nameRegistryAbi } from "./qie/names";
 import { getCampaign, getEvent, getPassport, getTraction, listCampaigns, listEvents } from "./queries";
 import { fakeChainClient } from "./testing/fake-chain";
 import { FIXTURE_CHAIN_ID, indexFixture, organizer, pass, pass2, registry, sponsor, startsAt, vault, wallet } from "./testing/fixtures";
 import { createTestDatabase } from "./testing/pglite";
 
-const zone: Address = "0x4000000000000000000000000000000000000004";
+const names: Address = "0x6000000000000000000000000000000000000006";
 const qusdc: Address = "0x5000000000000000000000000000000000000005";
 const claimed = 693n * 10n ** 15n;
 
@@ -41,16 +41,17 @@ beforeAll(async () => {
         throw new Error(`unexpected registry call ${fn}`);
       },
     },
-    [zone]: {
-      abi: zoneNamesAbi,
+    [names]: {
+      abi: nameRegistryAbi,
       handler: (fn, args) => {
-        if (fn === "balanceOf") return String(args[0]).toLowerCase() === wallet.toLowerCase() ? 1n : 0n;
-        if (fn === "domainExistsByName") return false;
-        throw new Error(`unexpected zone call ${fn}`);
+        const isWallet = String(args[0]).toLowerCase() === wallet.toLowerCase();
+        if (fn === "userDomain") return isWallet ? "guest.qie" : "";
+        if (fn === "resolver") return args[0] === "guest.qie" ? [1n, wallet] : [0n, zeroAddress];
+        throw new Error(`unexpected name registry call ${fn}`);
       },
     },
   });
-  setChainContext({ chainId: FIXTURE_CHAIN_ID, client, registry, vault, zone, qusdc, oracle: zeroAddress, nameRegistry: zeroAddress, deployBlock: 0n });
+  setChainContext({ chainId: FIXTURE_CHAIN_ID, client, registry, vault, qusdc, oracle: zeroAddress, nameRegistry: names, paidNameRegistry: zeroAddress, deployBlock: 0n });
 });
 
 afterAll(async () => {
@@ -96,7 +97,7 @@ describe("events", () => {
 describe("passport", () => {
   it("resolves a linked pass and reads balances and streaks from the chain", async () => {
     const passport = await getPassport(pass.toLowerCase());
-    expect(passport).toMatchObject({ pass, wallet, holdsQieId: true, qieName: null, pending: [] });
+    expect(passport).toMatchObject({ pass, wallet, holdsQieId: true, qieName: "guest.qie", pending: [] });
     expect(passport?.stamps).toHaveLength(1);
     expect(passport?.stamps[0]).toMatchObject({ eventId: "1", eventName: "Delhi builders night 2", city: "Delhi", mode: 1, streak: 1 });
     expect(passport?.streaks).toEqual([{ seriesId: "1", seriesName: "Builders nights", current: 1, best: 1 }]);
@@ -118,6 +119,7 @@ describe("passport", () => {
 
   it("returns null for names that do not exist and rejects garbage", async () => {
     expect(await getPassport("nobody.qie")).toBeNull();
+    expect((await getPassport("Guest.QIE"))?.pass).toBe(pass);
     await expect(getPassport("not an address")).rejects.toMatchObject({ status: 400 });
   });
 });

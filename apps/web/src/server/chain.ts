@@ -4,8 +4,10 @@ import { activeChainId } from "@/lib/chain/chains";
 import { publicClient } from "@/lib/chain/clients";
 import { qieNameRegistryAddress } from "./env";
 
-/** Mainnet QIE ID root registry (ERC1967 proxy). Registered as a minter on Zone; holds `userDomain(address)`. */
+/** Mainnet QIE ID root registry (ERC1967 proxy): `userDomain(address)` and `resolver(fqn)`. */
 export const MAINNET_QIE_NAME_REGISTRY: Address = "0x1D69d75AD7b77b91C3760F84faC52E651710f62e";
+/** Mainnet paid QIE ID registry: `resolver(fqn)` only. */
+export const MAINNET_QIE_PAID_NAME_REGISTRY: Address = "0x26cCB3fABd6db18834987134d715Ba2346CE7223";
 
 /**
  * Everything server code needs to talk to one chain. Production uses the shared config from src/lib/chain;
@@ -16,11 +18,12 @@ export interface ChainContext {
   client: PublicClient;
   registry: Address;
   vault: Address;
-  zone: Address;
   qusdc: Address;
   oracle: Address;
-  /** QIE ID root registry for reverse lookups, or zero when the network has none. */
+  /** QIE ID root registry (names and the QIE ID test), or zero when the network has none. */
   nameRegistry: Address;
+  /** Paid QIE ID registry for forward lookups, or zero. */
+  paidNameRegistry: Address;
   deployBlock: bigint;
 }
 
@@ -33,10 +36,10 @@ export function chainContext(): ChainContext {
     client: publicClient,
     registry: addresses.registry,
     vault: addresses.vault,
-    zone: addresses.zone,
     qusdc: addresses.qusdc,
     oracle: addresses.qieUsdOracle,
     nameRegistry: qieNameRegistryAddress() ?? (activeChainId === 1990 ? MAINNET_QIE_NAME_REGISTRY : zeroAddress),
+    paidNameRegistry: activeChainId === 1990 ? MAINNET_QIE_PAID_NAME_REGISTRY : zeroAddress,
     deployBlock,
   };
 }

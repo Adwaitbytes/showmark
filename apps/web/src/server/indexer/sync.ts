@@ -12,8 +12,9 @@ import { buildStatements, syncStateStatement } from "./apply";
 import { decodeShowmarkLogs } from "./decode";
 
 /**
- * eth_getLogs block span. Probed on 19 Nov 2026: rpc1..rpc5 mainnet and rpc1 testnet all reject
- * `toBlock - fromBlock > 10000` with "maximum [from, to] blocks distance: 10000". We stay one block under.
+ * eth_getLogs block span. Probed on 19 Nov 2026: rpc1..rpc5 mainnet and rpc1 testnet accept at most 10,001 blocks
+ * per call and reject `toBlock - fromBlock > 10000` with "maximum [from, to] blocks distance: 10000".
+ * Ranges here are 10,000 blocks, one under the limit.
  */
 export const MAX_LOG_BLOCK_SPAN = 10_000n;
 
