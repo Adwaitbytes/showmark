@@ -1,26 +1,321 @@
 @import "tailwindcss";
 
+/*
+ * Showmark design tokens. Locked at Gate 1 (docs/INTERFACES.md section 5).
+ *
+ * The page is a desk, documents are paper, and every mark is ink. The role
+ * variables below (--paper, --ink, ...) keep their names in both themes: the
+ * "night desk" theme swaps their values so components never need dark: variants.
+ * Contrast ratios for every text pair are recorded in src/ui/README.md.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Values from INTERFACES section 5, verbatim. */
+  --paper: #f3efe6;
+  --paper-deep: #e9e3d6;
+  --ink: #141311;
+  --ink-soft: #4a4640;
+  --vermilion: #e4442b;
+  --stamp-blue: #2b4bd9;
+  --ledger-green: #1f6b45;
+  --night: #12110f;
+
+  /* Extensions that keep every pair at WCAG AA. */
+  --sheet: #faf7f0; /* a document lying on the desk */
+  --ink-faint: #67615a; /* tertiary text, still 4.5:1 on every surface */
+  --vermilion-ink: #b33822; /* vermilion for small text (errors) */
+  --on-vermilion: #141311; /* text on a vermilion fill, 4.56:1 */
+  --rule: #8a8378; /* control borders, 3:1 against paper */
+  --rule-soft: rgb(20 19 17 / 0.13); /* decorative hairlines */
+  --focus: #2b4bd9;
+  --shadow-color: 32 28 20;
+  --duration-press: 180ms;
+  --duration-page: 220ms;
+  --ease-press: cubic-bezier(0.2, 1.4, 0.4, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .08 0 0 0 0 .05 0 0 0 .5 -.16'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/* Night desk: the same inks on a dark desk. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --paper: #12110f;
+    --paper-deep: #23211d;
+    --ink: #ede7db;
+    --ink-soft: #a9a296;
+    --vermilion: #eb5a40;
+    --stamp-blue: #8da0ff;
+    --ledger-green: #58b987;
+    --sheet: #1a1916;
+    --ink-faint: #938c80;
+    --vermilion-ink: #eb5a40;
+    --on-vermilion: #12110f;
+    --rule: #757064;
+    --rule-soft: rgb(237 231 219 / 0.12);
+    --focus: #8da0ff;
+    --shadow-color: 0 0 0;
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .9 0 0 0 0 .85 0 0 0 .34 -.12'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+    color-scheme: dark;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+:root[data-theme="dark"] {
+  --paper: #12110f;
+  --paper-deep: #23211d;
+  --ink: #ede7db;
+  --ink-soft: #a9a296;
+  --vermilion: #eb5a40;
+  --stamp-blue: #8da0ff;
+  --ledger-green: #58b987;
+  --sheet: #1a1916;
+  --ink-faint: #938c80;
+  --vermilion-ink: #eb5a40;
+  --on-vermilion: #12110f;
+  --rule: #757064;
+  --rule-soft: rgb(237 231 219 / 0.12);
+  --focus: #8da0ff;
+  --shadow-color: 0 0 0;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .9 0 0 0 0 .85 0 0 0 .34 -.12'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  color-scheme: dark;
+}
+
+/* Lets components opt into dark-only tweaks; prefer the role variables instead. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+@theme inline {
+  /* Only the Showmark palette exists. Tailwind's default colours are removed on purpose. */
+  --color-*: initial;
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-sheet: var(--sheet);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-vermilion: var(--vermilion);
+  --color-vermilion-ink: var(--vermilion-ink);
+  --color-on-vermilion: var(--on-vermilion);
+  --color-stamp-blue: var(--stamp-blue);
+  --color-ledger-green: var(--ledger-green);
+  --color-rule: var(--rule);
+  --color-rule-soft: var(--rule-soft);
+  --color-focus: var(--focus);
+  --color-night: var(--night);
+
+  --font-*: initial;
+  --font-display: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --shadow-*: initial;
+  --shadow-sheet:
+    0 0 0 1px rgb(var(--shadow-color) / 0.06), 0 1px 1px rgb(var(--shadow-color) / 0.05),
+    0 12px 28px -18px rgb(var(--shadow-color) / 0.32);
+  --shadow-lift:
+    0 0 0 1px rgb(var(--shadow-color) / 0.07), 0 2px 3px rgb(var(--shadow-color) / 0.06),
+    0 22px 44px -22px rgb(var(--shadow-color) / 0.4);
+}
+
+@theme {
+  /* Type scale (rem): 0.75, 0.875, 1, 1.125, 1.375, 1.75, 2.25, 3, 4, 5.5 */
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6;
+  --text-md: 1.125rem;
+  --text-md--line-height: 1.6;
+  --text-lg: 1.375rem;
+  --text-lg--line-height: 1.35;
+  --text-xl: 1.75rem;
+  --text-xl--line-height: 1.18;
+  --text-2xl: 2.25rem;
+  --text-2xl--line-height: 1.08;
+  --text-2xl--letter-spacing: -0.005em;
+  --text-3xl: 3rem;
+  --text-3xl--line-height: 1.02;
+  --text-3xl--letter-spacing: -0.01em;
+  --text-4xl: 4rem;
+  --text-4xl--line-height: 0.98;
+  --text-4xl--letter-spacing: -0.015em;
+  --text-5xl: 5.5rem;
+  --text-5xl--line-height: 0.94;
+  --text-5xl--letter-spacing: -0.02em;
+
+  /* Spacing: 4 px base. Use steps 1 2 3 4 6 8 12 16 24 32. */
+  --spacing: 0.25rem;
+
+  /* Radius: 2 px for documents, 999 px for pills only. */
+  --radius-*: initial;
+  --radius-doc: 2px;
+  --radius-pill: 999px;
+
+  /* Motion: stamp press 180 ms with a small overshoot; page view transitions 220 ms. */
+  --ease-press: cubic-bezier(0.2, 1.4, 0.4, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+
+  --animate-stamp-press: stamp-press 180ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  --animate-ink-wait: ink-wait 1.6s ease-in-out infinite;
+
+  @keyframes stamp-press {
+    0% {
+      opacity: 0;
+      transform: rotate(var(--stamp-rotate, 0deg)) scale(1.22);
+    }
+    55% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 1;
+      transform: rotate(var(--stamp-rotate, 0deg)) scale(1);
+    }
+  }
+
+  @keyframes ink-wait {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+@layer base {
+  html {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--paper);
+    background-image: var(--grain);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--vermilion) 32%, transparent);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  a {
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: 1px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Numbers that are compared down a column line up. */
+  .font-mono {
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+}
+
+@utility grain {
+  background-image: var(--grain);
+}
+
+/* Dotted leader between a label and its figure, as on a receipt or a ledger. */
+@utility leader {
+  flex: 1 1 auto;
+  min-width: 1.5rem;
+  height: 0.9em;
+  background-image: radial-gradient(circle, var(--rule) 0.75px, transparent 1.25px);
+  background-size: 6px 4px;
+  background-position: 0 100%;
+  background-repeat: repeat-x;
+}
+
+/* A perforated tear line: a row of punched holes in the colour of the surface beneath. */
+@utility perf-x {
+  height: 8px;
+  background-image: radial-gradient(circle at 4px 4px, var(--perf-hole, var(--paper)) 2.25px, transparent 2.75px);
+  background-size: 11px 8px;
+  background-repeat: repeat-x;
+  background-position: center;
+}
+
+@utility perf-y {
+  width: 8px;
+  background-image: radial-gradient(circle at 4px 4px, var(--perf-hole, var(--paper)) 2.25px, transparent 2.75px);
+  background-size: 8px 11px;
+  background-repeat: repeat-y;
+  background-position: center;
+}
+
+/* Page changes use view transitions: a short crossfade, the header stays put. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-page);
+  animation-timing-function: var(--ease-out-quart);
+}
+
+::view-transition-group(site-header) {
+  animation: none;
+  z-index: 100;
+}
+
+::view-transition-old(site-header) {
+  display: none;
+}
+
+::view-transition-new(site-header) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
 }
