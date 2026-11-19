@@ -62,7 +62,7 @@ export function SiteFooter() {
     <footer className="mt-16 border-t border-rule-soft sm:mt-24">
       <Container className="grid grid-cols-1 gap-12 py-14 md:grid-cols-[1.3fr_2fr] md:gap-16 md:py-16">
         <div className="flex max-w-sm flex-col gap-4">
-          <Link href="/" className="inline-flex w-fit min-h-11 items-center text-[1.75rem]" aria-label="Showmark, home">
+          <Link href="/" className="inline-flex w-fit min-h-11 items-center text-[1.75rem]">
             <Wordmark />
           </Link>
           <p className="text-base text-ink-soft">{SITE.pitch}</p>
@@ -91,10 +91,10 @@ export function SiteFooter() {
                   href={explorerAddress(contract.address)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex min-h-10 flex-wrap items-baseline gap-x-2 text-base text-ink-soft hover:text-ink"
+                  className="flex min-h-11 flex-col justify-center text-base leading-tight text-ink-soft hover:text-ink"
                 >
                   {contract.label}
-                  <span className="font-mono text-xs">{shortAddress(contract.address)}</span>
+                  <span className="mt-0.5 font-mono text-xs">{shortAddress(contract.address)}</span>
                 </a>
               ))
             ) : (

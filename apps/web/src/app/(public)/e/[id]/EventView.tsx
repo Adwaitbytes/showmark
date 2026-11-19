@@ -101,7 +101,7 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
-                className="w-fit text-base text-stamp-blue underline decoration-stamp-blue/35 underline-offset-4 hover:decoration-stamp-blue"
+                className="inline-flex min-h-11 w-fit items-center text-base text-stamp-blue underline decoration-stamp-blue/35 underline-offset-4 hover:decoration-stamp-blue"
               >
                 Event website
               </a>
@@ -216,7 +216,7 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
           </EmptyState>
         )}
         <p className="text-sm text-ink-faint">
-          Created in <TxLink hash={event.createdTx} className="text-sm" />
+          Created in transaction <TxLink hash={event.createdTx} className="text-sm" />
         </p>
       </section>
     </div>

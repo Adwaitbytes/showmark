@@ -18,8 +18,8 @@ export interface AddressChipProps {
 
 /**
  * An address the way people can read it: a .qie name when there is one, otherwise the short
- * mono address, with copy and an explorer link. The full address is in the title and the
- * spoken label.
+ * mono address, with copy and an explorer link. The visible text is the accessible name; the full
+ * address is in the title and the copy button.
  */
 export function AddressChip({ address, name, link = "explorer", copy = true, className }: AddressChipProps) {
   const short = shortAddress(address);
@@ -29,7 +29,6 @@ export function AddressChip({ address, name, link = "explorer", copy = true, cla
       <span className={cn("font-mono", name ? "text-xs text-ink-soft" : "text-sm text-ink")}>{short}</span>
     </>
   );
-  const label = name ? `${name}, address ${address}` : `Address ${address}`;
   const linkClass =
     "inline-flex min-h-8 items-baseline gap-2 rounded-doc underline decoration-transparent underline-offset-4 transition-colors hover:decoration-current";
 
@@ -39,8 +38,9 @@ export function AddressChip({ address, name, link = "explorer", copy = true, cla
       title={address}
     >
       {link === "passport" ? (
-        <Link href={`/p/${name ?? address}`} className={linkClass} aria-label={`${label}. Open passport`}>
+        <Link href={`/p/${name ?? address}`} className={linkClass}>
           {text}
+          <span className="sr-only">, open passport</span>
         </Link>
       ) : link === "explorer" ? (
         <a
@@ -48,13 +48,13 @@ export function AddressChip({ address, name, link = "explorer", copy = true, cla
           target="_blank"
           rel="noopener noreferrer"
           className={linkClass}
-          aria-label={`${label}. Open in the QIE explorer, new tab`}
         >
           {text}
+          <span className="sr-only">, open in the QIE explorer in a new tab</span>
           <ExternalIcon className="size-3.5 self-center text-ink-soft" />
         </a>
       ) : (
-        <span className="inline-flex min-h-8 items-baseline gap-2" aria-label={label}>
+        <span className="inline-flex min-h-8 items-baseline gap-2">
           {text}
         </span>
       )}

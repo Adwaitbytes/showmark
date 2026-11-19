@@ -34,7 +34,7 @@ export function SiteHeader({ current = "none" }: { current?: NavKey }) {
         <Link
           href="/"
           className="-ml-1 inline-flex min-h-11 items-center rounded-doc px-1 text-[1.625rem]"
-          aria-label="Showmark, home"
+         
         >
           <Wordmark />
         </Link>
