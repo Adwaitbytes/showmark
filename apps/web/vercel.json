@@ -3,5 +3,13 @@
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm --filter \"web...\" build",
   "framework": "nextjs",
-  "crons": [{ "path": "/api/cron/sync", "schedule": "*/2 * * * *" }]
+  "crons": [
+    {
+      "path": "/api/cron/sync",
+      "schedule": "*/2 * * * *"
+    }
+  ],
+  "regions": [
+    "bom1"
+  ]
 }
