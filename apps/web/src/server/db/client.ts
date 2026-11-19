@@ -1,12 +1,14 @@
 import { neon } from "@neondatabase/serverless";
 import type { BatchItem } from "drizzle-orm/batch";
+import type { SQLWrapper } from "drizzle-orm/sql";
 import { drizzle } from "drizzle-orm/neon-http";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { requireDatabaseUrl } from "../env";
 import * as schema from "./schema";
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
-export type Statement = BatchItem<"pg">;
+/** A built but not yet executed insert, update or delete. */
+export type Statement = BatchItem<"pg"> & SQLWrapper;
 
 export interface Database {
   db: Db;
