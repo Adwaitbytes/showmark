@@ -164,9 +164,6 @@ export function CheckInScreen() {
         streak: 0,
         holder: pass,
       });
-    } else {
-      const local = localStamps(pass).find((s) => s.eventId === eventId);
-      if (local) setPrior({ at: local.at, tx: local.tx });
     }
 
     import("@/lib/checkin/api-passport")
@@ -187,7 +184,14 @@ export function CheckInScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, pass, eventId]);
 
-  const now = useNow(phase.kind === "waiting" && phase.retryAt !== null);
+  const now = useNow(phase.kind === "waiting" && phase.retryAt !== null, phase.kind === "waiting" ? phase.retryAt : null);
+  // A stamp this phone confirmed earlier answers "already checked in" before the index does.
+  const localPrior = useMemo<PriorStamp | null>(() => {
+    if (phase.kind !== "already" || !pass || !eventId) return null;
+    const local = localStamps(pass).find((s) => s.eventId === eventId);
+    return local ? { at: local.at, tx: local.tx } : null;
+  }, [phase.kind, pass, eventId]);
+  const priorStamp = prior ?? localPrior;
   const loadedEvent = event.status === "ready" ? event.event : null;
   const eventName = loadedEvent?.metadata.name ?? (eventId ? t.common.eventFallback(eventId) : "");
   const done = phase.kind === "stamped" || phase.kind === "already";
@@ -210,7 +214,7 @@ export function CheckInScreen() {
         ) : (
           <>
             <SheetSection className="flex flex-col items-center gap-5 pt-8 text-center sm:pt-10">
-              <StampStage phase={phase} pass={pass} eventId={eventId ?? "0"} eventName={eventName} city={loadedEvent?.metadata.city ?? ""} prior={prior} startsAt={loadedEvent?.startsAt ?? null} />
+              <StampStage phase={phase} pass={pass} eventId={eventId ?? "0"} eventName={eventName} city={loadedEvent?.metadata.city ?? ""} prior={priorStamp} startsAt={loadedEvent?.startsAt ?? null} />
               <div role="status" aria-live="polite" className="flex max-w-[24rem] flex-col items-center gap-2">
                 <h1 id="check-in-status" className="font-display text-2xl text-ink">
                   {headline(phase, t)}
@@ -230,7 +234,7 @@ export function CheckInScreen() {
             </SheetSection>
             <Perforation />
             <SheetSection>
-              <Receipt phase={phase} prior={prior} eventName={eventName} />
+              <Receipt phase={phase} prior={priorStamp} eventName={eventName} />
             </SheetSection>
           </>
         )}
@@ -269,7 +273,8 @@ export function CheckInScreen() {
 }
 
 function FailedState({ phase, eventStartsAt, onRetry }: { phase: ScreenPhase; eventStartsAt: string | null; onRetry: () => void }) {
-const { locale, t } = useLocale();
+  const { locale, t } = useLocale();
+  const [shownAt] = useState(Date.now);
   if (phase.kind === "invalid" || phase.kind === "storage") {
     const copy = phase.kind === "invalid" ? t.errors.invalidCode : t.errors.storage;
     return (
@@ -292,7 +297,7 @@ const { locale, t } = useLocale();
   const { problem } = phase;
   const copy = problemCopy(problem, locale, t);
   const opensAt =
-    problem.kind === "window" && eventStartsAt && Date.parse(eventStartsAt) - CHECK_IN_MARGIN_MS > Date.now()
+    problem.kind === "window" && eventStartsAt && Date.parse(eventStartsAt) - CHECK_IN_MARGIN_MS > shownAt
       ? new Date(Date.parse(eventStartsAt) - CHECK_IN_MARGIN_MS).toISOString()
       : null;
   return (

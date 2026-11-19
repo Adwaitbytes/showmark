@@ -186,6 +186,8 @@ const en = {
   link: {
     metaTitle: "Link QIE Wallet",
     title: "Link QIE Wallet",
+    step1: "Connect your wallet",
+    step2: "Sign the link",
     connect: "Connect QIE Wallet",
     connecting: "Waiting for QIE Wallet",
     connectedAs: "Connected wallet",
@@ -212,6 +214,14 @@ const en = {
       message: "Showmark could not check this wallet just now.",
       action: "Check your connection and try again.",
     },
+    reverted: {
+      message: "The network did not record the link.",
+      action: "Try again. Each pass links to one wallet, and each wallet to one pass.",
+    },
+    slow: {
+      message: "The network is taking longer than usual to record the link.",
+      action: "It was sent. Open your passport in a minute to see the linked wallet.",
+    },
   },
   withdraw: {
     metaTitle: "Withdraw rewards",
@@ -226,6 +236,14 @@ const en = {
     needsLink: {
       message: "Link QIE Wallet before you withdraw.",
       action: "Rewards can only go to a wallet you linked to this pass.",
+    },
+    failed: {
+      message: "The withdrawal did not go through.",
+      action: "Try again in a minute. Your rewards stay safe in the vault until they reach your wallet.",
+    },
+    slow: {
+      message: "The network is taking longer than usual to record the withdrawal.",
+      action: "It was sent. Check your wallet in a minute, or open the transaction on the explorer.",
     },
   },
 } as const;
@@ -411,6 +429,8 @@ const hi: Dictionary = {
   link: {
     metaTitle: "QIE Wallet लिंक करें",
     title: "QIE Wallet लिंक करें",
+    step1: "अपना वॉलेट कनेक्ट करें",
+    step2: "लिंक साइन करें",
     connect: "QIE Wallet कनेक्ट करें",
     connecting: "QIE Wallet का इंतज़ार है",
     connectedAs: "कनेक्ट किया हुआ वॉलेट",
@@ -437,6 +457,14 @@ const hi: Dictionary = {
       message: "Showmark अभी इस वॉलेट को चेक नहीं कर पाया।",
       action: "अपना इंटरनेट चेक करें और फिर से कोशिश करें।",
     },
+    reverted: {
+      message: "नेटवर्क ने लिंक दर्ज नहीं किया।",
+      action: "फिर से कोशिश करें। हर पास एक वॉलेट से लिंक होता है, और हर वॉलेट एक पास से।",
+    },
+    slow: {
+      message: "नेटवर्क लिंक दर्ज करने में आम से ज़्यादा समय ले रहा है।",
+      action: "लिंक भेज दिया गया है। एक मिनट बाद अपना पासपोर्ट खोलकर लिंक किया हुआ वॉलेट देखें।",
+    },
   },
   withdraw: {
     metaTitle: "इनाम निकालें",
@@ -451,6 +479,14 @@ const hi: Dictionary = {
     needsLink: {
       message: "निकालने से पहले QIE Wallet लिंक करें।",
       action: "इनाम सिर्फ़ उसी वॉलेट में जा सकता है जिसे आपने इस पास से लिंक किया है।",
+    },
+    failed: {
+      message: "निकासी नहीं हो पाई।",
+      action: "एक मिनट बाद फिर से कोशिश करें। जब तक इनाम आपके वॉलेट में नहीं पहुँचता, वह वॉल्ट में सुरक्षित है।",
+    },
+    slow: {
+      message: "नेटवर्क निकासी दर्ज करने में आम से ज़्यादा समय ले रहा है।",
+      action: "निकासी भेज दी गई है। एक मिनट बाद अपना वॉलेट देखें, या एक्सप्लोरर पर ट्रांज़ैक्शन खोलें।",
     },
   },
 };

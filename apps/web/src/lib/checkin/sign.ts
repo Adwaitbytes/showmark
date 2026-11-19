@@ -63,3 +63,8 @@ export const LINK_DEADLINE_SECONDS = 600;
 export function linkDeadline(nowMs: number): bigint {
   return BigInt(Math.floor(nowMs / 1000) + LINK_DEADLINE_SECONDS);
 }
+
+/** The deadline for a link signed now. */
+export function linkDeadlineFromNow(): bigint {
+  return linkDeadline(Date.now());
+}

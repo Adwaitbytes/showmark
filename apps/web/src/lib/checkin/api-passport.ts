@@ -1,6 +1,6 @@
 import * as z from "zod/mini";
 import type { Address, Hex } from "viem";
-import { apiRequest, postJson, type ApiResult, type RequestOptions } from "./api";
+import { apiRequest, getTxStatus, postJson, type ApiResult, type RequestOptions } from "./api";
 
 // Passport, wallet link, withdraw and event list routes. Loaded by /pass and its sub-pages, and by
 // the check-in screen only on demand (dynamic import), so the door route stays small.
@@ -94,4 +94,18 @@ export function getCampaignBrief(id: string, options?: RequestOptions): Promise<
 export function linkedWalletOf(passport: PassportData, pass: Address): Address | null {
   if (!passport.pass || passport.pass.toLowerCase() !== pass.toLowerCase()) return null;
   return passport.wallet;
+}
+
+export type TxOutcome = "success" | "reverted" | "timeout";
+
+/** Polls GET /api/tx/{hash} until the transaction is mined or `timeoutMs` passes. A failed read just polls again. */
+export async function waitForTx(hash: Hex, signal: AbortSignal, { pollMs = 800, timeoutMs = 45_000 } = {}): Promise<TxOutcome> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await getTxStatus(hash, { signal });
+    if (signal.aborted) return "timeout";
+    if (result.ok && result.data.status !== "pending") return result.data.status;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  return "timeout";
 }
