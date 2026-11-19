@@ -1,22 +1,20 @@
 # Status
 
-Updated 19 Nov 2026, 16:25 IST. Read this first to catch up in two minutes.
+Updated 19 Nov 2026, 18:25 IST. Read this first to catch up in two minutes.
 
 ## Where we are
 
-Gate 0 is met and Gate 1 is mostly met, two days early. The full product is live on https://showmark.vercel.app against QIE testnet, and the first real check-in and payout went through it end to end (see EVIDENCE.md).
+Gate 1 met, Gate 2 waiting only on mainnet funds and the Safe. Everything runs on https://showmark.vercel.app against QIE testnet with the final audited contracts.
 
 | Area | State |
 |---|---|
-| Contracts | Done and audited twice. 218 tests, 100% coverage. A third bond fix (N2-01, N2-02) is being made, then a final audit pass |
-| Testnet deployment | Live and source-verified on testnet.qie.digital (all nine contracts) |
-| Relayer, indexer, API | Live on Vercel with Neon and Upstash. Indexer caught up, cron every 2 minutes |
-| Attendee app | Live. Check-in to stamp in about 8 s on testnet. One bug: passport stuck after "Open my passport"; fix in progress |
-| Organizer console and door screen | Built and tested with mocks; needs a live run with a real wallet |
-| Sponsor console, reports, Safe App, QIEDEX funding | Built and tested with mocks; needs a live run with a real wallet |
-| SDK and MCP server | Done: 85 and 15 tests, MCP live at /api/mcp |
-| Docs | Architecture, security, SDK, Phase 0, decisions, launch kit drafts done; README pending |
-| QA | Independent sweep of every production page at 390 and 1440 in progress |
+| Contracts | Final. Four audit rounds, verdict go for mainnet. 238 tests, 100% coverage, verified on testnet |
+| Mainnet | One command (`scripts/mainnet-launch.sh`) once the Safe and funds exist |
+| Attendee journey | Live on testnet: scan to stamp 7.4 s and 8.9 s measured in Chrome; later production runs measured 11 to 15 s with outliers, latency work in progress |
+| Judges' desk | Live on testnet at /judges with a server-held door key and a team-funded pool |
+| Organizer, sponsor, link and withdraw | Proven live on testnet with real transactions (EVIDENCE.md, wallet journeys). Organizer withdraw bug found and being fixed |
+| QA | Independent sweep: 1 blocker, 7 major, 19 minor found; all fixed or explained (QA_REPORT.md) |
+| Docs | README, ARCHITECTURE, SECURITY (with audit table), SDK, DECISIONS, EVIDENCE, launch kit drafts |
 
 ## Blocked, and on whom
 
@@ -39,7 +37,6 @@ Gate 0 is met and Gate 1 is mostly met, two days early. The full product is live
 
 ## Next
 
-1. Final bond fix, final audit pass, redeploy testnet with `scripts/set-vercel-env.sh 1983`.
-2. Fix QA findings; live runs of organizer and sponsor journeys with a wallet.
-3. README with live links and integrations table.
-4. Mainnet deploy the moment funds and the Safe exist.
+1. Fix organizer withdraw, stale link state, and cut scan-to-stamp latency below 10 s on production (in progress).
+2. Mainnet launch the moment the Safe and funds exist, then the Safe accepts ownership.
+3. Refresh the launch kit (deck, demo script, judge Q&A, SUBMISSION.md) with mainnet addresses and real numbers.
