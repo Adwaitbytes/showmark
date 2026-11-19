@@ -2,11 +2,12 @@ import type { ReactNode } from "react";
 import { cn } from "./cn";
 
 /**
- * Loading placeholders in paper-deep with a slow ink pulse (still under reduced motion).
+ * Loading placeholders: ink at 10% so they read on paper and on the night desk, with a slow
+ * pulse that stops under reduced motion.
  * Wrap a group in <LoadingRegion> so assistive tech hears one "Loading ..." message.
  */
 export function Skeleton({ className }: { className?: string }) {
-  return <span aria-hidden="true" className={cn("block rounded-doc bg-paper-deep animate-ink-wait", className)} />;
+  return <span aria-hidden="true" className={cn("block rounded-doc bg-ink/10 animate-ink-wait", className)} />;
 }
 
 export function SkeletonText({ lines = 3, className }: { lines?: number; className?: string }) {
