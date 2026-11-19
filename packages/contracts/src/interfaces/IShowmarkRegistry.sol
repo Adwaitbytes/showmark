@@ -17,20 +17,23 @@ interface IShowmarkRegistry {
         uint32 seriesIndex; // 1-based position inside the series, 0 if no series
     }
 
-    /// @notice A recorded presence. `mode` 0 means absent; `at` is the block time of the record.
+    /// @notice A recorded presence. `mode` 0 means absent. `at` is the block time of the record for mode 1 and the
+    /// door's attestedAt for mode 2, so offline-queued attendances keep the time they happened (audit L-05).
     struct Presence {
         uint8 mode;
         uint64 at;
     }
 
-    /// @notice A relayable check-in: the attendee signature plus the door signature.
+    /// @notice A relayable check-in: the attendee signature, the door signature and, for mode 1, the ticket signature.
     struct CheckInData {
         uint256 eventId;
         address attendee;
         uint8 mode; // 1 rotating door QR, 2 door scans you
         uint64 doorTime; // issuedAt (mode 1) or attestedAt (mode 2)
-        bytes attendeeSig; // EIP-712 CheckIn
-        bytes doorSig; // EIP-712 DoorPass or DoorAttest
+        address ticket; // mode 1: the rotation's ticket key, signed into DoorPass; mode 2: address(0)
+        bytes attendeeSig; // EIP-712 CheckIn(eventId, attendee, mode)
+        bytes doorSig; // EIP-712 DoorPass(eventId, issuedAt, ticket) or DoorAttest
+        bytes ticketSig; // mode 1: EIP-712 Ticket(eventId, attendee) by the ticket key; mode 2: empty
     }
 
     /// @notice Emitted when an organizer opens a series of recurring events.
@@ -126,8 +129,10 @@ interface IShowmarkRegistry {
     error ValidUntilTooLate();
     /// @notice Presence for this event and attendee is already recorded.
     error AlreadyPresent();
-    /// @notice The attendee CheckIn signature is invalid.
+    /// @notice The attendee CheckIn signature is invalid (wrong signer, event or mode).
     error BadAttendeeSig();
+    /// @notice Mode 1: the ticket is zero or its Ticket signature is invalid. Mode 2: ticket fields are not empty.
+    error BadTicketSig();
     /// @notice The door signature is malformed.
     error BadDoorSig();
     /// @notice The door signer is not authorized for this event at doorTime.
@@ -204,7 +209,8 @@ interface IShowmarkRegistry {
     /// @notice Records many presences. Never reverts per item; returns a status code per item.
     /// @param ds The signed check-ins.
     /// @return status One code per item: 0 Recorded, 1 AlreadyPresent, 2 UnknownEvent, 3 BadAttendeeSig,
-    /// 4 BadDoorSig, 5 DoorKeyNotAuthorized, 6 Stale, 7 OutsideEventWindow, 8 AtCapacity, 9 BadMode, 10 Paused.
+    /// 4 BadDoorSig, 5 DoorKeyNotAuthorized, 6 Stale, 7 OutsideEventWindow, 8 AtCapacity, 9 BadMode, 10 Paused,
+    /// 11 BadTicketSig.
     function checkInBatch(CheckInData[] calldata ds) external returns (uint8[] memory status);
 
     /// @notice Links a pass to a wallet once, with signatures from both, and moves the listed stamps to the wallet.

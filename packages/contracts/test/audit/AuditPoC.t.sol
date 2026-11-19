@@ -6,6 +6,7 @@ import {CampaignVault} from "../../src/CampaignVault.sol";
 import {IShowmarkRegistry} from "../../src/interfaces/IShowmarkRegistry.sol";
 import {ICampaignVault} from "../../src/interfaces/ICampaignVault.sol";
 import {IOrganizerBond} from "../../src/interfaces/IOrganizerBond.sol";
+import {Ownable2StepNoRenounce} from "../../src/utils/Ownable2StepNoRenounce.sol";
 import {ProtocolFixture} from "../utils/ProtocolFixture.sol";
 import {SigUtils} from "../utils/SigUtils.sol";
 
@@ -24,133 +25,115 @@ contract ShortAnswerAggregator {
     }
 }
 
-/// @notice Proof-of-concept tests for the findings in docs/AUDIT.md. Each test passes when the issue is present.
+/// @notice Regression tests for the findings in docs/AUDIT.md. Each started as a proof of concept that passed while
+/// the issue was present; each now asserts that the attack fails. L-01 and L-04 are accepted, documented behaviour
+/// and are kept as tests of that behaviour.
 contract AuditPoCTest is ProtocolFixture {
     uint256 internal constant HONEST_PK = 0x4F4E35;
 
-    /// @dev What anyone can read back from a mined `checkIn` transaction: the calldata carries the door signature.
-    function harvestDoorPass(bytes calldata txInput) external pure returns (uint64 issuedAt, bytes memory doorSig) {
-        IShowmarkRegistry.CheckInData memory d = abi.decode(txInput[4:], (IShowmarkRegistry.CheckInData));
-        return (d.doorTime, d.doorSig);
+    /// @dev What anyone can read back from a mined `checkIn` transaction.
+    function harvest(bytes calldata txInput) external pure returns (IShowmarkRegistry.CheckInData memory) {
+        return abi.decode(txInput[4:], (IShowmarkRegistry.CheckInData));
     }
 
-    function _honestMode1CheckIn() internal returns (uint64 issuedAt, bytes memory doorSig) {
-        IShowmarkRegistry.CheckInData memory d = _mode1(eventId, HONEST_PK, doorPk, uint64(block.timestamp));
+    function _honestMode1CheckIn(uint256 id) internal returns (IShowmarkRegistry.CheckInData memory) {
+        IShowmarkRegistry.CheckInData memory d = _mode1(id, HONEST_PK, doorPk, uint64(block.timestamp));
         _checkIn(d);
-        return this.harvestDoorPass(abi.encodeCall(ShowmarkRegistry.checkIn, (d)));
+        return this.harvest(abi.encodeCall(ShowmarkRegistry.checkIn, (d)));
     }
 
-    function _sybil(uint256 pk, uint64 issuedAt, bytes memory doorSig)
+    /// @dev Everything the remote attacker can build: the harvested door pass and ticket fields, plus its own
+    /// attendee signature. It never learns the ticket private key, which only exists inside the door QR.
+    function _sybil(uint256 pk, IShowmarkRegistry.CheckInData memory seen, bool forgeTicketSig)
         internal
         view
         returns (IShowmarkRegistry.CheckInData memory d)
     {
-        d.eventId = eventId;
+        d = seen;
         d.attendee = vm.addr(pk);
-        d.mode = 1;
-        d.doorTime = issuedAt;
-        d.attendeeSig = SigUtils.sign(pk, SigUtils.checkInDigest(separator, eventId, d.attendee));
-        d.doorSig = doorSig;
+        d.attendeeSig = SigUtils.sign(pk, SigUtils.checkInDigest(separator, seen.eventId, d.attendee, 1));
+        if (forgeTicketSig) {
+            d.ticketSig = SigUtils.sign(pk, SigUtils.ticketDigest(separator, seen.eventId, d.attendee));
+        }
     }
 
-    // ------------------------------------------------------------------ C-01
+    // ------------------------------------------------------------------ C-01 (fixed: ticket keys)
 
-    /// A remote attacker who was never at the venue harvests the DoorPass from an honest check-in's calldata and
-    /// checks in any number of fresh pass keys with it, then drains a default (mode 1, no QIE ID, no caps) campaign.
-    function test_C01_remoteSybilsDrainMode1CampaignWithHarvestedDoorPass() public {
+    function test_C01_harvestedDoorPassNoLongerAdmitsRemoteSybils() public {
         uint256 campaignId = _createApproved(_params(NATIVE), 21 ether);
         vm.warp(T0 + 10);
-        (uint64 issuedAt, bytes memory doorSig) = _honestMode1CheckIn();
+        IShowmarkRegistry.CheckInData memory seen = _honestMode1CheckIn(eventId);
 
         vm.warp(T0 + 10 + MAX_PASS_AGE); // still inside maxPassAge of the harvested pass
         uint256 n = 20;
         IShowmarkRegistry.CheckInData[] memory ds = new IShowmarkRegistry.CheckInData[](n);
         ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](n);
         for (uint256 i; i < n; ++i) {
-            ds[i] = _sybil(0xBAD000 + i, issuedAt, doorSig);
+            // half reuse the honest ticket signature, half sign it with a key they own
+            ds[i] = _sybil(0xBAD000 + i, seen, i % 2 == 1);
             items[i] = ICampaignVault.SettleItem(campaignId, eventId, ds[i].attendee);
         }
-        address attacker = makeAddr("remoteAttacker");
-        vm.prank(attacker);
+        vm.prank(makeAddr("remoteAttacker"));
         uint8[] memory status = registry.checkInBatch(ds);
         for (uint256 i; i < n; ++i) {
-            assertEq(status[i], 0, "sybil recorded");
+            assertEq(status[i], 11, "BadTicketSig");
+            assertEq(registry.presenceOf(eventId, ds[i].attendee).mode, 0);
         }
-
-        vm.prank(attacker);
-        vault.settleBatch(items);
-        uint256 stolen;
+        uint8[] memory paid = vault.settleBatch(items);
         for (uint256 i; i < n; ++i) {
-            address pass = ds[i].attendee;
-            uint256 before = pass.balance;
-            vm.prank(pass);
-            vault.withdraw(NATIVE, pass);
-            stolen += pass.balance - before;
+            assertEq(paid[i], 3, "NotPresent");
         }
-        assertEq(stolen, 10 ether, "attacker took the attendee share of 20 presences");
-        assertEq(vault.campaign(campaignId).balance, 1 ether, "20 of 21 presences paid to sybils");
+        assertEq(vault.campaign(campaignId).balance, 21 ether, "nothing drained");
+        assertEq(registry.eventInfo(eventId).checkedIn, 1, "only the honest attendee");
     }
 
-    /// Same harvested pass fills the event's capacity so real attendees at the door are refused.
-    function test_C01_harvestedDoorPassFillsCapacity() public {
+    function test_C01_harvestedDoorPassCannotFillCapacity() public {
         uint256 small = _createEvent(organizer, T0, T0 + EVENT_LENGTH, 5, 0);
         _authorize(organizer, small, doorKey, T0 + EVENT_LENGTH);
         vm.warp(T0 + 10);
-        IShowmarkRegistry.CheckInData memory honest = _mode1(small, HONEST_PK, doorPk, uint64(block.timestamp));
-        _checkIn(honest);
+        IShowmarkRegistry.CheckInData memory seen = _honestMode1CheckIn(small);
         for (uint256 i; i < 4; ++i) {
-            IShowmarkRegistry.CheckInData memory d = _mode1(small, 0xBAD100 + i, doorPk, honest.doorTime);
-            d.doorSig = honest.doorSig; // reused, not re-signed
-            _checkIn(d);
+            vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+            _checkIn(_sybil(0xBAD100 + i, seen, false));
         }
         vm.warp(T0 + 20);
-        vm.expectRevert(IShowmarkRegistry.AtCapacity.selector);
-        _checkIn(_mode1(small, 0x600D, doorPk, uint64(block.timestamp)));
+        assertTrue(_checkIn(_mode1(small, 0x600D, doorPk, uint64(block.timestamp))), "real attendee gets in");
+        assertEq(registry.eventInfo(small).checkedIn, 2);
     }
 
-    // ------------------------------------------------------------------ M-01
+    // ------------------------------------------------------------------ M-01 (fixed: mode bound in CheckIn)
 
-    /// The attendee's mode 2 code (SM2.{eventId}.{attendee}.{attendeeSig}) is shown openly. Anyone who reads it
-    /// combines the attendee signature with a harvested DoorPass and records a mode 1 presence first. The door's
-    /// real attestation is then rejected and the attendee can never be paid by a mode 2 campaign.
-    function test_M01_modeDowngradeLocksAttendeeOutOfMode2Campaign() public {
+    function test_M01_modeDowngradeIsRejected() public {
         ICampaignVault.CampaignParams memory p = _params(NATIVE);
         p.minProofMode = 2;
         uint256 campaignId = _createApproved(p, 5 ether);
 
         vm.warp(T0 + 10);
-        (uint64 issuedAt, bytes memory doorSig) = _honestMode1CheckIn();
+        IShowmarkRegistry.CheckInData memory seen = _honestMode1CheckIn(eventId);
 
-        // Victim's real mode 2 check-in, as the door would submit it
+        // the victim's real mode 2 check-in, as the door would submit it
         IShowmarkRegistry.CheckInData memory real = _mode2(eventId, attendeePk, doorPk, uint64(block.timestamp));
 
-        // Griefer reuses the victim's public attendeeSig with the harvested DoorPass
-        IShowmarkRegistry.CheckInData memory downgrade;
-        downgrade.eventId = eventId;
+        // the griefer reuses the victim's public mode 2 attendee signature in a mode 1 check-in
+        IShowmarkRegistry.CheckInData memory downgrade = seen;
         downgrade.attendee = attendee;
-        downgrade.mode = 1;
-        downgrade.doorTime = issuedAt;
         downgrade.attendeeSig = real.attendeeSig;
-        downgrade.doorSig = doorSig;
         vm.prank(makeAddr("griefer"));
+        vm.expectRevert(IShowmarkRegistry.BadAttendeeSig.selector);
         registry.checkIn(downgrade);
 
-        vm.expectRevert(IShowmarkRegistry.AlreadyPresent.selector);
-        _checkIn(real);
-        assertEq(registry.presenceOf(eventId, attendee).mode, 1);
-        vm.expectRevert(ICampaignVault.NotPresent.selector);
-        vault.settle(campaignId, eventId, attendee);
+        assertTrue(_checkIn(real));
+        assertEq(registry.presenceOf(eventId, attendee).mode, 2);
+        assertEq(vault.settle(campaignId, eventId, attendee), 1 ether);
     }
 
-    // ------------------------------------------------------------------ M-02
+    // ------------------------------------------------------------------ M-02 (fixed: bonded exposure cap)
 
-    /// One minBond stake qualifies an organizer for every openToBonded campaign at once, while the most the
-    /// arbitrator can slash is that one stake.
-    function test_M02_singleBondDrainsSeveralOpenCampaigns() public {
+    function test_M02_oneBondBacksAtMostItsOwnValueAcrossOpenCampaigns() public {
         ICampaignVault.CampaignParams memory p = _params(NATIVE);
         p.openToBonded = true;
         p.minBond = 1 ether;
-        p.attendeeShareBps = 5000;
+        p.amountPerPresence = 0.25 ether;
         uint256 a = _create(p, 10 ether);
         uint256 b = _create(p, 10 ether);
 
@@ -170,40 +153,49 @@ contract AuditPoCTest is ProtocolFixture {
             items[2 * i] = ICampaignVault.SettleItem(a, ev, d.attendee);
             items[2 * i + 1] = ICampaignVault.SettleItem(b, ev, d.attendee);
         }
-        vault.settleBatch(items);
+        uint8[] memory s = vault.settleBatch(items);
+        uint256 settled;
+        for (uint256 i; i < s.length; ++i) {
+            if (s[i] == 0) ++settled;
+            else assertEq(s[i], 5, "EventNotEligible once the bond is used up");
+        }
+        assertEq(settled, 4, "4 x 0.25 QIE = the 1 QIE bond");
+        uint256 drained = 20 ether - vault.campaign(a).balance - vault.campaign(b).balance;
+        assertEq(drained, 1 ether);
+        assertEq(vault.bondedExposure(rogue), 1 ether);
+
+        // and the whole amount stays slashable
         vm.prank(rogue);
         bond.requestUnbond(1 ether);
-
-        assertEq(vault.campaign(a).balance + vault.campaign(b).balance, 0, "both campaigns drained");
-        assertEq(vault.claimable(NATIVE, rogue), 10 ether, "organizer share alone is 10x the bond");
-
         vm.prank(sponsor);
         uint256 cid = bond.challenge(rogue, a, "sybil event");
         vm.prank(owner);
-        vm.expectRevert(IOrganizerBond.SlashExceedsBond.selector);
-        bond.resolve(cid, 2 ether, sponsor);
+        bond.resolve(cid, drained, sponsor);
+        assertEq(sponsor.balance, 1_000_000 ether - 20 ether + drained);
     }
 
-    // ------------------------------------------------------------------ L-01
+    // ------------------------------------------------------------------ L-01 (accepted, documented)
 
-    /// A door key used after its validUntil can still back-date mode 2 attestations to its validity window and
-    /// have them recorded until endsAt + 3 days.
-    function test_L01_expiredDoorKeyBackdatesAttestations() public {
+    /// Validity bounds the signed attestation time, not the submission time, so the offline queue keeps working.
+    /// The README tells organizers to revoke a key when a shift ends rather than wait for validUntil.
+    function test_L01_documented_doorKeyValidityBoundsAttestationTime() public {
         uint256 volunteerPk = 0x7011;
         uint64 shiftEnd = T0 + 1 hours;
         _authorize(organizer, eventId, vm.addr(volunteerPk), shiftEnd);
 
-        vm.warp(T0 + EVENT_LENGTH + 2 days); // long after the shift and the event
-        IShowmarkRegistry.CheckInData memory d = _mode2(eventId, 0xF00D, volunteerPk, shiftEnd);
-        assertTrue(_checkIn(d));
-        assertEq(registry.presenceOf(eventId, d.attendee).mode, 2);
+        vm.warp(T0 + EVENT_LENGTH + 2 days);
+        assertTrue(_checkIn(_mode2(eventId, 0xF00D, volunteerPk, shiftEnd)));
+
+        // revoking the key is what stops it
+        vm.prank(organizer);
+        registry.revokeDoorKey(eventId, vm.addr(volunteerPk));
+        vm.expectRevert(IShowmarkRegistry.DoorKeyNotAuthorized.selector);
+        _checkIn(_mode2(eventId, 0xF00E, volunteerPk, shiftEnd));
     }
 
-    // ------------------------------------------------------------------ L-02
+    // ------------------------------------------------------------------ L-02 (fixed: low-level oracle read)
 
-    /// A feed that returns malformed data is not caught by try/catch (decoding happens outside it), so the whole
-    /// settleBatch reverts, including token-priced items that never read the oracle.
-    function test_L02_malformedOracleAnswerRevertsWholeSettleBatch() public {
+    function test_L02_malformedOracleAnswerDefersInsteadOfRevertingTheBatch() public {
         ShortAnswerAggregator bad = new ShortAnswerAggregator();
         CampaignVault v = new CampaignVault(
             address(registry), address(qieIdCheck), address(bad), address(bond), MAX_ORACLE_AGE, owner, feeRecipient, 0
@@ -221,48 +213,54 @@ contract AuditPoCTest is ProtocolFixture {
         ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](2);
         items[0] = ICampaignVault.SettleItem(tokenPriced, eventId, attendee);
         items[1] = ICampaignVault.SettleItem(usdPriced, eventId, attendee);
-        vm.expectRevert();
-        v.settleBatch(items);
-        vm.expectRevert();
-        v.quote(usdPriced);
-
-        // The token-priced item on its own settles fine: the revert comes only from decoding the feed's answer.
-        ICampaignVault.SettleItem[] memory only = new ICampaignVault.SettleItem[](1);
-        only[0] = items[0];
-        assertEq(v.settleBatch(only)[0], 0);
+        uint8[] memory s = v.settleBatch(items);
+        assertEq(s[0], 0, "token-priced item settles");
+        assertEq(s[1], 9, "USD item defers as PriceStale");
+        (uint256 amount, bool fresh) = v.quote(usdPriced);
+        assertEq(amount, 0);
+        assertFalse(fresh);
     }
 
-    // ------------------------------------------------------------------ L-03
+    // ------------------------------------------------------------------ L-03 (fixed: relevant, one per pair)
 
-    /// Anyone can open a zero-deposit campaign and file unlimited challenges against any organizer; each one
-    /// blocks completeUnbond until the Safe resolves it individually.
-    function test_L03_challengeSpamLocksAnyOrganizersUnbond() public {
+    function test_L03_challengeSpamIsRefused() public {
         vm.deal(organizer, 1 ether);
         vm.startPrank(organizer);
         bond.bond{value: 1 ether}();
         bond.requestUnbond(1 ether);
         vm.stopPrank();
 
+        // a zero-deposit campaign that never paid this organizer cannot challenge it
         address griefer = makeAddr("griefer");
         vm.startPrank(griefer);
         uint256 cid = vault.createCampaign(_params(NATIVE), 0);
-        for (uint256 i; i < 25; ++i) {
-            bond.challenge(organizer, cid, "");
-        }
+        vm.expectRevert(IOrganizerBond.OrganizerNotPaid.selector);
+        bond.challenge(organizer, cid, "");
         vm.stopPrank();
-        assertEq(bond.openChallenges(organizer), 25);
 
+        // a sponsor that did pay may open exactly one
+        uint256 paidCampaign = _createApproved(_params(NATIVE), 1 ether);
+        _checkInNow(eventId, attendeePk);
+        vault.settle(paidCampaign, eventId, attendee);
+        vm.startPrank(sponsor);
+        uint256 challengeId = bond.challenge(organizer, paidCampaign, "first");
+        vm.expectRevert(IOrganizerBond.DuplicateChallenge.selector);
+        bond.challenge(organizer, paidCampaign, "spam");
+        vm.stopPrank();
+        assertEq(bond.openChallenges(organizer), 1);
+
+        vm.prank(owner);
+        bond.resolve(challengeId, 0, address(0));
         vm.warp(block.timestamp + 7 days);
         vm.prank(organizer);
-        vm.expectRevert(IOrganizerBond.ChallengeOpen.selector);
         bond.completeUnbond();
     }
 
-    // ------------------------------------------------------------------ L-04
+    // ------------------------------------------------------------------ L-04 (accepted, documented)
 
-    /// A vault pause that runs past endsAt + SETTLE_GRACE permanently voids presences that were earned but not yet
-    /// settled; the sponsor then refunds the money owed to them.
-    function test_L04_pauseThroughGraceVoidsEarnedPayouts() public {
+    /// Settlement deadlines keep running while paused. The README tells the Safe to unpause before
+    /// endsAt + SETTLE_GRACE of any live campaign, or earned but unsettled presences are refunded to the sponsor.
+    function test_L04_documented_pauseThroughGraceVoidsUnsettledPayouts() public {
         uint256 campaignId = _createApproved(_params(NATIVE), 3 ether);
         _checkInNow(eventId, attendeePk);
         vm.prank(owner);
@@ -279,12 +277,9 @@ contract AuditPoCTest is ProtocolFixture {
         assertEq(vault.campaign(campaignId).balance, 0);
     }
 
-    // ------------------------------------------------------------------ L-05
+    // ------------------------------------------------------------------ L-05 (fixed: mode 2 dated by attestation)
 
-    /// Mode 2 presence is dated by the block that records it, not by attestedAt. A door attestation made inside the
-    /// campaign window but submitted from the offline queue after the campaign ended is never paid, although the
-    /// registry accepts it until endsAt + 3 days.
-    function test_L05_offlineQueuedAttestationDatedBySubmission() public {
+    function test_L05_offlineQueuedAttestationIsPaidByAttendanceTime() public {
         ICampaignVault.CampaignParams memory p = _params(NATIVE);
         p.minProofMode = 2;
         p.endsAt = T0 + EVENT_LENGTH; // campaign covers exactly the event
@@ -295,31 +290,23 @@ contract AuditPoCTest is ProtocolFixture {
 
         vm.warp(T0 + EVENT_LENGTH + 2 hours); // door was offline; queue flushes after the event
         assertTrue(_checkIn(d));
-        vm.expectRevert(ICampaignVault.OutsideCampaignWindow.selector);
-        vault.settle(campaignId, eventId, attendee);
+        assertEq(registry.presenceOf(eventId, attendee).at, attestedAt);
+        assertEq(vault.settle(campaignId, eventId, attendee), 1 ether);
     }
 
-    // ------------------------------------------------------------------ L-06
+    // ------------------------------------------------------------------ L-06 (fixed: renounce disabled)
 
-    /// renounceOwnership is still callable. On the bond it strands every organizer with an open challenge.
-    function test_L06_renounceOwnershipStrandsChallengedBond() public {
-        vm.deal(organizer, 1 ether);
-        vm.startPrank(organizer);
-        bond.bond{value: 1 ether}();
-        bond.requestUnbond(1 ether);
-        vm.stopPrank();
-        uint256 cid = _create(_params(NATIVE), 0);
-        vm.prank(sponsor);
-        bond.challenge(organizer, cid, "");
-
-        vm.prank(owner);
+    function test_L06_renounceOwnershipIsDisabledEverywhere() public {
+        vm.startPrank(owner);
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
         bond.renounceOwnership();
-        assertEq(bond.owner(), address(0));
-
-        vm.warp(block.timestamp + 365 days);
-        vm.prank(organizer);
-        vm.expectRevert(IOrganizerBond.ChallengeOpen.selector);
-        bond.completeUnbond();
-        assertEq(address(bond).balance, 1 ether, "locked forever");
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
+        vault.renounceOwnership();
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
+        registry.renounceOwnership();
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
+        stamp.renounceOwnership();
+        vm.stopPrank();
+        assertEq(bond.owner(), owner);
     }
 }

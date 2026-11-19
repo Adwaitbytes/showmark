@@ -65,6 +65,13 @@ contract TestnetMocksTest is Test {
         names.claim("al-1ce");
     }
 
+    function test_feed_cannotBeRenounced() public {
+        vm.prank(team);
+        vm.expectRevert(TestnetAggregator.RenounceDisabled.selector);
+        feed.renounceOwnership();
+        assertEq(feed.owner(), team);
+    }
+
     function test_feed_ownerSetsFreshRounds() public {
         assertEq(feed.decimals(), 8);
         assertEq(feed.description(), "QIE / USD (Showmark testnet)");

@@ -24,6 +24,7 @@ contract OrganizerBondTest is Test {
         bondC = new OrganizerBond(arbitrator);
         vault = new MockSponsorVault();
         vault.setSponsor(CAMPAIGN, sponsor);
+        vault.setPaid(CAMPAIGN, organizer, 1 ether);
         vm.prank(arbitrator);
         bondC.setVault(address(vault));
         vm.deal(organizer, 100 ether);
@@ -178,10 +179,34 @@ contract OrganizerBondTest is Test {
         assertEq(c.campaignId, CAMPAIGN);
         assertFalse(c.resolved);
 
+        assertTrue(bondC.hasOpenChallenge(CAMPAIGN, organizer));
+
+        // one open challenge per campaign and organizer
         vm.prank(sponsor);
-        assertEq(bondC.challenge(organizer, CAMPAIGN, "again"), 2);
+        vm.expectRevert(IOrganizerBond.DuplicateChallenge.selector);
+        bondC.challenge(organizer, CAMPAIGN, "again");
+
+        // another campaign of the same sponsor that also paid this organizer may challenge too
+        vault.setSponsor(CAMPAIGN + 1, sponsor);
+        vault.setPaid(CAMPAIGN + 1, organizer, 1);
+        vm.prank(sponsor);
+        assertEq(bondC.challenge(organizer, CAMPAIGN + 1, "again"), 2);
         assertEq(bondC.openChallenges(organizer), 2);
         assertEq(bondC.nextChallengeId(), 3);
+
+        // once resolved, the campaign may challenge again
+        vm.prank(arbitrator);
+        bondC.resolve(id, 0, address(0));
+        assertFalse(bondC.hasOpenChallenge(CAMPAIGN, organizer));
+        vm.prank(sponsor);
+        assertEq(bondC.challenge(organizer, CAMPAIGN, "third"), 3);
+    }
+
+    function test_challenge_requiresTheCampaignToHavePaidTheOrganizer() public {
+        address stranger = makeAddr("unrelated organizer");
+        vm.prank(sponsor);
+        vm.expectRevert(IOrganizerBond.OrganizerNotPaid.selector);
+        bondC.challenge(stranger, CAMPAIGN, "never worked together");
     }
 
     function test_challenge_guards() public {

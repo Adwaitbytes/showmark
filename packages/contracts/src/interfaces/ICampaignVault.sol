@@ -288,6 +288,13 @@ interface ICampaignVault {
     /// @return priceFresh False when a UsdInNative campaign has no usable oracle price.
     function quote(uint256 campaignId) external view returns (uint256 amountInToken, bool priceFresh);
 
+    /// @notice Gross a campaign has paid for presences at a given organizer's events. OrganizerBond requires it to be
+    /// non-zero before that campaign's sponsor may challenge the organizer.
+    /// @param campaignId The campaign.
+    /// @param organizer The organizer.
+    /// @return The cumulative gross paid, in the campaign's token.
+    function paidForOrganizer(uint256 campaignId, address organizer) external view returns (uint256);
+
     /// @notice Sum of campaign balances plus claimables for a token.
     /// @param token The token, address(0) for native QIE.
     /// @return The total owed by the vault in that token.

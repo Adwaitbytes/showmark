@@ -12,6 +12,7 @@ import {QieIdCheck} from "../src/QieIdCheck.sol";
 import {TestnetAggregator} from "../src/testnet/TestnetAggregator.sol";
 import {TestnetNameRegistry} from "../src/testnet/TestnetNameRegistry.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
+import {MockQUSDC} from "./mocks/MockQUSDC.sol";
 
 contract DeployTest is Test {
     Deploy internal script;
@@ -70,13 +71,9 @@ contract DeployTest is Test {
         vm.removeFile(string.concat(OUT, "/1983.json"));
     }
 
-    function test_mainnet_usesRealAddressesAndKeepsOwnerWithoutSafe() public {
-        vm.chainId(1990);
-        // stand-in code at the real addresses so constructors that read them succeed
-        vm.etch(0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17, address(new MockAggregator(8)).code);
-        vm.etch(0x1D69d75AD7b77b91C3760F84faC52E651710f62e, address(new TestnetNameRegistry()).code);
-
-        Deploy.Config memory c = _config(address(0), 0);
+    function test_mainnet_usesRealAddressesAndHandsOwnershipToSafe() public {
+        _etchMainnet(8, 6);
+        Deploy.Config memory c = _config(safe, 0);
         Deploy.Deployment memory d = script.deploy(c);
 
         assertFalse(d.testnetMocks);
@@ -84,9 +81,68 @@ contract DeployTest is Test {
         assertEq(d.nameRegistry, 0x1D69d75AD7b77b91C3760F84faC52E651710f62e);
         assertEq(d.oracle, 0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17);
         _assertWiring(d, c);
-        assertEq(ShowmarkRegistry(d.registry).pendingOwner(), address(0));
-        assertEq(CampaignVault(d.vault).pendingOwner(), address(0));
+        assertEq(ShowmarkRegistry(d.registry).pendingOwner(), safe);
+        assertEq(CampaignVault(d.vault).pendingOwner(), safe);
         vm.removeFile(string.concat(OUT, "/1990.json"));
+    }
+
+    function test_mainnet_refusesWithoutSafe() public {
+        _etchMainnet(8, 6);
+        Deploy.Config memory c = _config(address(0), 0);
+        vm.expectRevert(Deploy.SafeRequired.selector);
+        script.deploy(c);
+    }
+
+    function test_mainnet_refusesUnexpectedDecimals() public {
+        _etchMainnet(18, 6);
+        Deploy.Config memory c = _config(safe, 0);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Deploy.UnexpectedDecimals.selector, address(0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17), 18
+            )
+        );
+        script.deploy(c);
+    }
+
+    /// The only test that touches the environment, so parallel tests cannot race on it.
+    function test_configFromEnv_mainnetRequiresSafeAndExplicitFeeRecipient() public {
+        vm.setEnv("DEPLOYER_PRIVATE_KEY", vm.toString(bytes32(KEY)));
+        vm.setEnv("SAFE_ADDRESS", "");
+        vm.setEnv("FEE_RECIPIENT", "");
+        vm.chainId(1983);
+        Deploy.Config memory c = script.configFromEnv();
+        assertEq(c.feeRecipient, deployer, "testnet defaults the fee recipient to the deployer");
+        assertEq(c.safe, address(0));
+        assertEq(c.oracleMaxAge, 172_800);
+
+        vm.chainId(1990);
+        vm.expectRevert(Deploy.SafeRequired.selector);
+        script.configFromEnv();
+
+        vm.setEnv("SAFE_ADDRESS", vm.toString(safe));
+        vm.expectRevert(Deploy.FeeRecipientRequired.selector);
+        script.configFromEnv();
+
+        vm.setEnv("FEE_RECIPIENT", vm.toString(address(0xFEE)));
+        c = script.configFromEnv();
+        assertEq(c.safe, safe);
+        assertEq(c.feeRecipient, address(0xFEE));
+
+        vm.setEnv("FEE_BPS", "501");
+        vm.expectRevert(abi.encodeWithSelector(Deploy.FeeTooHigh.selector, 501));
+        script.configFromEnv();
+        vm.setEnv("FEE_BPS", "0");
+        vm.setEnv("SAFE_ADDRESS", "");
+        vm.setEnv("FEE_RECIPIENT", "");
+    }
+
+    function _etchMainnet(uint8 oracleDecimals, uint8 qusdcDecimals) internal {
+        vm.chainId(1990);
+        // stand-in code at the real addresses so constructors and decimal checks that read them succeed
+        vm.etch(0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17, address(new MockAggregator(oracleDecimals)).code);
+        vm.etch(0x1D69d75AD7b77b91C3760F84faC52E651710f62e, address(new TestnetNameRegistry()).code);
+        vm.etch(0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5, address(new MockQUSDC()).code);
+        assertEq(qusdcDecimals, 6, "MockQUSDC has 6 decimals");
     }
 
     function test_rejectsOtherChains() public {

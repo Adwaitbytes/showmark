@@ -16,6 +16,9 @@ contract TestnetAggregator is IAggregatorV3, Ownable {
     /// @param updatedAt Block time of the post.
     event AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt);
 
+    /// @notice renounceOwnership is disabled; a feed without an owner could never be refreshed.
+    error RenounceDisabled();
+
     uint80 private _roundId;
     int256 private _answer;
     uint256 private _updatedAt;
@@ -41,6 +44,11 @@ contract TestnetAggregator is IAggregatorV3, Ownable {
     /// @param answer Price with 8 decimals.
     function setAnswer(int256 answer) external onlyOwner {
         _post(answer);
+    }
+
+    /// @notice Always reverts: ownership can be transferred but never renounced.
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
     }
 
     /// @inheritdoc IAggregatorV3

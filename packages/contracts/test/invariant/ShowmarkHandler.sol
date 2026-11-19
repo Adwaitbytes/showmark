@@ -155,13 +155,31 @@ contract ShowmarkHandler is Test {
         }
     }
 
-    /// Resubmits a recorded check-in unchanged, retargeted at another event, or signed for another chain or
-    /// another verifying contract. None of these may ever record a presence.
+    /// Resubmits a recorded check-in unchanged, retargeted at another event, signed for another chain or another
+    /// verifying contract, with its door pass and ticket fields reused for a different attendee who signs for
+    /// themselves (audit C-01), or with its attendee signature reused under the other proof mode (audit M-01).
+    /// None of these may ever record a presence.
     function replay(uint256 recordSeed, uint256 eventSeed, uint256 kind, uint256 passSeed) external {
         if (records.length == 0) return;
         IShowmarkRegistry.CheckInData memory d = records[recordSeed % records.length];
-        kind = kind % 4;
-        if (kind == 1) {
+        kind = kind % 6;
+        if (kind == 4) {
+            // a remote attacker harvests a door pass from calldata and signs for its own pass
+            uint256 pk = passPks[passSeed % passPks.length];
+            d.attendee = vm.addr(pk);
+            d.attendeeSig = SigUtils.sign(pk, SigUtils.checkInDigest(separator, d.eventId, d.attendee, d.mode));
+            if (passSeed % 2 == 0) {
+                d.ticketSig = SigUtils.sign(pk, SigUtils.ticketDigest(separator, d.eventId, d.attendee));
+            }
+        } else if (kind == 5) {
+            // a signature made for one mode (a public mode 2 code, say) submitted under the other mode with a door
+            // proof that is valid for that mode
+            uint256 pk = passPks[passSeed % passPks.length];
+            uint256 eventId = eventIds[eventSeed % eventIds.length];
+            uint8 signedMode = uint8(1 + recordSeed % 2);
+            d = _sign(eventId, pk, DOOR_A, signedMode == 1 ? 2 : 1, uint64(block.timestamp), separator);
+            d.attendeeSig = SigUtils.sign(pk, SigUtils.checkInDigest(separator, eventId, d.attendee, signedMode));
+        } else if (kind == 1) {
             d.eventId = eventIds[eventSeed % eventIds.length];
         } else if (kind >= 2) {
             // a check-in that would be valid here, but signed under a foreign domain
@@ -222,7 +240,7 @@ contract ShowmarkHandler is Test {
         p.endsAt = uint64(block.timestamp + bound(h >> 16, 1 hours, 5 days));
         p.maxPerEvent = uint32((h >> 80) % 4);
         p.maxTotal = uint32((h >> 96) % 6);
-        p.openToBonded = (h >> 112) % 3 == 0;
+        p.openToBonded = p.token == NATIVE && (h >> 112) % 3 == 0; // a QIE bond only backs native payouts
         p.minBond = p.openToBonded ? uint128(bound(h >> 128, 1, 3 ether)) : 0;
         p.metadata = "{}";
         uint256 dep = p.token == NATIVE ? bound(deposit, 0, 40 ether) : bound(deposit, 0, 400e6);
@@ -490,13 +508,16 @@ contract ShowmarkHandler is Test {
         d.attendee = pass;
         d.mode = mode;
         d.doorTime = doorTime;
-        d.attendeeSig = SigUtils.sign(passPk, SigUtils.checkInDigest(domain, eventId, pass));
-        d.doorSig = SigUtils.sign(
-            doorPk,
-            mode == 1
-                ? SigUtils.doorPassDigest(domain, eventId, doorTime)
-                : SigUtils.doorAttestDigest(domain, eventId, pass, doorTime)
-        );
+        d.attendeeSig = SigUtils.sign(passPk, SigUtils.checkInDigest(domain, eventId, pass, mode));
+        if (mode == 1) {
+            // the door rotation's throwaway ticket key, known only to whoever sees the QR
+            uint256 tPk = SigUtils.ticketPk(doorPk, doorTime);
+            d.ticket = vm.addr(tPk);
+            d.doorSig = SigUtils.sign(doorPk, SigUtils.doorPassDigest(domain, eventId, doorTime, d.ticket));
+            d.ticketSig = SigUtils.sign(tPk, SigUtils.ticketDigest(domain, eventId, pass));
+        } else {
+            d.doorSig = SigUtils.sign(doorPk, SigUtils.doorAttestDigest(domain, eventId, pass, doorTime));
+        }
     }
 
     /// Independent statement of who may attest: door A everywhere until endsAt + 3 days, door C only at the first

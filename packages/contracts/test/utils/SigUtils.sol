@@ -10,8 +10,10 @@ library SigUtils {
 
     bytes32 internal constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-    bytes32 internal constant CHECK_IN_TYPEHASH = keccak256("CheckIn(uint256 eventId,address attendee)");
-    bytes32 internal constant DOOR_PASS_TYPEHASH = keccak256("DoorPass(uint256 eventId,uint64 issuedAt)");
+    bytes32 internal constant CHECK_IN_TYPEHASH = keccak256("CheckIn(uint256 eventId,address attendee,uint8 mode)");
+    bytes32 internal constant DOOR_PASS_TYPEHASH =
+        keccak256("DoorPass(uint256 eventId,uint64 issuedAt,address ticket)");
+    bytes32 internal constant TICKET_TYPEHASH = keccak256("Ticket(uint256 eventId,address attendee)");
     bytes32 internal constant DOOR_ATTEST_TYPEHASH =
         keccak256("DoorAttest(uint256 eventId,address attendee,uint64 attestedAt)");
     bytes32 internal constant LINK_WALLET_TYPEHASH =
@@ -30,12 +32,30 @@ library SigUtils {
         return abi.encodePacked(r, s, v);
     }
 
-    function checkInDigest(bytes32 separator, uint256 eventId, address attendee) internal pure returns (bytes32) {
-        return digest(separator, keccak256(abi.encode(CHECK_IN_TYPEHASH, eventId, attendee)));
+    function checkInDigest(bytes32 separator, uint256 eventId, address attendee, uint8 mode)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return digest(separator, keccak256(abi.encode(CHECK_IN_TYPEHASH, eventId, attendee, mode)));
     }
 
-    function doorPassDigest(bytes32 separator, uint256 eventId, uint64 issuedAt) internal pure returns (bytes32) {
-        return digest(separator, keccak256(abi.encode(DOOR_PASS_TYPEHASH, eventId, issuedAt)));
+    function doorPassDigest(bytes32 separator, uint256 eventId, uint64 issuedAt, address ticket)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return digest(separator, keccak256(abi.encode(DOOR_PASS_TYPEHASH, eventId, issuedAt, ticket)));
+    }
+
+    function ticketDigest(bytes32 separator, uint256 eventId, address attendee) internal pure returns (bytes32) {
+        return digest(separator, keccak256(abi.encode(TICKET_TYPEHASH, eventId, attendee)));
+    }
+
+    /// A throwaway ticket key per door rotation, derived so tests can reproduce it.
+    function ticketPk(uint256 doorPk, uint64 issuedAt) internal pure returns (uint256) {
+        uint256 n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+        return uint256(keccak256(abi.encode("ticket", doorPk, issuedAt))) % (n - 1) + 1;
     }
 
     function doorAttestDigest(bytes32 separator, uint256 eventId, address attendee, uint64 attestedAt)

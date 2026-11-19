@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.38;
 
-import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2StepNoRenounce} from "./utils/Ownable2StepNoRenounce.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IOrganizerBond} from "./interfaces/IOrganizerBond.sol";
@@ -13,7 +14,7 @@ import {ICampaignVault} from "./interfaces/ICampaignVault.sol";
 /// may slash. Arbitration is centralized in v1.
 /// @dev An organizer with an open challenge cannot complete an unbond, so the slashable pending amount cannot
 /// leave while the arbitrator decides.
-contract OrganizerBond is IOrganizerBond, Ownable2Step, ReentrancyGuard {
+contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuard {
     /// @notice Delay between requestUnbond and completeUnbond.
     uint256 public constant UNBOND_DELAY = 7 days;
     /// @notice Largest challenge reason accepted, in bytes.
@@ -34,6 +35,7 @@ contract OrganizerBond is IOrganizerBond, Ownable2Step, ReentrancyGuard {
     mapping(address organizer => uint256) private _bonded;
     mapping(address organizer => Pending) private _pending;
     mapping(uint256 challengeId => Challenge) private _challenges;
+    mapping(uint256 campaignId => mapping(address organizer => bool)) private _openFor;
 
     /// @param owner_ The arbitrator; move to the protocol Safe after deploy.
     constructor(address owner_) Ownable(owner_) {}
@@ -97,6 +99,11 @@ contract OrganizerBond is IOrganizerBond, Ownable2Step, ReentrancyGuard {
         if (organizer == address(0)) revert ZeroAddress();
         if (bytes(reason).length > MAX_REASON_BYTES) revert ReasonTooLong();
         if (ICampaignVault(v).campaign(campaignId).sponsor != msg.sender) revert NotCampaignSponsor();
+        // Only a campaign that actually paid this organizer has a grievance, and one open challenge per pair is
+        // enough, so nobody can freeze an unrelated organizer's unbond with spam (audit L-03).
+        if (ICampaignVault(v).paidForOrganizer(campaignId, organizer) == 0) revert OrganizerNotPaid();
+        if (_openFor[campaignId][organizer]) revert DuplicateChallenge();
+        _openFor[campaignId][organizer] = true;
 
         challengeId = _nextChallengeId++;
         _challenges[challengeId] =
@@ -117,6 +124,7 @@ contract OrganizerBond is IOrganizerBond, Ownable2Step, ReentrancyGuard {
         if (slashAmount != 0 && recipient == address(0)) revert ZeroAddress();
 
         c.resolved = true;
+        _openFor[c.campaignId][organizer] = false;
         openChallenges[organizer] -= 1;
         if (slashAmount <= bonded) {
             _bonded[organizer] = bonded - slashAmount;
@@ -147,6 +155,14 @@ contract OrganizerBond is IOrganizerBond, Ownable2Step, ReentrancyGuard {
     /// @return The challenge.
     function challengeOf(uint256 challengeId) external view returns (Challenge memory) {
         return _challenges[challengeId];
+    }
+
+    /// @notice Whether `campaignId` has an unresolved challenge against `organizer`.
+    /// @param campaignId The campaign.
+    /// @param organizer The organizer.
+    /// @return The flag.
+    function hasOpenChallenge(uint256 campaignId, address organizer) external view returns (bool) {
+        return _openFor[campaignId][organizer];
     }
 
     /// @notice The id the next challenge will get. Ids start at 1.

@@ -3,9 +3,14 @@ pragma solidity 0.8.38;
 
 import {ICampaignVault} from "../../src/interfaces/ICampaignVault.sol";
 
-/// @notice Vault stand-in for OrganizerBond unit tests: only campaign(id).sponsor is meaningful.
+/// @notice Vault stand-in for OrganizerBond unit tests: campaign(id).sponsor and paidForOrganizer are meaningful.
 contract MockSponsorVault {
     mapping(uint256 => address) public sponsorOf;
+    mapping(uint256 => mapping(address => uint256)) public paidForOrganizer;
+
+    function setPaid(uint256 campaignId, address organizer, uint256 amount) external {
+        paidForOrganizer[campaignId][organizer] = amount;
+    }
 
     function setSponsor(uint256 campaignId, address sponsor) external {
         sponsorOf[campaignId] = sponsor;

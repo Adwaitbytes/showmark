@@ -77,6 +77,10 @@ interface IOrganizerBond {
     error ChallengeNotOpen();
     /// @notice Slash amount exceeds bonded plus pending unbond.
     error SlashExceedsBond();
+    /// @notice The campaign has never paid for a presence at this organizer's events.
+    error OrganizerNotPaid();
+    /// @notice This campaign already has an open challenge against this organizer.
+    error DuplicateChallenge();
 
     /// @notice Adds msg.value to the caller's bond.
     function bond() external payable;
@@ -88,7 +92,8 @@ interface IOrganizerBond {
     /// @notice Pays the pending unbond to the caller after the delay, when no challenge is open.
     function completeUnbond() external;
 
-    /// @notice Opens a challenge against an organizer. Sponsor of `campaignId` only.
+    /// @notice Opens a challenge against an organizer. Sponsor of `campaignId` only, the campaign must have paid for at
+    /// least one presence at the organizer's events, and at most one challenge per (campaign, organizer) may be open.
     /// @param organizer The organizer challenged.
     /// @param campaignId The caller's campaign the challenge concerns.
     /// @param reason Free-form reason, at most 2,048 bytes.

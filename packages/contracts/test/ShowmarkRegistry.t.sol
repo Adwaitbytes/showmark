@@ -8,6 +8,7 @@ import {ShowmarkRegistry} from "../src/ShowmarkRegistry.sol";
 import {RegistryFixture} from "./utils/RegistryFixture.sol";
 import {SigUtils} from "./utils/SigUtils.sol";
 import {MockERC1271Wallet} from "./mocks/MockERC1271Wallet.sol";
+import {Ownable2StepNoRenounce} from "../src/utils/Ownable2StepNoRenounce.sol";
 
 contract ShowmarkRegistryTest is RegistryFixture {
     // ---------------------------------------------------------------- deployment
@@ -270,7 +271,7 @@ contract ShowmarkRegistryTest is RegistryFixture {
 
     function test_checkIn_rejectsAttendeeSigFromOtherKey() public {
         IShowmarkRegistry.CheckInData memory d = _mode1(eventId, attendeePk, doorPk, T0);
-        d.attendeeSig = SigUtils.sign(0xBAD, SigUtils.checkInDigest(separator, eventId, attendee));
+        d.attendeeSig = SigUtils.sign(0xBAD, SigUtils.checkInDigest(separator, eventId, attendee, 1));
         vm.expectRevert(IShowmarkRegistry.BadAttendeeSig.selector);
         _checkIn(d);
     }
@@ -278,7 +279,7 @@ contract ShowmarkRegistryTest is RegistryFixture {
     function test_checkIn_rejectsAttendeeSigForOtherEvent() public {
         uint256 other = _createEvent(organizer, T0, T0 + EVENT_LENGTH, 0, 0);
         IShowmarkRegistry.CheckInData memory d = _mode1(eventId, attendeePk, doorPk, T0);
-        d.attendeeSig = SigUtils.sign(attendeePk, SigUtils.checkInDigest(separator, other, attendee));
+        d.attendeeSig = SigUtils.sign(attendeePk, SigUtils.checkInDigest(separator, other, attendee, 1));
         vm.expectRevert(IShowmarkRegistry.BadAttendeeSig.selector);
         _checkIn(d);
     }
@@ -336,7 +337,7 @@ contract ShowmarkRegistryTest is RegistryFixture {
         uint256 other = _createEvent(organizer, T0, T0 + EVENT_LENGTH, 0, 0);
         _authorize(organizer, other, doorKey, T0 + EVENT_LENGTH);
         IShowmarkRegistry.CheckInData memory d = _mode1(other, attendeePk, doorPk, T0);
-        d.doorSig = SigUtils.sign(doorPk, SigUtils.doorPassDigest(separator, eventId, T0));
+        d.doorSig = SigUtils.sign(doorPk, SigUtils.doorPassDigest(separator, eventId, T0, d.ticket));
         vm.expectRevert(IShowmarkRegistry.DoorKeyNotAuthorized.selector);
         _checkIn(d);
     }
@@ -346,12 +347,12 @@ contract ShowmarkRegistryTest is RegistryFixture {
         bytes32 otherContract = SigUtils.domainSeparator(block.chainid, address(0xC0FFEE));
 
         IShowmarkRegistry.CheckInData memory d = _mode1(eventId, attendeePk, doorPk, T0);
-        d.attendeeSig = SigUtils.sign(attendeePk, SigUtils.checkInDigest(otherChain, eventId, attendee));
+        d.attendeeSig = SigUtils.sign(attendeePk, SigUtils.checkInDigest(otherChain, eventId, attendee, 1));
         vm.expectRevert(IShowmarkRegistry.BadAttendeeSig.selector);
         _checkIn(d);
 
         d = _mode1(eventId, attendeePk, doorPk, T0);
-        d.doorSig = SigUtils.sign(doorPk, SigUtils.doorPassDigest(otherContract, eventId, T0));
+        d.doorSig = SigUtils.sign(doorPk, SigUtils.doorPassDigest(otherContract, eventId, T0, d.ticket));
         vm.expectRevert(IShowmarkRegistry.DoorKeyNotAuthorized.selector);
         _checkIn(d);
     }
@@ -473,7 +474,7 @@ contract ShowmarkRegistryTest is RegistryFixture {
         IShowmarkRegistry.CheckInData memory d = _mode2(eventId, 0xBEEF, doorPk, T0);
         // door attested someone else; attendee swaps in their own CheckIn signature
         d.attendee = attendee;
-        d.attendeeSig = SigUtils.sign(attendeePk, SigUtils.checkInDigest(separator, eventId, attendee));
+        d.attendeeSig = SigUtils.sign(attendeePk, SigUtils.checkInDigest(separator, eventId, attendee, 2));
         vm.expectRevert(IShowmarkRegistry.DoorKeyNotAuthorized.selector);
         _checkIn(d);
     }
@@ -481,8 +482,113 @@ contract ShowmarkRegistryTest is RegistryFixture {
     function test_checkIn_doorPassCannotBeUsedAsAttestation() public {
         IShowmarkRegistry.CheckInData memory d = _mode1(eventId, attendeePk, doorPk, T0);
         d.mode = 2;
+        d.ticket = address(0);
+        d.ticketSig = "";
+        d.attendeeSig = SigUtils.sign(attendeePk, SigUtils.checkInDigest(separator, eventId, attendee, 2));
         vm.expectRevert(IShowmarkRegistry.DoorKeyNotAuthorized.selector);
         _checkIn(d);
+    }
+
+    // ---------------------------------------------------------------- ticket keys (audit C-01) and mode binding (M-01)
+
+    function test_checkIn_mode1RequiresTicketSignedByTheDoorPassTicket() public {
+        // ticket signature by some other key
+        IShowmarkRegistry.CheckInData memory d = _mode1(eventId, attendeePk, doorPk, T0);
+        d.ticketSig = SigUtils.sign(0x0DD, SigUtils.ticketDigest(separator, eventId, attendee));
+        vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+        _checkIn(d);
+
+        // ticket signed for a different attendee
+        d = _mode1(eventId, attendeePk, doorPk, T0);
+        d.ticketSig = SigUtils.sign(SigUtils.ticketPk(doorPk, T0), SigUtils.ticketDigest(separator, eventId, wallet));
+        vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+        _checkIn(d);
+
+        // ticket signed for a different event
+        d = _mode1(eventId, attendeePk, doorPk, T0);
+        d.ticketSig = SigUtils.sign(SigUtils.ticketPk(doorPk, T0), SigUtils.ticketDigest(separator, 99, attendee));
+        vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+        _checkIn(d);
+
+        // malformed ticket signature
+        d = _mode1(eventId, attendeePk, doorPk, T0);
+        d.ticketSig = new bytes(64);
+        vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+        _checkIn(d);
+
+        // swapping in another ticket breaks the door signature, which commits to the ticket
+        d = _mode1(eventId, attendeePk, doorPk, T0);
+        d.ticket = vm.addr(0x0DD);
+        d.ticketSig = SigUtils.sign(0x0DD, SigUtils.ticketDigest(separator, eventId, attendee));
+        vm.expectRevert(IShowmarkRegistry.DoorKeyNotAuthorized.selector);
+        _checkIn(d);
+
+        assertTrue(_checkIn(_mode1(eventId, attendeePk, doorPk, T0)));
+    }
+
+    function test_checkIn_mode1RejectsZeroTicket() public {
+        IShowmarkRegistry.CheckInData memory d = _mode1(eventId, attendeePk, doorPk, T0);
+        d.ticket = address(0);
+        d.doorSig = SigUtils.sign(doorPk, SigUtils.doorPassDigest(separator, eventId, T0, address(0)));
+        d.ticketSig = new bytes(65);
+        vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+        _checkIn(d);
+    }
+
+    function test_checkIn_mode2RejectsTicketFields() public {
+        IShowmarkRegistry.CheckInData memory d = _mode2(eventId, attendeePk, doorPk, T0);
+        d.ticket = vm.addr(0x0DD);
+        vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+        _checkIn(d);
+
+        d = _mode2(eventId, attendeePk, doorPk, T0);
+        d.ticketSig = hex"01";
+        vm.expectRevert(IShowmarkRegistry.BadTicketSig.selector);
+        _checkIn(d);
+
+        assertTrue(_checkIn(_mode2(eventId, attendeePk, doorPk, T0)));
+    }
+
+    function test_checkIn_attendeeSignatureBindsTheMode() public {
+        // a mode 2 code shown at the door cannot be replayed as a mode 1 check-in
+        IShowmarkRegistry.CheckInData memory m2 = _mode2(eventId, attendeePk, doorPk, T0);
+        IShowmarkRegistry.CheckInData memory d = _mode1(eventId, attendeePk, doorPk, T0);
+        d.attendeeSig = m2.attendeeSig;
+        vm.expectRevert(IShowmarkRegistry.BadAttendeeSig.selector);
+        _checkIn(d);
+
+        // and a mode 1 signature cannot be used for mode 2
+        IShowmarkRegistry.CheckInData memory m1 = _mode1(eventId, attendeePk, doorPk, T0);
+        m2.attendeeSig = m1.attendeeSig;
+        vm.expectRevert(IShowmarkRegistry.BadAttendeeSig.selector);
+        _checkIn(m2);
+    }
+
+    function test_checkIn_mode2PresenceIsDatedByAttestation() public {
+        _authorize(organizer, eventId, doorKey, T0 + EVENT_LENGTH + 3 days);
+        IShowmarkRegistry.CheckInData memory d = _mode2(eventId, attendeePk, doorPk, T0 + 30 minutes);
+        vm.warp(T0 + EVENT_LENGTH + 2 days);
+        _checkIn(d);
+        assertEq(registry.presenceOf(eventId, attendee).at, T0 + 30 minutes);
+    }
+
+    function test_checkInBatch_badTicketIsCode11() public {
+        IShowmarkRegistry.CheckInData[] memory ds = new IShowmarkRegistry.CheckInData[](1);
+        ds[0] = _mode1(eventId, attendeePk, doorPk, T0);
+        ds[0].ticketSig = SigUtils.sign(0x0DD, SigUtils.ticketDigest(separator, eventId, attendee));
+        vm.expectEmit(address(registry));
+        emit IShowmarkRegistry.CheckInRejected(eventId, attendee, 11);
+        assertEq(registry.checkInBatch(ds)[0], 11);
+    }
+
+    function test_renounceOwnershipDisabled() public {
+        vm.prank(owner);
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
+        registry.renounceOwnership();
+        vm.prank(owner);
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
+        stamp.renounceOwnership();
+        assertEq(registry.owner(), owner);
     }
 
     // ---------------------------------------------------------------- streaks
@@ -537,7 +643,7 @@ contract ShowmarkRegistryTest is RegistryFixture {
         ds[0] = _mode1(eventId, attendeePk, doorPk, T0);
         ds[1] = ds[0];
         ds[2] = _mode1(eventId, 0xBEEF, doorPk, T0);
-        ds[2].attendeeSig = SigUtils.sign(0xBAD, SigUtils.checkInDigest(separator, eventId, vm.addr(0xBEEF)));
+        ds[2].attendeeSig = SigUtils.sign(0xBAD, SigUtils.checkInDigest(separator, eventId, vm.addr(0xBEEF), 1));
         ds[3] = _mode1(99, 0xCAFE, doorPk, T0);
         ds[4] = _mode1(eventId, 0xCAFE, doorPk, T0);
         ds[4].mode = 7;

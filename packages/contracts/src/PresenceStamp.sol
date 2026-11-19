@@ -2,7 +2,8 @@
 pragma solidity 0.8.38;
 
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2StepNoRenounce} from "./utils/Ownable2StepNoRenounce.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title PresenceStamp
@@ -10,7 +11,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 /// @dev Deployed by ShowmarkRegistry, which alone mints and relocates. Mint and relocate deliberately skip the
 /// ERC-1155 receiver hook: a soulbound stamp needs no acceptance check, and skipping it means a check-in or a wallet
 /// link never makes an external call to attendee-controlled code.
-contract PresenceStamp is ERC1155, Ownable2Step {
+contract PresenceStamp is ERC1155, Ownable2StepNoRenounce {
     using Strings for uint256;
 
     /// @notice Stamps cannot be transferred or approved.

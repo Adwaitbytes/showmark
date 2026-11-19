@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.38;
 
-import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {IShowmarkRegistry} from "./interfaces/IShowmarkRegistry.sol";
 import {PresenceStamp} from "./PresenceStamp.sol";
+import {Ownable2StepNoRenounce} from "./utils/Ownable2StepNoRenounce.sol";
 
 /// @title ShowmarkRegistry
 /// @notice Records events, door keys, verified presence, series streaks and pass-to-wallet links.
-/// @dev Check-ins carry two EIP-712 signatures (attendee pass and door key) and are relayable by anyone.
-/// The registry never calls the vault, so no campaign or payout problem can block a check-in.
-contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
-    /// @notice EIP-712 type of the attendee's check-in signature.
-    bytes32 public constant CHECK_IN_TYPEHASH = keccak256("CheckIn(uint256 eventId,address attendee)");
-    /// @notice EIP-712 type of the rotating door pass (mode 1).
-    bytes32 public constant DOOR_PASS_TYPEHASH = keccak256("DoorPass(uint256 eventId,uint64 issuedAt)");
+/// @dev Check-ins carry EIP-712 signatures from the attendee pass and the door key and are relayable by anyone.
+/// Mode 1 also carries a Ticket signature from the rotation's throwaway ticket key, whose private key exists only in
+/// the door QR, so a door pass read from the chain cannot admit anyone else (audit C-01). The attendee signature
+/// commits to the proof mode (audit M-01). The registry never calls the vault, so no campaign or payout problem can
+/// block a check-in.
+contract ShowmarkRegistry is IShowmarkRegistry, Ownable2StepNoRenounce, Pausable, EIP712 {
+    /// @notice EIP-712 type of the attendee's check-in signature; binds the proof mode.
+    bytes32 public constant CHECK_IN_TYPEHASH = keccak256("CheckIn(uint256 eventId,address attendee,uint8 mode)");
+    /// @notice EIP-712 type of the rotating door pass (mode 1); names the rotation's ticket key.
+    bytes32 public constant DOOR_PASS_TYPEHASH = keccak256("DoorPass(uint256 eventId,uint64 issuedAt,address ticket)");
+    /// @notice EIP-712 type signed by the mode 1 ticket key for one attendee.
+    bytes32 public constant TICKET_TYPEHASH = keccak256("Ticket(uint256 eventId,address attendee)");
     /// @notice EIP-712 type of the door attestation bound to one attendee (mode 2).
     bytes32 public constant DOOR_ATTEST_TYPEHASH =
         keccak256("DoorAttest(uint256 eventId,address attendee,uint64 attestedAt)");
@@ -51,6 +57,7 @@ contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
     uint8 internal constant AT_CAPACITY = 8;
     uint8 internal constant BAD_MODE = 9;
     uint8 internal constant PAUSED = 10;
+    uint8 internal constant BAD_TICKET_SIG = 11;
 
     struct Series {
         address organizer;
@@ -316,19 +323,21 @@ contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
         if (e.organizer == address(0)) return (UNKNOWN_EVENT, address(0));
         if (_presence[d.eventId][d.attendee].mode != 0) return (ALREADY_PRESENT, address(0));
 
-        bytes32 checkInDigest = _hashTypedDataV4(keccak256(abi.encode(CHECK_IN_TYPEHASH, d.eventId, d.attendee)));
+        bytes32 checkInDigest =
+            _hashTypedDataV4(keccak256(abi.encode(CHECK_IN_TYPEHASH, d.eventId, d.attendee, d.mode)));
         if (d.attendee == address(0) || _recover(checkInDigest, d.attendeeSig) != d.attendee) {
             return (BAD_ATTENDEE_SIG, address(0));
         }
 
         bytes32 doorStruct = d.mode == MODE_ROTATING
-            ? keccak256(abi.encode(DOOR_PASS_TYPEHASH, d.eventId, d.doorTime))
+            ? keccak256(abi.encode(DOOR_PASS_TYPEHASH, d.eventId, d.doorTime, d.ticket))
             : keccak256(abi.encode(DOOR_ATTEST_TYPEHASH, d.eventId, d.attendee, d.doorTime));
         doorKey = _recover(_hashTypedDataV4(doorStruct), d.doorSig);
         if (doorKey == address(0)) return (BAD_DOOR_SIG, address(0));
 
         uint64 validUntil = _doorKeys[d.eventId][doorKey];
         if (validUntil == 0 || validUntil < d.doorTime) return (DOOR_KEY_NOT_AUTHORIZED, doorKey);
+        if (!_ticketValid(d)) return (BAD_TICKET_SIG, doorKey);
 
         uint256 nowTs = block.timestamp;
         // Mode 1 is judged by block time; mode 2 by when the door attested (it may be submitted later).
@@ -350,8 +359,11 @@ contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
 
     function _record(CheckInData calldata d, address doorKey) private {
         EventInfo storage e = _events[d.eventId];
+        // Mode 2 is dated by the attestation (already bounded to the event window and to now + 30 s), so an
+        // offline-queued attendance keeps the time it happened (audit L-05).
         // forge-lint: disable-next-line(unsafe-typecast)
-        _presence[d.eventId][d.attendee] = Presence({mode: d.mode, at: uint64(block.timestamp)}); // fits until year 2^64 s
+        uint64 at = d.mode == MODE_ATTEST ? d.doorTime : uint64(block.timestamp); // fits until year 2^64 s
+        _presence[d.eventId][d.attendee] = Presence({mode: d.mode, at: at});
         e.checkedIn += 1;
 
         uint32 streak;
@@ -375,6 +387,15 @@ contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
             if (current > s.best) s.best = current;
         }
         return s.current;
+    }
+
+    /// @dev Mode 1: a non-zero ticket (committed to by the door signature) must have signed Ticket(eventId, attendee).
+    /// Mode 2: there is no ticket, so both fields must be empty.
+    function _ticketValid(CheckInData calldata d) private view returns (bool) {
+        if (d.mode == MODE_ATTEST) return d.ticket == address(0) && d.ticketSig.length == 0;
+        if (d.ticket == address(0)) return false;
+        bytes32 ticketDigest = _hashTypedDataV4(keccak256(abi.encode(TICKET_TYPEHASH, d.eventId, d.attendee)));
+        return _recover(ticketDigest, d.ticketSig) == d.ticket;
     }
 
     function _organizerEvent(uint256 eventId) private view returns (EventInfo storage e) {
@@ -401,6 +422,7 @@ contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
         if (status == STALE) revert Stale();
         if (status == OUTSIDE_EVENT_WINDOW) revert OutsideEventWindow();
         if (status == AT_CAPACITY) revert AtCapacity();
+        if (status == BAD_TICKET_SIG) revert BadTicketSig();
         revert BadMode();
     }
 }

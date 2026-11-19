@@ -10,6 +10,8 @@ import {FeeOnTransferToken} from "./mocks/FeeOnTransferToken.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
 import {MockQieNameRegistry} from "./mocks/MockQieNameRegistry.sol";
 import {RevertingQieIdCheck} from "./mocks/RevertingQieIdCheck.sol";
+import {HostileAggregator} from "./mocks/HostileAggregator.sol";
+import {Ownable2StepNoRenounce} from "../src/utils/Ownable2StepNoRenounce.sol";
 
 contract CampaignVaultTest is ProtocolFixture {
     // ---------------------------------------------------------------- constructor and fee
@@ -772,6 +774,138 @@ contract CampaignVaultTest is ProtocolFixture {
         ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](1);
         items[0] = ICampaignVault.SettleItem(id, eventId, attendee);
         assertEq(strict.settleBatch(items)[0], 8);
+    }
+
+    // ---------------------------------------------------------------- bonded exposure (audit M-02)
+
+    function test_bondedExposure_capsPaidThroughBondAcrossCampaigns() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1 ether;
+        uint256 a = _create(p, 10 ether);
+        uint256 b = _create(p, 10 ether);
+        uint256 approvedOnly = _createApproved(_params(NATIVE), 10 ether);
+
+        vm.deal(organizer, 2 ether);
+        vm.prank(organizer);
+        bond.bond{value: 2 ether}();
+        for (uint256 i; i < 3; ++i) {
+            _checkInNow(eventId, 0x5B11 + i);
+        }
+
+        assertEq(vault.settle(a, eventId, vm.addr(0x5B11)), 1 ether);
+        assertEq(vault.settle(b, eventId, vm.addr(0x5B11)), 1 ether);
+        assertEq(vault.bondedExposure(organizer), 2 ether);
+        // a third payout through the bond would exceed it, in either open campaign
+        vm.expectRevert(ICampaignVault.EventNotEligible.selector);
+        vault.settle(a, eventId, vm.addr(0x5B12));
+        ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](1);
+        items[0] = ICampaignVault.SettleItem(b, eventId, vm.addr(0x5B12));
+        assertEq(vault.settleBatch(items)[0], 5);
+
+        // explicitly approved events are not counted against the bond
+        assertEq(vault.settle(approvedOnly, eventId, vm.addr(0x5B12)), 1 ether);
+        assertEq(vault.bondedExposure(organizer), 2 ether);
+        // and an approval in an open campaign bypasses the cap
+        _approve(a, eventId);
+        assertEq(vault.settle(a, eventId, vm.addr(0x5B12)), 1 ether);
+        assertEq(vault.bondedExposure(organizer), 2 ether);
+
+        // more stake opens more room
+        vm.deal(organizer, 1 ether);
+        vm.prank(organizer);
+        bond.bond{value: 1 ether}();
+        assertEq(vault.settle(b, eventId, vm.addr(0x5B13)), 1 ether);
+        assertEq(vault.bondedExposure(organizer), 3 ether);
+    }
+
+    function test_bondedExposure_usdCampaignCountsWei() public {
+        ICampaignVault.CampaignParams memory p = _usdParams(1e6);
+        p.openToBonded = true;
+        p.minBond = 1 ether;
+        uint256 id = _create(p, 100 ether);
+        vm.deal(organizer, 7 ether);
+        vm.prank(organizer);
+        bond.bond{value: 7 ether}();
+        _checkInNow(eventId, 0x5B11);
+        _checkInNow(eventId, 0x5B12);
+        uint256 q = vault.settle(id, eventId, vm.addr(0x5B11)); // 6.06 QIE
+        assertEq(vault.bondedExposure(organizer), q);
+        vm.expectRevert(ICampaignVault.EventNotEligible.selector);
+        vault.settle(id, eventId, vm.addr(0x5B12));
+    }
+
+    function test_openToBondedIsNativeOnly() public {
+        ICampaignVault.CampaignParams memory p = _params(address(qusdc));
+        p.openToBonded = true;
+        p.minBond = 1 ether;
+        _expectInvalid(p);
+    }
+
+    function test_paidForOrganizer_tracksGrossPerCampaign() public {
+        uint256 id = _createApproved(_params(NATIVE), 10 ether);
+        assertEq(vault.paidForOrganizer(id, organizer), 0);
+        _checkInNow(eventId, attendeePk);
+        _checkInNow(eventId, 0xBEEF);
+        vault.settle(id, eventId, attendee);
+        vault.settle(id, eventId, vm.addr(0xBEEF));
+        assertEq(vault.paidForOrganizer(id, organizer), 2 ether);
+        assertEq(vault.paidForOrganizer(id + 1, organizer), 0);
+    }
+
+    // ---------------------------------------------------------------- hostile oracle (audit L-02)
+
+    function test_oracle_malformedAnswersDeferWithoutRevertingTheBatch() public {
+        HostileAggregator bad = new HostileAggregator();
+        CampaignVault v = new CampaignVault(
+            address(registry), address(qieIdCheck), address(bad), address(bond), MAX_ORACLE_AGE, owner, feeRecipient, 0
+        );
+        vm.startPrank(sponsor);
+        uint256 tokenPriced = v.createCampaign{value: 5 ether}(_params(NATIVE), 5 ether);
+        uint256 usdPriced = v.createCampaign{value: 50 ether}(_usdParams(1e6), 50 ether);
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = eventId;
+        v.approveEvents(tokenPriced, ids);
+        v.approveEvents(usdPriced, ids);
+        vm.stopPrank();
+        _checkInNow(eventId, attendeePk);
+
+        ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](1);
+        items[0] = ICampaignVault.SettleItem(usdPriced, eventId, attendee);
+        HostileAggregator.Mode[4] memory modes = [
+            HostileAggregator.Mode.ShortAnswer,
+            HostileAggregator.Mode.OversizedRoundId,
+            HostileAggregator.Mode.GasBurner,
+            HostileAggregator.Mode.Empty
+        ];
+        for (uint256 i; i < modes.length; ++i) {
+            bad.setMode(modes[i]);
+            uint256 before = gasleft();
+            assertEq(v.settleBatch(items)[0], 9, "deferred as PriceStale");
+            assertLt(before - gasleft(), v.ORACLE_QUERY_GAS() + 100_000, "the feed gets at most ORACLE_QUERY_GAS");
+            (uint256 amount, bool fresh) = v.quote(usdPriced);
+            assertEq(amount, 0);
+            assertFalse(fresh);
+        }
+        vm.expectRevert(ICampaignVault.PriceStale.selector);
+        v.settle(usdPriced, eventId, attendee);
+
+        // token-priced items in the same batch still settle
+        ICampaignVault.SettleItem[] memory both = new ICampaignVault.SettleItem[](2);
+        both[0] = ICampaignVault.SettleItem(usdPriced, eventId, attendee);
+        both[1] = ICampaignVault.SettleItem(tokenPriced, eventId, attendee);
+        uint8[] memory s = v.settleBatch(both);
+        assertEq(s[0], 9);
+        assertEq(s[1], 0);
+    }
+
+    function test_renounceOwnershipDisabled() public {
+        vm.startPrank(owner);
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
+        vault.renounceOwnership();
+        vm.expectRevert(Ownable2StepNoRenounce.RenounceDisabled.selector);
+        bond.renounceOwnership();
+        vm.stopPrank();
     }
 
     function test_settleBatch_pausedReturns12() public {

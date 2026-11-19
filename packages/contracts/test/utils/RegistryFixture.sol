@@ -65,12 +65,15 @@ abstract contract RegistryFixture is Test {
         returns (IShowmarkRegistry.CheckInData memory d)
     {
         address pass = vm.addr(passPk);
+        uint256 tPk = SigUtils.ticketPk(keyPk, issuedAt);
         d.eventId = id;
         d.attendee = pass;
         d.mode = 1;
         d.doorTime = issuedAt;
-        d.attendeeSig = SigUtils.sign(passPk, SigUtils.checkInDigest(separator, id, pass));
-        d.doorSig = SigUtils.sign(keyPk, SigUtils.doorPassDigest(separator, id, issuedAt));
+        d.ticket = vm.addr(tPk);
+        d.attendeeSig = SigUtils.sign(passPk, SigUtils.checkInDigest(separator, id, pass, 1));
+        d.doorSig = SigUtils.sign(keyPk, SigUtils.doorPassDigest(separator, id, issuedAt, d.ticket));
+        d.ticketSig = SigUtils.sign(tPk, SigUtils.ticketDigest(separator, id, pass));
     }
 
     function _mode2(uint256 id, uint256 passPk, uint256 keyPk, uint64 attestedAt)
@@ -83,7 +86,7 @@ abstract contract RegistryFixture is Test {
         d.attendee = pass;
         d.mode = 2;
         d.doorTime = attestedAt;
-        d.attendeeSig = SigUtils.sign(passPk, SigUtils.checkInDigest(separator, id, pass));
+        d.attendeeSig = SigUtils.sign(passPk, SigUtils.checkInDigest(separator, id, pass, 2));
         d.doorSig = SigUtils.sign(keyPk, SigUtils.doorAttestDigest(separator, id, pass, attestedAt));
     }
 

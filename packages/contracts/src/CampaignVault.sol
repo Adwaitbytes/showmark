@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.38;
 
-import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2StepNoRenounce} from "./utils/Ownable2StepNoRenounce.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -21,7 +22,7 @@ import {IQieIdCheck} from "./interfaces/IQieIdCheck.sol";
 /// @dev Reads the registry (presence, organizer, wallet links), the bond, the QIE ID check and the QIE/USD oracle.
 /// Accounting per token: `totalLiabilities == sum(campaign balances) + sum(claimables) <= balance held`.
 /// Pause blocks createCampaign, topUp and settlement only; refund and withdraw always work.
-contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuard {
+contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// @notice Hard cap on the protocol fee, in basis points.
@@ -30,6 +31,9 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
     uint256 public constant SETTLE_GRACE = 3 days;
     /// @notice Largest campaign metadata accepted, in bytes.
     uint256 public constant MAX_METADATA_BYTES = 2048;
+
+    /// @notice Gas forwarded to the price feed. A real QIE feed read uses about 12,000.
+    uint256 public constant ORACLE_QUERY_GAS = 100_000;
 
     uint256 private constant BPS = 10_000;
 
@@ -68,6 +72,12 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
     uint256 public campaignCount;
     /// @notice Presences paid per campaign and event, for `maxPerEvent`.
     mapping(uint256 campaignId => mapping(uint256 eventId => uint32)) public settledPerEvent;
+    /// @inheritdoc ICampaignVault
+    mapping(uint256 campaignId => mapping(address organizer => uint256)) public paidForOrganizer;
+    /// @notice Cumulative gross (native wei) ever paid at an organizer's events through open-to-bonded eligibility,
+    /// across all campaigns. It may never exceed the organizer's current bond, so one stake cannot back unbounded
+    /// payouts (audit M-02). Payouts for explicitly approved events are not counted.
+    mapping(address organizer => uint256) public bondedExposure;
 
     mapping(uint256 campaignId => Campaign) private _campaigns;
     mapping(uint256 campaignId => mapping(uint256 eventId => bool)) private _approved;
@@ -304,8 +314,14 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
         if (presence.at < c.startsAt || presence.at > c.endsAt) return (OUTSIDE_CAMPAIGN_WINDOW, 0);
 
         address organizer = registry.eventInfo(eventId).organizer;
-        if (!_approved[campaignId][eventId] && !(c.openToBonded && bond.bondOf(organizer) >= c.minBond)) {
-            return (EVENT_NOT_ELIGIBLE, 0);
+        // type(uint256).max marks an explicitly approved event, which is not limited by the organizer's bond
+        uint256 bondRoom = type(uint256).max;
+        if (!_approved[campaignId][eventId]) {
+            if (!c.openToBonded) return (EVENT_NOT_ELIGIBLE, 0);
+            uint256 bonded = bond.bondOf(organizer);
+            if (bonded < c.minBond) return (EVENT_NOT_ELIGIBLE, 0);
+            uint256 exposure = bondedExposure[organizer];
+            bondRoom = bonded > exposure ? bonded - exposure : 0;
         }
         if (c.maxPerEvent != 0 && settledPerEvent[campaignId][eventId] >= c.maxPerEvent) {
             return (EVENT_CAP_REACHED, 0);
@@ -315,8 +331,10 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
 
         (bool fresh, uint256 gross, uint256 price) = _quote(c);
         if (!fresh) return (PRICE_STALE, 0);
+        if (gross > bondRoom) return (EVENT_NOT_ELIGIBLE, 0);
         if (gross > c.balance) return (INSUFFICIENT_BUDGET, 0);
 
+        if (bondRoom != type(uint256).max) bondedExposure[organizer] += gross;
         _credit(campaignId, eventId, attendee, organizer, gross, price);
         return (SETTLED, gross);
     }
@@ -340,6 +358,7 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
         settledPerEvent[campaignId][eventId] += 1;
         c.settledCount += 1;
         c.balance -= gross;
+        paidForOrganizer[campaignId][organizer] += gross;
         // Liabilities are unchanged: gross moves from the campaign balance into claimables.
         _claimable[token][attendee] += toAttendee;
         _claimable[token][organizer] += toOrganizer;
@@ -352,19 +371,39 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
     /// or unreadable round, or a quote that rounds to zero, is reported as not fresh so settlement defers.
     function _quote(Campaign storage c) private view returns (bool, uint256, uint256) {
         if (c.pricing == Pricing.Token) return (true, c.amountPerPresence, 0);
-        try oracle.latestRoundData() returns (
-            uint80 roundId, int256 answer, uint256, uint256 updatedAt, uint80 answeredInRound
-        ) {
-            if (
-                answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp
-                    || block.timestamp - updatedAt > maxOracleAge || answeredInRound < roundId
-            ) return (false, 0, 0);
-            uint256 amount = Math.mulDiv(c.amountPerPresence, _usdToWeiScale, uint256(answer));
-            if (amount == 0) return (false, 0, 0);
-            return (true, amount, uint256(answer));
-        } catch {
-            return (false, 0, 0);
+        (bool ok, uint256 roundId, int256 answer, uint256 updatedAt, uint256 answeredInRound) = _readOracle();
+        if (
+            !ok || answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp
+                || block.timestamp - updatedAt > maxOracleAge || answeredInRound < roundId
+        ) return (false, 0, 0);
+        uint256 amount = Math.mulDiv(c.amountPerPresence, _usdToWeiScale, uint256(answer));
+        if (amount == 0) return (false, 0, 0);
+        return (true, amount, uint256(answer));
+    }
+
+    /// @dev latestRoundData through a gas-capped staticcall that copies exactly five words back. A revert, an
+    /// out-of-gas, short return data or round ids that do not fit uint80 read as "no price" instead of reverting the
+    /// caller, which a try/catch cannot guarantee because it does not catch decoding failures (audit L-02).
+    function _readOracle()
+        private
+        view
+        returns (bool ok, uint256 roundId, int256 answer, uint256 updatedAt, uint256 answeredInRound)
+    {
+        address feed = address(oracle);
+        bytes4 selector = IAggregatorV3.latestRoundData.selector;
+        uint256 size;
+        assembly ("memory-safe") {
+            // scratch space past the free memory pointer; nothing is allocated
+            let ptr := mload(0x40)
+            mstore(ptr, selector)
+            ok := staticcall(ORACLE_QUERY_GAS, feed, ptr, 0x04, ptr, 0xa0)
+            size := returndatasize()
+            roundId := mload(ptr)
+            answer := mload(add(ptr, 0x20))
+            updatedAt := mload(add(ptr, 0x60))
+            answeredInRound := mload(add(ptr, 0x80))
         }
+        ok = ok && size >= 0xa0 && roundId <= type(uint80).max && answeredInRound <= type(uint80).max;
     }
 
     function _holdsQieId(address pass) private view returns (bool) {
@@ -406,7 +445,8 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
         if (
             p.amountPerPresence == 0 || p.attendeeShareBps > BPS || (p.minProofMode != 1 && p.minProofMode != 2)
                 || p.startsAt >= p.endsAt || (p.pricing == Pricing.UsdInNative && p.token != address(0))
-                || (p.token != address(0) && p.token.code.length == 0) || (p.openToBonded && p.minBond == 0)
+                || (p.token != address(0) && p.token.code.length == 0)
+                || (p.openToBonded && (p.minBond == 0 || p.token != address(0)))
         ) revert InvalidParams();
         if (bytes(p.metadata).length > MAX_METADATA_BYTES) revert MetadataTooLong();
     }
