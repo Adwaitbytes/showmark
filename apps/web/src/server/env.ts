@@ -109,3 +109,17 @@ export function qieNameRegistryAddress(): Address | null {
 export function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
+
+export interface RelayLimits {
+  /** Check-ins per minute from one IP address. INTERFACES section 3 sets 10. */
+  perIpPerMinute: number;
+  /** Check-ins per minute for one pass. INTERFACES section 3 sets 3. */
+  perPassPerMinute: number;
+}
+
+/** Venues share one Wi-Fi address, so operators can raise the per-IP limit for an event without a deploy. */
+export function relayLimits(): RelayLimits {
+  const perIp = parse("RELAY_IP_LIMIT_PER_MINUTE", z.coerce.number().int().min(1).max(10_000), "must be a whole number from 1 to 10000");
+  const perPass = parse("RELAY_PASS_LIMIT_PER_MINUTE", z.coerce.number().int().min(1).max(100), "must be a whole number from 1 to 100");
+  return { perIpPerMinute: perIp ?? 10, perPassPerMinute: perPass ?? 3 };
+}

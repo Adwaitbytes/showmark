@@ -16,6 +16,7 @@ export interface SetOptions {
 
 export interface KeyValueStore {
   get(key: string): Promise<string | null>;
+  mget(keys: string[]): Promise<(string | null)[]>;
   /** Returns true when the value was written (false when NX found an existing key). */
   set(key: string, value: string, options?: SetOptions): Promise<boolean>;
   getdel(key: string): Promise<string | null>;
@@ -49,6 +50,11 @@ export class UpstashStore implements KeyValueStore {
 
   async get(key: string) {
     return this.redis.get<string>(key);
+  }
+
+  async mget(keys: string[]) {
+    if (keys.length === 0) return [];
+    return this.redis.mget<(string | null)[]>(...keys);
   }
 
   async set(key: string, value: string, options: SetOptions = {}) {
@@ -131,6 +137,13 @@ export class MemoryStore implements KeyValueStore {
 
   async get(key: string) {
     return this.string(key);
+  }
+
+  async mget(keys: string[]) {
+    return keys.map((key) => {
+      const entry = this.live(key);
+      return entry && typeof entry.value === "string" ? entry.value : null;
+    });
   }
 
   async set(key: string, value: string, options: SetOptions = {}) {
