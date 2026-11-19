@@ -15,12 +15,15 @@ export interface ErrorCopy {
 export class AppError extends Error {
   readonly status: number;
   readonly copy: ErrorCopy;
+  /** Extra response headers, for example Retry-After on a 429. */
+  readonly headers: Record<string, string>;
 
-  constructor(status: number, copy: ErrorCopy, options?: { cause?: unknown }) {
-    super(`${copy.code}: ${copy.message}`, options);
+  constructor(status: number, copy: ErrorCopy, options?: { cause?: unknown; headers?: Record<string, string> }) {
+    super(`${copy.code}: ${copy.message}`, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = "AppError";
     this.status = status;
     this.copy = copy;
+    this.headers = options?.headers ?? {};
   }
 
   toBody(): ApiError {
@@ -225,10 +228,10 @@ export const RELAY_ERRORS = {
     message: "The network rejected this withdrawal.",
     action: "Try again in a few minutes. If it keeps failing, tell the Showmark team.",
   },
-  batchMixedEvents: {
-    code: "batch_mixed_events",
-    message: "A batch can only hold check-ins for one event.",
-    action: "Send each event's queue separately.",
+  bodyTooLarge: {
+    code: "body_too_large",
+    message: "The request was larger than Showmark accepts.",
+    action: "Send fewer items at a time.",
   },
 } as const satisfies Record<string, ErrorCopy>;
 
