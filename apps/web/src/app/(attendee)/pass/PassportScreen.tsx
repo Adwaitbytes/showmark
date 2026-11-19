@@ -194,10 +194,12 @@ function Cover({ pass, wallet, qieName, count, loading }: { pass: Address | null
                 )}
               </dd>
             </div>
-            <div className="flex flex-col items-start gap-1.5 sm:items-end">
-              <dt className="text-sm text-ink-soft">{t.pass.stampsTitle}</dt>
-              <dd className="font-display text-3xl leading-none text-ink">{count}</dd>
-            </div>
+            {count > 0 ? (
+              <div className="flex flex-col items-start gap-1.5 sm:items-end">
+                <dt className="text-sm text-ink-soft">{t.pass.stampsTitle}</dt>
+                <dd className="font-display text-3xl leading-none text-ink">{count}</dd>
+              </div>
+            ) : null}
           </dl>
         ) : (
           <p className="text-base text-ink-soft">{t.pass.noPassNote}</p>

@@ -60,6 +60,8 @@ export const hi: Dictionary = {
     receiptTime: "समय",
     receiptTx: "ट्रांज़ैक्शन",
     receiptPending: "ब्लॉक का इंतज़ार है",
+    receiptNotSent: "अभी भेजा नहीं गया",
+    receiptEarlier: "पहले दर्ज हो चुका",
   },
   errors: {
     invalidCode: {
@@ -72,11 +74,11 @@ export const hi: Dictionary = {
     },
     offline: {
       message: "आपका फ़ोन ऑफ़लाइन है।",
-      action: "आपका चेक इन इस फ़ोन पर सेव है और इंटरनेट आते ही अपने आप भेज दिया जाएगा। यह स्क्रीन खुली रखें।",
+      action: "इंटरनेट आते ही यह अपने आप भेज दिया जाएगा। यह स्क्रीन खुली रखें।",
     },
     relay: {
       message: "Showmark अभी नेटवर्क तक नहीं पहुँच पाया।",
-      action: "आपका चेक इन इस फ़ोन पर सेव है। Showmark अपने आप फिर कोशिश करेगा, या आप अभी कोशिश कर सकते हैं।",
+      action: "Showmark अपने आप फिर कोशिश करेगा, या आप अभी कोशिश कर सकते हैं।",
     },
     retryIn: (seconds) => (seconds <= 1 ? "अभी फिर कोशिश हो रही है।" : `${seconds} सेकंड में फिर कोशिश होगी।`),
     confirmTimeout: {

@@ -71,6 +71,8 @@ const english = {
     receiptTime: "Time",
     receiptTx: "Transaction",
     receiptPending: "Waiting for the block",
+    receiptNotSent: "Not sent yet",
+    receiptEarlier: "Recorded earlier",
   },
   errors: {
     invalidCode: {
@@ -83,11 +85,11 @@ const english = {
     },
     offline: {
       message: "Your phone is offline.",
-      action: "Your check-in is saved on this phone and goes through as soon as you are back online. Keep this screen open.",
+      action: "It goes through on its own as soon as you are back online. Keep this screen open.",
     },
     relay: {
       message: "Showmark could not reach the network just now.",
-      action: "Your check-in is saved on this phone. Showmark tries again on its own, or you can try now.",
+      action: "Showmark tries again on its own, or you can try now.",
     },
     retryIn: (seconds: number) => (seconds <= 1 ? "Trying again now." : `Trying again in ${seconds} seconds.`),
     confirmTimeout: {

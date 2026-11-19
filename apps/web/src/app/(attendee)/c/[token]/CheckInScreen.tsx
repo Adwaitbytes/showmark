@@ -322,7 +322,7 @@ function FailedState({ phase, eventStartsAt, onRetry }: { phase: ScreenPhase; ev
             <Button variant="primary" onClick={onRetry} leading={<RetryIcon className="size-4" />}>
               {t.common.retry}
             </Button>
-          ) : problem.kind === "unconfirmed" ? (
+          ) : problem.kind === "unconfirmed" || problem.kind === "capacity" || problem.kind === "window" ? (
             <Button href="/pass" variant="secondary">
               {t.checkIn.openPassport}
             </Button>
@@ -454,16 +454,17 @@ function Receipt({ phase, prior, eventName }: { phase: ScreenPhase; prior: Prior
   const { t } = useLocale();
   const at = phase.kind === "stamped" ? new Date(phase.at).toISOString() : phase.kind === "already" ? (prior?.at ?? null) : null;
   const tx = phase.kind === "stamped" || phase.kind === "confirming" ? phase.txHash : phase.kind === "already" ? (prior?.tx ?? null) : null;
+  const waitingWord = phase.kind === "confirming" ? t.checkIn.receiptPending : phase.kind === "already" ? t.checkIn.receiptEarlier : t.checkIn.receiptNotSent;
   return (
     <Ledger label={t.checkIn.receiptLabel}>
       <LedgerRow label={t.checkIn.receiptEvent} value={<span className="font-sans">{eventName}</span>} />
       <LedgerRow
         label={t.checkIn.receiptTime}
-        value={at ? `${formatDate(at)}, ${formatTime(at)}` : <span className="font-sans text-ink-soft">{t.checkIn.receiptPending}</span>}
+        value={at ? `${formatDate(at)}, ${formatTime(at)}` : <span className="font-sans text-ink-soft">{waitingWord}</span>}
       />
       <LedgerRow
         label={t.checkIn.receiptTx}
-        value={tx ? <TxLink hash={tx} /> : <span className="font-sans text-ink-soft">{t.checkIn.receiptPending}</span>}
+        value={tx ? <TxLink hash={tx} /> : <span className="font-sans text-ink-soft">{waitingWord}</span>}
       />
     </Ledger>
   );
