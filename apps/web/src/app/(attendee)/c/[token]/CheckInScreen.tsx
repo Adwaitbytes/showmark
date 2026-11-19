@@ -47,8 +47,13 @@ interface PriorStamp {
 
 const CHECK_IN_MARGIN_MS = 60 * 60_000;
 
-// Start fetching the signing code as soon as this module runs in the browser, alongside hydration.
-const signer = typeof window === "undefined" ? null : import("@/lib/checkin/pass-signer");
+// The signing code (secp256k1 and EIP-712) is fetched only once a valid door code is in hand, and
+// then in parallel with the event lookup, so a broken link never downloads it.
+let signer: Promise<typeof import("@/lib/checkin/pass-signer")> | null = null;
+function loadSigner() {
+  signer ??= import("@/lib/checkin/pass-signer");
+  return signer;
+}
 
 /**
  * The door QR opens here. The check-in starts on load: scanning the code is the intent, a tap
@@ -81,6 +86,10 @@ export function CheckInScreen() {
   // Event details load next to the check-in, never in front of it.
   useEffect(() => {
     if (!eventId) return;
+    void loadSigner().catch(() => {
+      // Retried when the check-in actually needs it.
+      signer = null;
+    });
     const controller = new AbortController();
     rememberEvent({ eventId, name: null, openedAt: Date.now() });
     getEvent(eventId, { signal: controller.signal }).then((result) => {
@@ -121,7 +130,7 @@ export function CheckInScreen() {
       if (!request) {
         let signed: SignResult;
         try {
-          const { passAndSign } = await (signer ?? import("@/lib/checkin/pass-signer"));
+          const { passAndSign } = await loadSigner();
           signed = await passAndSign(door);
         } catch {
           // The signing code did not download: same as the relay being out of reach.

@@ -63,3 +63,32 @@ describe("parsers", () => {
     expect(parseEvent({ ...event, campaigns: [{ ...event.campaigns[0], attendeeAmount: "1e18" }] })).toBeNull();
   });
 });
+
+describe("passport parsing", () => {
+  const passport = {
+    pass: "0x7aE3b1c9D4f20a8E6B5c3D1f9A2e4B6c8D0f1A3b",
+    wallet: null,
+    qieName: null,
+    holdsQieId: false,
+    stamps: [{ eventId: "1", eventName: "Meetup", city: "Pune", at: "2026-11-19T10:00:00Z", mode: 1, tx: TX, streak: 0, extra: "dropped" }],
+    streaks: [],
+    claimable: [{ token: "0x0000000000000000000000000000000000000000", symbol: "QIE", amount: "6000000000000000" }],
+    pending: [{ campaignId: "1", eventId: "1", reason: "NeedsQieId" }],
+    unknownTopLevel: true,
+  };
+
+  it("keeps the declared fields and drops the rest", async () => {
+    const { parsePassport } = await import("./api-passport");
+    const parsed = parsePassport(passport);
+    expect(parsed?.stamps[0]).toEqual({ eventId: "1", eventName: "Meetup", city: "Pune", at: "2026-11-19T10:00:00Z", mode: 1, tx: TX, streak: 0 });
+    expect(parsed && "unknownTopLevel" in parsed).toBe(false);
+  });
+
+  it("rejects a wrong mode, symbol, amount or pending reason", async () => {
+    const { parsePassport } = await import("./api-passport");
+    expect(parsePassport({ ...passport, stamps: [{ ...passport.stamps[0], mode: 3 }] })).toBeNull();
+    expect(parsePassport({ ...passport, claimable: [{ ...passport.claimable[0], symbol: "ETH" }] })).toBeNull();
+    expect(parsePassport({ ...passport, claimable: [{ ...passport.claimable[0], amount: "1.5" }] })).toBeNull();
+    expect(parsePassport({ ...passport, pending: [{ campaignId: "1", eventId: "1", reason: "Later" }] })).toBeNull();
+  });
+});

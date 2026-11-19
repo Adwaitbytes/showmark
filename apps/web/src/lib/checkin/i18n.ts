@@ -188,7 +188,9 @@ const english = {
     outboxTitle: "A check-in is waiting to be sent",
     outboxBody: (event: string) => `Your check-in for ${event} is saved on this phone and has not reached the network yet.`,
     outboxSend: "Send it now",
-    noPassNote: "This phone has no pass yet. It makes one the first time you check in.",
+    noPassNote: "This phone has no pass yet. It makes one the first time you check in, or when you make a door code below.",
+    codeNeedsPass: "Your door code is signed by a private pass that lives on this phone. Make one now, or it is made for you at your first check-in.",
+    codeMake: "Make my door code",
   },
   link: {
     metaTitle: "Link QIE Wallet",
@@ -229,6 +231,19 @@ const english = {
     slow: {
       message: "The network is taking longer than usual to record the link.",
       action: "It was sent. Open your passport in a minute to see the linked wallet.",
+    },
+  },
+  handoff: {
+    caption: "Scan with your phone camera",
+    scan: {
+      title: "Scanning works best on your phone",
+      body: "Point your phone's camera at this code to open the scanner there, then scan the code on the door screen.",
+      qrLabel: "A code that opens this scanner on your phone",
+    },
+    pass: {
+      title: "Checked in on your phone?",
+      body: "Your pass lives on the phone that checked in. Scan this code with that phone to open this page there.",
+      qrLabel: "A code that opens this page on your phone",
     },
   },
   withdraw: {

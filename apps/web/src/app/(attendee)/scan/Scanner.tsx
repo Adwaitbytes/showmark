@@ -236,6 +236,9 @@ export function Scanner() {
         ) : null}
       </div>
 
+      {/* Framing advice only helps while the camera is on; it is not shown under a camera error. */}
+      <p className="text-center text-sm text-ink-soft">{t.scan.tip}</p>
+
       {torch.supported ? (
         <Button variant="quiet" size="lg" block onClick={toggleTorch} aria-pressed={torch.on} leading={<TorchIcon className="size-5" />} className="mx-auto max-w-[26rem]">
           {torch.on ? t.scan.torchOff : t.scan.torchOn}

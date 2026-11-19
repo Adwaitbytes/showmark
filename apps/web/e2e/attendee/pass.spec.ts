@@ -7,7 +7,7 @@ import { doorPath, mockApi, seedPass } from "./fixtures";
 const stampsLoaded = async (page: import("@playwright/test").Page) => {
   const main = page.locator("main:visible");
   await expect(main.getByRole("heading", { level: 1, name: "Your passport" })).toBeVisible();
-  await expect(main.getByText("Solidity study circle", { exact: true })).toBeVisible({ timeout: 5_000 });
+  await expect(main.getByRole("img", { name: /Solidity study circle/ })).toBeVisible({ timeout: 5_000 });
 };
 
 test.describe("navigating to the passport", () => {
@@ -39,7 +39,7 @@ test.describe("navigating to the passport", () => {
     await page.evaluate((href) => (window as unknown as { next: { router: { push(h: string): void } } }).next.router.push(href), door);
     await expect(page.getByRole("heading", { level: 1, name: "You are checked in" })).toBeVisible();
     await page.getByRole("link", { name: "Open my passport" }).click();
-    await expect(page.locator("main:visible").getByText("Solidity study circle", { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("main:visible").getByRole("img", { name: /Solidity study circle/ })).toBeVisible({ timeout: 5_000 });
   });
 
   test("loads from the bottom tab bar", async ({ page }) => {

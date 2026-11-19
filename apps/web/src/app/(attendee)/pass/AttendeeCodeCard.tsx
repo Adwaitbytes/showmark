@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { listUpcomingEvents, type EventListItem } from "@/lib/checkin/api-passport";
 import { RECENT_KEY, recentEvents, type RecentEvent } from "@/lib/checkin/local-records";
 import { useLocale } from "@/lib/checkin/locale";
-import { ensurePassKey, PassStorageError } from "@/lib/checkin/pass-key";
+import { ensurePassKey, parsePassKey, PASS_STORAGE_KEY, PassStorageError } from "@/lib/checkin/pass-key";
 import { attendeeCode } from "@/lib/checkin/sign";
 import { Button } from "@/ui/Button";
 import { Select } from "@/ui/Field";
@@ -19,6 +19,8 @@ import { useStoredItem } from "@/lib/checkin/use-stored";
 interface Choice {
   eventId: string;
   label: string;
+  /** Shown under the picker, not in the option, so long names are not cut off on phones. */
+  date?: string;
 }
 
 /**
@@ -32,6 +34,10 @@ export function AttendeeCodeCard() {
   const selectId = useId();
   // Read as a store so a door code opened since this card first mounted shows up (see use-stored.ts).
   const rawRecent = useStoredItem(RECENT_KEY);
+  // Viewing the passport never creates a pass. The code is made from an existing pass, or after the
+  // person asks for one with the button below.
+  const passKey = parsePassKey(useStoredItem(PASS_STORAGE_KEY) ?? null);
+  const [makeError, setMakeError] = useState<string | null>(null);
   const recent = useMemo<RecentEvent[]>(() => (rawRecent ? recentEvents() : []), [rawRecent]);
   const [upcoming, setUpcoming] = useState<EventListItem[] | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
@@ -59,7 +65,7 @@ export function AttendeeCodeCard() {
     }
     const fromIndex: Choice[] = (upcoming ?? [])
       .filter((e) => !seen.has(e.id))
-      .map((e) => ({ eventId: e.id, label: `${e.metadata.name}, ${formatShortDate(e.startsAt)}` }));
+      .map((e) => ({ eventId: e.id, label: e.metadata.name, date: formatShortDate(e.startsAt) }));
     return { fromPhone, fromIndex };
   }, [recent, upcoming, t]);
 
@@ -69,11 +75,11 @@ export function AttendeeCodeCard() {
   const selected = all.find((c) => c.eventId === selectedId) ?? null;
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || !passKey) return;
     let cancelled = false;
     (async () => {
       try {
-        const code = await attendeeCode(ensurePassKey(), BigInt(selectedId));
+        const code = await attendeeCode(passKey, BigInt(selectedId));
         const QRCode = await import("qrcode");
         const markup = await QRCode.toString(code, { type: "svg", margin: 0, errorCorrectionLevel: "M", color: { dark: "#141311", light: "#00000000" } });
         if (!cancelled) {
@@ -87,7 +93,7 @@ export function AttendeeCodeCard() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, t]);
+  }, [selectedId, passKey, t]);
 
   const loading = upcoming === null && recent.length === 0;
 
@@ -133,9 +139,30 @@ export function AttendeeCodeCard() {
           </div>
         )}
 
-        {failed ? <p className="text-base text-vermilion-ink">{failed}</p> : null}
+        {selected?.date ? <p className="-mt-2 text-sm text-ink-soft">{selected.date}</p> : null}
 
-        {selected && svg ? (
+        {failed || makeError ? <p className="text-base text-vermilion-ink">{failed ?? makeError}</p> : null}
+
+        {selected && !passKey ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-base text-ink-soft">{t.pass.codeNeedsPass}</p>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                try {
+                  ensurePassKey();
+                  setMakeError(null);
+                } catch (error) {
+                  setMakeError(error instanceof PassStorageError ? t.errors.storage.action : t.errors.unknown.action);
+                }
+              }}
+            >
+              {t.pass.codeMake}
+            </Button>
+          </div>
+        ) : null}
+
+        {selected && passKey && svg ? (
           <>
             <div className="mx-auto w-full max-w-[18rem]">
               <QrFrame label={t.pass.codeQrLabel(selected.label)} caption={t.pass.codeCaption} status={t.pass.codeStatus}>

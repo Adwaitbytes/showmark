@@ -11,8 +11,3 @@ export function ScanIntro() {
     </div>
   );
 }
-
-export function ScanTip() {
-  const { t } = useLocale();
-  return <p className="text-center text-sm text-ink-soft">{t.scan.tip}</p>;
-}
