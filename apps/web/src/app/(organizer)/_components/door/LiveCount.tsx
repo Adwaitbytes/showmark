@@ -20,24 +20,30 @@ export function LiveCount({ value, capacity, stale, className }: Props) {
   const reduce = useReducedMotion();
   const [shown, setShown] = useState(value);
   const [pressKey, setPressKey] = useState(0);
-  const previous = useRef(value);
+  const [previous, setPrevious] = useState(value);
+  const from = useRef(value);
+
+  // Adjusting state while rendering when a prop changes, as React recommends, instead of in an effect.
+  if (value !== previous) {
+    setPrevious(value);
+    if (value > previous) setPressKey((k) => k + 1);
+  }
 
   useEffect(() => {
-    const from = previous.current;
-    previous.current = value;
-    if (from === value) return;
-    if (value > from) setPressKey((k) => k + 1);
-    if (reduce) {
-      setShown(value);
-      return;
-    }
-    const controls = animate(from, value, {
-      duration: Math.min(0.9, 0.25 + Math.abs(value - from) * 0.04),
+    if (reduce) return;
+    const start = from.current;
+    const controls = animate(start, value, {
+      duration: Math.min(0.9, 0.25 + Math.abs(value - start) * 0.04),
       ease: [0.25, 1, 0.5, 1],
-      onUpdate: (v) => setShown(Math.round(v)),
+      onUpdate: (v) => {
+        from.current = v;
+        setShown(Math.round(v));
+      },
     });
     return () => controls.stop();
   }, [value, reduce]);
+
+  const display = reduce ? value : shown;
 
   const full = capacity > 0 && value >= capacity;
 
@@ -50,7 +56,7 @@ export function LiveCount({ value, capacity, stale, className }: Props) {
         style={{ fontSize: "clamp(6rem, 26vmin, 22rem)" }}
       >
         <span key={pressKey} className={cn("inline-block", pressKey > 0 && "animate-stamp-press")}>
-          {formatCount(shown)}
+          {formatCount(display)}
         </span>
       </p>
       <p className="mt-[1.2vmin] text-[clamp(1rem,2.4vmin,1.75rem)] text-ink-soft">

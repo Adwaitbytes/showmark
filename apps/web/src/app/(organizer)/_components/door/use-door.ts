@@ -142,9 +142,11 @@ export function useDoorSetup(rawEventId: string | string[] | undefined): DoorSet
   const [storageFailed, setStorageFailed] = useState(false);
   const [released, setReleased] = useState(false);
 
+  // The key lives in browser storage, which only exists after hydration, so it is read in an effect.
   useEffect(() => {
     if (!enabled || !scope || released) return;
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from localStorage, an external system
       setStored(ensureDoorKey(browserStorage(), scope));
       setStorageFailed(false);
     } catch {
@@ -240,6 +242,7 @@ export function useWakeLock(active: boolean): "on" | "unsupported" | "denied" | 
     if (!active) return;
     const wakeLock = (navigator as Navigator & { wakeLock?: WakeLockLike }).wakeLock;
     if (!wakeLock) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- feature detection that only runs in the browser
       setState("unsupported");
       return;
     }

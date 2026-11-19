@@ -18,10 +18,7 @@ const IDLE_HIDE_MS = 4_000;
 function useIdle(enabled: boolean): boolean {
   const [idle, setIdle] = useState(false);
   useEffect(() => {
-    if (!enabled) {
-      setIdle(false);
-      return;
-    }
+    if (!enabled) return;
     let timer = setTimeout(() => setIdle(true), IDLE_HIDE_MS);
     const wake = () => {
       setIdle(false);
@@ -36,9 +33,10 @@ function useIdle(enabled: boolean): boolean {
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("keydown", wake);
       window.removeEventListener("pointerdown", wake);
+      setIdle(false);
     };
   }, [enabled]);
-  return idle;
+  return enabled && idle;
 }
 
 export function DoorScreen() {

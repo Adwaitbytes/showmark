@@ -154,6 +154,9 @@ export const api = {
       throw error;
     }
   },
+  /** Just the token of a campaign, to label payouts read from the chain. */
+  campaignToken: (id: string) =>
+    requestJson(`/api/campaigns/${encodeURIComponent(id)}`, z.object({ tokenSymbol: z.enum(["QIE", "QUSDC"]), name: z.string() }).passthrough()),
   session: () => requestJson("/api/auth/session", sessionSchema),
   nonce: () => requestJson("/api/auth/nonce", z.object({ nonce: z.string().min(8) }), { method: "GET" }),
   verify: (message: string, signature: Hex) =>

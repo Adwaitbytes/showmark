@@ -90,8 +90,11 @@ export interface GasQuote {
   enough: boolean;
 }
 
+/** Error copy, plus the gas cost when the problem is an empty wallet. */
+export type TxErrorCopy = ErrorCopy & { needsGas?: boolean; gasCost?: string };
+
 export class TxError extends Error {
-  constructor(readonly copy: ErrorCopy & { needsGas?: boolean }) {
+  constructor(readonly copy: TxErrorCopy) {
     super(copy.message);
     this.name = "TxError";
   }
@@ -139,16 +142,22 @@ const REVERT_COPY: Record<string, ErrorCopy> = {
   },
 };
 
-export function needsGasCopy(account: Address, cost: bigint | null): ErrorCopy & { needsGas: true } {
+export function needsGasCopy(account: Address, cost: bigint | null): TxErrorCopy {
   const amount = cost === null ? "a small amount of QIE" : `about ${formatQie(cost)} QIE`;
   const where = activeChain.testnet
     ? "Get free test QIE from the faucet at qie.digital/faucet, then try again."
     : `Send a little QIE to ${account} from an exchange or another wallet, then try again.`;
-  return { code: "needs_gas", message: `You need a little QIE for gas. This step costs ${amount}.`, action: where, needsGas: true };
+  return {
+    code: "needs_gas",
+    message: `You need a little QIE for gas. This step costs ${amount}.`,
+    action: where,
+    needsGas: true,
+    ...(cost === null ? {} : { gasCost: formatQie(cost) }),
+  };
 }
 
 /** Turns a wallet, RPC or revert error into what happened and what to do next. */
-export function describeTxError(error: unknown, account: Address | null): ErrorCopy & { needsGas?: boolean } {
+export function describeTxError(error: unknown, account: Address | null): TxErrorCopy {
   if (error instanceof TxError) return error.copy;
   const code = typeof error === "object" && error !== null && "code" in error ? (error as { code: unknown }).code : undefined;
   if (error instanceof BaseError) {

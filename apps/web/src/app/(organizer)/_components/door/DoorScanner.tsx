@@ -127,10 +127,14 @@ export function DoorScanner() {
     }
   }, [queue, eventKey, refreshQueue]);
 
+  // Read the saved queue once the door is ready, and send it whenever the connection comes back.
   useEffect(() => {
     if (!ready) return;
-    void refreshQueue();
-    if (setup.online) void flush();
+    const id = setTimeout(() => {
+      if (setup.online) void flush();
+      else void refreshQueue();
+    }, 0);
+    return () => clearTimeout(id);
   }, [ready, setup.online, refreshQueue, flush]);
 
   useEffect(() => {
@@ -209,7 +213,7 @@ export function DoorScanner() {
     [setup.doorKey, setup.eventId, setup.clock.clock, queue, show, refreshQueue],
   );
 
-  const camera = useQrCamera((text) => void handleCode(text));
+  const { videoRef, state: cameraState, start: startCamera } = useQrCamera((text) => void handleCode(text));
 
   function submitManual(event: FormEvent) {
     event.preventDefault();
@@ -268,28 +272,28 @@ export function DoorScanner() {
           ) : null}
 
           <div className="relative overflow-hidden rounded-doc bg-night shadow-sheet">
-            <video ref={camera.videoRef} playsInline muted className={cn("aspect-[4/3] w-full object-cover", camera.state.kind !== "running" && "invisible")} />
-            {camera.state.kind === "running" ? (
+            <video ref={videoRef} playsInline muted className={cn("aspect-[4/3] w-full object-cover", cameraState.kind !== "running" && "invisible")} />
+            {cameraState.kind === "running" ? (
               <span aria-hidden="true" className="pointer-events-none absolute inset-[18%] rounded-doc shadow-[0_0_0_9999px_rgb(18_17_15/0.35)] ring-2 ring-[#faf7f0]/85" />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center text-[#ede7db]">
-                {camera.state.kind === "denied" ? (
+                {cameraState.kind === "denied" ? (
                   <>
                     <p className="font-display text-2xl">Camera access is blocked</p>
                     <p className="max-w-sm text-base text-[#a9a296]">Allow the camera for this site in the browser’s address bar settings, then try again. You can also type codes by hand below.</p>
-                    <Button variant="primary" onClick={() => void camera.start()}>
+                    <Button variant="primary" onClick={() => void startCamera()}>
                       Try the camera again
                     </Button>
                   </>
-                ) : camera.state.kind === "unavailable" ? (
+                ) : cameraState.kind === "unavailable" ? (
                   <>
                     <p className="font-display text-2xl">No camera</p>
-                    <p className="max-w-sm text-base text-[#a9a296]">{camera.state.reason}</p>
+                    <p className="max-w-sm text-base text-[#a9a296]">{cameraState.reason}</p>
                   </>
                 ) : (
                   <>
                     <p className="font-display text-2xl">Point the camera at the attendee’s code</p>
-                    <Button variant="primary" size="lg" onClick={() => void camera.start()} pending={camera.state.kind === "starting"} disabled={closed}>
+                    <Button variant="primary" size="lg" onClick={() => void startCamera()} pending={cameraState.kind === "starting"} disabled={closed}>
                       Start the camera
                     </Button>
                   </>
