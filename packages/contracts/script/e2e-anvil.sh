@@ -2,8 +2,8 @@
 # End-to-end proof on a throwaway local chain with QIE testnet's chain id (1983):
 #   1. deploy everything with script/Deploy.s.sol (testnet stand-ins included, ownership handed to a "Safe")
 #   2. organizer creates an event and authorizes a door key; sponsor funds and approves a campaign
-#   3. a relayer submits a real check-in signed with EIP-712 by the attendee pass and the door key (cast signs,
-#      so this also proves the domain and types match standard tooling)
+#   3. a relayer submits a real check-in signed with EIP-712 by the attendee pass, the door key and the rotation's
+#      throwaway ticket key (cast signs, so this also proves the domain and types match standard tooling)
 #   4. the relayer settles it; the organizer withdraws; the pass links a wallet; the relayer withdraws the
 #      attendee's reward to that wallet
 #   5. verify.sh prints the Blockscout verification commands for the deployment
@@ -78,19 +78,28 @@ send "$SPONSOR_KEY" "$VAULT" \
 CAMPAIGN_ID=$(call "$VAULT" 'campaignCount()(uint256)')
 send "$SPONSOR_KEY" "$VAULT" 'approveEvents(uint256,uint256[])' "$CAMPAIGN_ID" "[$EVENT_ID]"
 
-step "attendee pass $PASS signs CheckIn, door key signs a fresh DoorPass, relayer submits checkIn"
+step "door rotation: fresh ticket key, door signs DoorPass naming it; the QR holds the ticket key"
 ISSUED=$(cast block latest --field timestamp --rpc-url "$RPC")
+TICKET_KEY=$(cast wallet new --json | jq -r '(.data // .)[0].private_key')
+TICKET=$(addr "$TICKET_KEY")
 # messages are built with jq into variables: nested quoting inside "$(...)" breaks on macOS bash 3.2
-CHECKIN_TYPES='{"CheckIn":[{"name":"eventId","type":"uint256"},{"name":"attendee","type":"address"}]}'
-CHECKIN_MSG=$(jq -nc --argjson e "$EVENT_ID" --arg a "$PASS" '{eventId: $e, attendee: $a}')
-CHECKIN_FILE=$(typed CheckIn "$CHECKIN_TYPES" "$CHECKIN_MSG")
-ATT_SIG=$(sign "$PASS_KEY" "$CHECKIN_FILE")
-DOORPASS_TYPES='{"DoorPass":[{"name":"eventId","type":"uint256"},{"name":"issuedAt","type":"uint64"}]}'
-DOORPASS_MSG=$(jq -nc --argjson e "$EVENT_ID" --argjson t "$ISSUED" '{eventId: $e, issuedAt: $t}')
+DOORPASS_TYPES='{"DoorPass":[{"name":"eventId","type":"uint256"},{"name":"issuedAt","type":"uint64"},{"name":"ticket","type":"address"}]}'
+DOORPASS_MSG=$(jq -nc --argjson e "$EVENT_ID" --argjson t "$ISSUED" --arg k "$TICKET" '{eventId: $e, issuedAt: $t, ticket: $k}')
 DOORPASS_FILE=$(typed DoorPass "$DOORPASS_TYPES" "$DOORPASS_MSG")
 DOOR_SIG=$(sign "$DOOR_KEY" "$DOORPASS_FILE")
-send "$RELAYER_KEY" "$REGISTRY" 'checkIn((uint256,address,uint8,uint64,bytes,bytes))' \
-  "($EVENT_ID,$PASS,1,$ISSUED,$ATT_SIG,$DOOR_SIG)"
+echo "   ticket key address $TICKET (private key never leaves the QR)"
+
+step "attendee pass $PASS signs CheckIn(mode 1) and, with the scanned ticket key, Ticket; relayer submits checkIn"
+CHECKIN_TYPES='{"CheckIn":[{"name":"eventId","type":"uint256"},{"name":"attendee","type":"address"},{"name":"mode","type":"uint8"}]}'
+CHECKIN_MSG=$(jq -nc --argjson e "$EVENT_ID" --arg a "$PASS" '{eventId: $e, attendee: $a, mode: 1}')
+CHECKIN_FILE=$(typed CheckIn "$CHECKIN_TYPES" "$CHECKIN_MSG")
+ATT_SIG=$(sign "$PASS_KEY" "$CHECKIN_FILE")
+TICKET_TYPES='{"Ticket":[{"name":"eventId","type":"uint256"},{"name":"attendee","type":"address"}]}'
+TICKET_MSG=$(jq -nc --argjson e "$EVENT_ID" --arg a "$PASS" '{eventId: $e, attendee: $a}')
+TICKET_FILE=$(typed Ticket "$TICKET_TYPES" "$TICKET_MSG")
+TICKET_SIG=$(sign "$TICKET_KEY" "$TICKET_FILE")
+send "$RELAYER_KEY" "$REGISTRY" 'checkIn((uint256,address,uint8,uint64,address,bytes,bytes,bytes))' \
+  "($EVENT_ID,$PASS,1,$ISSUED,$TICKET,$ATT_SIG,$DOOR_SIG,$TICKET_SIG)"
 echo "   presenceOf(event, pass) = $(call "$REGISTRY" 'presenceOf(uint256,address)((uint8,uint64))' "$EVENT_ID" "$PASS")"
 echo "   stamp balance of pass = $(call "$STAMP" 'balanceOf(address,uint256)(uint256)' "$PASS" "$EVENT_ID"), uri = $(call "$STAMP" 'uri(uint256)(string)' "$EVENT_ID")"
 echo "   pass native balance = $(cast balance "$PASS" --rpc-url "$RPC" -e) QIE (the relayer paid the gas)"
