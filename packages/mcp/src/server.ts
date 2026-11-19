@@ -77,8 +77,8 @@ export function createShowmarkMcpServer(options: ShowmarkMcpOptions): McpServer 
     if (!options.client || !registry) {
       throw new ShowmarkDataError({
         code: "no_chain",
-        message: "This MCP server has no ShowmarkRegistry address configured, so it cannot read presence from the chain.",
-        action: "Set SHOWMARK_REGISTRY_ADDRESS, and SHOWMARK_CHAIN_ID if it is not mainnet.",
+        message: "This server has no ShowmarkRegistry address yet, so it cannot read presence from the chain.",
+        action: "Try again once the contracts are deployed. When you run showmark-mcp yourself, set SHOWMARK_REGISTRY_ADDRESS.",
       });
     }
     return { client: options.client, registry };

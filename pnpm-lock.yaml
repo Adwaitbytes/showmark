@@ -171,6 +171,12 @@ importers:
       '@neondatabase/serverless':
         specifier: 1.2.1
         version: 1.2.1
+      '@showmark/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@showmark/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@upstash/ratelimit':
         specifier: 2.2.1
         version: 2.2.1(@upstash/redis@1.41.0)
