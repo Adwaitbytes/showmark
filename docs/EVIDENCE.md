@@ -56,3 +56,10 @@ Independent security review: `packages/contracts/docs/AUDIT.md` (four rounds, fi
 - Measured in Chrome on https://showmark.vercel.app: 7.4 seconds from navigation start to "You are checked in" (presence confirmed on chain). Desktop on broadband; the mid-range Android measurement on mobile data is still to be done at a real event.
 - Presence: [CheckedIn 0x3c5e8c6b…9369](https://testnet.qie.digital/tx/0x3c5e8c6b3087eea69b124d86df676eb0bb35385527e7438f9821453c759a9369). Payout: [Settled 0xe061ed0d…7e48](https://testnet.qie.digital/tx/0xe061ed0d897d7f1b0da1f2833766c589545216f2955f648b7eb2686d2d787e48).
 - "Open my passport" showed the stamp and 0.006 QIE claimable immediately (the stuck-passport bug from journey 1 is fixed by commit b754c91).
+
+### 3. Judges' desk, testnet (19 Nov 2026, 16:59 IST)
+
+- Event 2 "Judges' desk" runs until 13 Dec 2026 with a team-funded pool (campaign 2, [0x2709956e…e611](https://testnet.qie.digital/tx/0x2709956ece3a24d265f5200d0be69be878e34ed988f61fa57353d37be594e611), approved [0xebf25708…d5e4](https://testnet.qie.digital/tx/0xebf25708e57db1d013c6820c7948a525a3a656e3184c0fb1b966183f5ba5d5e4)). Its door key lives only on the server.
+- https://showmark.vercel.app/judges showed a rotating code, the live count and the team-funded note. `/api/judges-desk/pass` returned a fresh pass with `Cache-Control: no-store` and the ticket key only in the URL fragment.
+- Opening the desk's code as a judge's phone would: 8.9 seconds from taking the code to "You are checked in", measured in Chrome.
+- Presence: [CheckedIn 0xbca9f4db…a11e](https://testnet.qie.digital/tx/0xbca9f4db83fad1706c5ddbf582cb31f6f8f65303b7a8a587bc0685f913bfa11e). Payout: [Settled 0x1190b66a…7ebb](https://testnet.qie.digital/tx/0x1190b66a7db4ca81b611a430608732624190affe4b52f98a428b92998d7c7ebb).
