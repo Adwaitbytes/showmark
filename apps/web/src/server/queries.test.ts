@@ -53,7 +53,7 @@ beforeAll(async () => {
       },
     },
   });
-  setChainContext({ chainId: FIXTURE_CHAIN_ID, client, registry, vault, qusdc, oracle: zeroAddress, nameRegistry: names, paidNameRegistry: zeroAddress, deployBlock: 0n });
+  setChainContext({ chainId: FIXTURE_CHAIN_ID, client, registry, vault, bond: zeroAddress, qusdc, oracle: zeroAddress, nameRegistry: names, paidNameRegistry: zeroAddress, deployBlock: 0n });
 });
 
 afterAll(async () => {
@@ -145,6 +145,7 @@ describe("campaigns", () => {
       maxTotal: 0,
       openToBonded: false,
       minBond: "0",
+      challengeDeadline: null,
     });
     expect(await listCampaigns({ sponsor: organizer })).toEqual([]);
   });

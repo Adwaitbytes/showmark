@@ -7,7 +7,8 @@ import { refreshProfiles } from "./indexer/profiles";
 import { syncForCron } from "./indexer/sync";
 import { log } from "./log";
 import { relayerDeps } from "./relayer";
-import { relaySettlements } from "./relayer/actions";
+import { relayClaimRefreshes, relaySettlements } from "./relayer/actions";
+import { staleChallenges } from "./relayer/claims";
 import { drainQueue } from "./relayer/queue";
 import { retryableSettlements } from "./relayer/retry";
 
@@ -52,5 +53,13 @@ export async function runCron() {
         return { items: items.length, txHash };
       })
     : null;
-  return { ok: sync.ok, sync, profiles, queue, settlements };
+  // Audit I4-01: after the retries above, raise any challenge claim that fell behind the bonded exposure.
+  const claims = relayerConfigured
+    ? await step("claims", async () => {
+        const deps = relayerDeps();
+        const ids = await staleChallenges(deps.chain, getDatabase().db);
+        return { refreshed: ids.map(String), txHash: await relayClaimRefreshes(deps, ids) };
+      })
+    : null;
+  return { ok: sync.ok, sync, profiles, queue, settlements, claims };
 }

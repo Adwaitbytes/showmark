@@ -19,7 +19,7 @@ import {
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { registryAbi, vaultAbi } from "@/lib/chain/abi";
+import { bondAbi, registryAbi, vaultAbi } from "@/lib/chain/abi";
 import { qieTestnet } from "@/lib/chain/chains";
 import { checkInTypes, doorPassTypes, linkWalletTypes, ticketTypes } from "@/lib/chain/eip712";
 import { NextRequest } from "next/server";
@@ -30,7 +30,8 @@ import { setDatabase } from "../db/client";
 import { checkInStatusCopy } from "../errors";
 import { syncOnce } from "../indexer/sync";
 import { MemoryStore, setStore } from "../kv";
-import { attendeeShare, payingCampaignIds, pendingFor } from "../payouts";
+import { attendeeShare, openCampaignIds, payingCampaignIds, pendingFor } from "../payouts";
+import { challengesAfterSettlement, liveOptedInCampaigns, staleChallenges } from "../relayer/claims";
 import { getCampaign, getEvent, getPassport, getTraction } from "../queries";
 import { relayLinkWallet, relayWithdraw } from "../relayer/actions";
 import { relayCheckIns, simulateCheckIns, DEFAULT_RELAY_OPTIONS, type RelayerDeps } from "../relayer/queue";
@@ -72,6 +73,7 @@ const testnetNamesAbi = parseAbi(["function claim(string label)"]);
 interface Deployment {
   registry: Address;
   vault: Address;
+  bond: Address;
   qusdc: Address;
   oracle: Address;
   nameRegistry: Address;
@@ -144,6 +146,7 @@ describe.skipIf(missing.length > 0)("relayer, indexer and queries against anvil 
       client,
       registry: d.registry,
       vault: d.vault,
+      bond: d.bond,
       qusdc: d.qusdc,
       oracle: d.oracle,
       nameRegistry: d.nameRegistry,
@@ -152,9 +155,14 @@ describe.skipIf(missing.length > 0)("relayer, indexer and queries against anvil 
     };
     database = await createTestDatabase();
     deps = {
-      chain: { chainId: 1983, client, account: relayer, registry: d.registry, vault: d.vault },
+      chain: { chainId: 1983, client, account: relayer, registry: d.registry, vault: d.vault, bond: d.bond },
       kv,
-      campaignsFor: (id) => payingCampaignIds(database.db, id),
+      // The same composition relayerDeps() uses in production.
+      async campaignsFor(id) {
+        const [indexed, open] = await Promise.all([payingCampaignIds(database.db, id), openCampaignIds(database.db)]);
+        return [...indexed, ...(await liveOptedInCampaigns(deps.chain, database.db, id, open.filter((c) => !indexed.includes(c))))];
+      },
+      challengesAfter: async (items) => challengesAfterSettlement(deps.chain, database.db, items, new Set(await openCampaignIds(database.db))),
       options: { ...DEFAULT_RELAY_OPTIONS, pollMs: 20 },
       now: Date.now,
     };
@@ -327,5 +335,56 @@ describe.skipIf(missing.length > 0)("relayer, indexer and queries against anvil 
     expect((await client.waitForTransactionReceipt({ hash: txHash })).status).toBe("success");
     expect(await client.getBalance({ address: wallet.address })).toBe(before + owed);
     await expect(relayWithdraw(deps, zeroAddress, firstPass.address)).rejects.toMatchObject({ status: 422, copy: { code: "nothing_to_withdraw" } });
+  });
+
+  it("pays an opted-in bonded organizer from an open campaign and keeps a challenge's claim current", async () => {
+    const { timestamp } = await client.getBlock();
+    const open = {
+      token: zeroAddress, pricing: 0, amountPerPresence: parseEther("1"), attendeeShareBps: 5_000, minProofMode: 1, requireQieId: false,
+      startsAt: timestamp - 120n, endsAt: timestamp + 7_200n, maxPerEvent: 0, maxTotal: 0, openToBonded: true, minBond: parseEther("1"),
+      metadata: JSON.stringify({ v: 1, name: "Open to bonded", sponsor: "Anvil sponsor", description: "Bonded pool" }),
+    };
+    await confirm(walletFor(sponsor).writeContract({ address: d.vault, abi: vaultAbi, functionName: "createCampaign", args: [open, parseEther("5")], value: parseEther("5") }));
+    const openId = 3n;
+    await confirm(walletFor(organizer).writeContract({ address: d.bond, abi: bondAbi, functionName: "bond", value: parseEther("5") }));
+    await confirm(walletFor(organizer).writeContract({ address: d.vault, abi: vaultAbi, functionName: "optInOpenCampaign", args: [openId] }));
+    await index();
+
+    const relay = async () => {
+      const pass = privateKeyToAccount(generatePrivateKey());
+      const [result] = await relayCheckIns(deps, [await signedCheckIn(pass)]);
+      if (!result.ok) throw new Error(`relay failed: ${JSON.stringify(result)}`);
+      for (let i = 0; i < 50 && !(await client.readContract({ address: d.vault, abi: vaultAbi, functionName: "isSettled", args: [openId, eventId, pass.address] })); i++) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return pass;
+    };
+    const exposure = () => client.readContract({ address: d.vault, abi: vaultAbi, functionName: "exposureOf", args: [openId, organizer.address] });
+
+    // Never approved for the event: it pays because the organizer opted in and is bonded.
+    await relay();
+    expect(await exposure()).toBe(parseEther("1"));
+
+    const deposit = await client.readContract({ address: d.bond, abi: bondAbi, functionName: "challengeDeposit" });
+    await confirm(walletFor(sponsor).writeContract({ address: d.bond, abi: bondAbi, functionName: "challenge", args: [organizer.address, openId, "Integration test"], value: deposit }));
+    await index();
+    const challengeId = (await client.readContract({ address: d.bond, abi: bondAbi, functionName: "nextChallengeId" })) - 1n;
+    expect((await client.readContract({ address: d.bond, abi: bondAbi, functionName: "challengeOf", args: [challengeId] })).claim).toBe(parseEther("1"));
+
+    // The next bonded payout raises the exposure; the relayer sends refreshClaim right behind it.
+    await relay();
+    expect(await exposure()).toBe(parseEther("2"));
+    let claim = 0n;
+    for (let i = 0; i < 50 && claim !== parseEther("2"); i++) {
+      claim = (await client.readContract({ address: d.bond, abi: bondAbi, functionName: "challengeOf", args: [challengeId] })).claim;
+      if (claim !== parseEther("2")) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(claim).toBe(parseEther("2"));
+
+    await index();
+    const campaign = await getCampaign(openId);
+    expect(campaign).toMatchObject({ openToBonded: true, minBond: parseEther("1").toString(), settledCount: 2 });
+    expect(campaign?.challengeDeadline).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(await staleChallenges(deps.chain, database.db)).toEqual([]);
   });
 });

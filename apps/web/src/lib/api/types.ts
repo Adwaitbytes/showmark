@@ -96,6 +96,7 @@ export interface CampaignSummary {
   maxTotal: number; // 0 = unlimited
   openToBonded: boolean;
   minBond: string; // native QIE base units
+  challengeDeadline: string | null; // open-to-bonded campaigns: last moment a sponsor can challenge (vault.challengeDeadline); null otherwise
 }
 
 export interface Settlement {

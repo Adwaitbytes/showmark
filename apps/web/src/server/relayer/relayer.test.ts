@@ -2,6 +2,7 @@ import {
   createPublicClient,
   custom,
   decodeFunctionData,
+  encodeFunctionData,
   encodeFunctionResult,
   parseTransaction,
   RpcRequestError,
@@ -10,7 +11,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { beforeEach, describe, expect, it } from "vitest";
-import { registryAbi, vaultAbi } from "@/lib/chain/abi";
+import { bondAbi, registryAbi, vaultAbi } from "@/lib/chain/abi";
 import { qieTestnet } from "@/lib/chain/chains";
 import { checkInStatusCopy, settleStatusCopy } from "../errors";
 import { MemoryStore } from "../kv";
@@ -24,6 +25,7 @@ import { settleGasLimit } from "./settle";
 const relayer = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
 const registry: Address = "0x1000000000000000000000000000000000000001";
 const vault: Address = "0x2000000000000000000000000000000000000002";
+const bond: Address = "0x4000000000000000000000000000000000000004";
 
 interface FakeState {
   chainNonce: number;
@@ -76,7 +78,7 @@ function fakeChain(state: FakeState): RelayerChain {
       },
     }),
   });
-  return { chainId: qieTestnet.id, client, account: relayer, registry, vault };
+  return { chainId: qieTestnet.id, client, account: relayer, registry, vault, bond };
 }
 
 function checkIn(attendee: Address, eventId = 1n): CheckInData {
@@ -104,6 +106,7 @@ function decodeSent(raw: Hex) {
   const tx = parseTransaction(raw as `0x${string}`);
   if (!tx.data || !tx.to) throw new Error("sent transaction without data");
   if (tx.to.toLowerCase() === registry.toLowerCase()) return { tx, call: decodeFunctionData({ abi: registryAbi, data: tx.data }) };
+  if (tx.to.toLowerCase() === bond.toLowerCase()) return { tx, call: decodeFunctionData({ abi: bondAbi, data: tx.data }) };
   return { tx, call: decodeFunctionData({ abi: vaultAbi, data: tx.data }) };
 }
 
@@ -236,6 +239,24 @@ describe("nonce management", () => {
     state.failNextSendWith = "already known";
     expect(await sendOne()).toBe(7);
     expect(await sendOne()).toBe(8);
+  });
+
+  it("lets the relayer call only refreshClaim on the bond", async () => {
+    const lock = await tryLock(kv, relayLockKey(deps.chain), 5_000);
+    if (!lock) throw new Error("lock");
+    const refresh = encodeFunctionData({ abi: bondAbi, functionName: "refreshClaim", args: [7n] });
+    const { sent } = await sendSequential(deps.chain, kv, lock, [{ to: bond, data: refresh, gas: 100_000n, label: "refresh" }]);
+    expect(sent).toHaveLength(1);
+    const other = encodeFunctionData({ abi: bondAbi, functionName: "claimDeposit" });
+    await expect(sendSequential(deps.chain, kv, lock, [{ to: bond, data: other, gas: 1n, label: "x" }])).rejects.toBeInstanceOf(RelayTargetError);
+  });
+
+  it("sends refreshClaim right behind a settlement that may have paid through a bond", async () => {
+    await relayCheckIns({ ...deps, challengesAfter: async (items) => (items.length > 0 ? [5n] : []) }, [checkIn(attendees[0])]);
+    expect(state.sent).toHaveLength(3);
+    const third = decodeSent(state.sent[2]);
+    expect(third.tx.to?.toLowerCase()).toBe(bond.toLowerCase());
+    expect(third.tx.nonce).toBe(9);
   });
 
   it("refuses to sign for any contract other than the registry and the vault", async () => {

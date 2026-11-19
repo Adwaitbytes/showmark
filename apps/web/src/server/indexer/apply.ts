@@ -242,9 +242,37 @@ export function buildStatements(db: Db, logs: ShowmarkLog[], blockTimes: Readonl
       case "OwnershipTransferred":
       case "Paused":
       case "Unpaused":
+        // Counted as Showmark transactions; nothing else is stored.
+        break;
       case "OpenCampaignJoined":
+        ordered.push(optInStatement(db, log.args.campaignId, log.args.organizer, true, block));
+        break;
       case "OpenCampaignLeft":
+        ordered.push(optInStatement(db, log.args.campaignId, log.args.organizer, false, block));
+        break;
+      case "Challenged":
+        ordered.push(
+          db
+            .insert(t.challenges)
+            .values({ id: log.args.challengeId, campaignId: log.args.campaignId, organizer: lower(log.args.organizer), sponsor: lower(log.args.sponsor), block, tx })
+            .onConflictDoNothing(),
+        );
+        break;
+      case "ClaimFiled":
+      case "ClaimRefreshed":
+        // Both carry the claim after the event; Challenged comes first in the same transaction.
+        ordered.push(db.update(t.challenges).set({ claim: log.args.claim }).where(eq(t.challenges.id, log.args.challengeId)));
+        break;
+      case "Resolved":
+        ordered.push(db.update(t.challenges).set({ resolved: true, slashed: log.args.slashed }).where(eq(t.challenges.id, log.args.challengeId)));
+        break;
       case "ExposureReleased":
+      case "Bonded":
+      case "UnbondRequested":
+      case "Unbonded":
+      case "DepositAwarded":
+      case "DepositClaimed":
+      case "VaultSet":
         // Counted as Showmark transactions; nothing else is stored.
         break;
       default: {
@@ -297,6 +325,13 @@ export function buildStatements(db: Db, logs: ShowmarkLog[], blockTimes: Readonl
     );
   }
   return statements;
+}
+
+function optInStatement(db: Db, campaignId: bigint, organizer: string, optedIn: boolean, block: bigint): Statement {
+  return db
+    .insert(t.campaignOptIns)
+    .values({ campaignId, organizer: lower(organizer), optedIn, block })
+    .onConflictDoUpdate({ target: [t.campaignOptIns.campaignId, t.campaignOptIns.organizer], set: { optedIn, block } });
 }
 
 export function syncStateStatement(db: Db, chainId: number, contracts: string[], lastBlock: bigint): Statement {

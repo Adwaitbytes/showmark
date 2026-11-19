@@ -227,3 +227,32 @@ export const doorQueue = pgTable(
   },
   (t) => [index("door_queue_event_idx").on(t.eventId)],
 );
+
+/** Not in the spec: organizers' opt-ins to open-to-bonded campaigns (OpenCampaignJoined / OpenCampaignLeft). */
+export const campaignOptIns = pgTable(
+  "campaign_optins",
+  {
+    campaignId: bigint("campaign_id", { mode: "bigint" }).notNull(),
+    organizer: text("organizer").notNull(),
+    optedIn: boolean("opted_in").notNull(),
+    block: blockNumber("block").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.organizer] })],
+);
+
+/** Not in the spec: bond challenges (Challenged, ClaimFiled, ClaimRefreshed, Resolved), for the claim refresh sweep. */
+export const challenges = pgTable(
+  "challenges",
+  {
+    id: bigint("id", { mode: "bigint" }).primaryKey(),
+    campaignId: bigint("campaign_id", { mode: "bigint" }).notNull(),
+    organizer: text("organizer").notNull(),
+    sponsor: text("sponsor").notNull(),
+    claim: amount("claim").notNull().default(sql`0`),
+    resolved: boolean("resolved").notNull().default(false),
+    slashed: amount("slashed"),
+    block: blockNumber("block").notNull(),
+    tx: text("tx").notNull(),
+  },
+  (t) => [index("challenges_open_idx").on(t.campaignId, t.organizer)],
+);

@@ -19,6 +19,7 @@ function mainnetContext(): ChainContext {
     client: createPublicClient({ chain: qieMainnet, transport: http("https://rpc1mainnet.qie.digital") }),
     registry: zeroAddress,
     vault: zeroAddress,
+    bond: zeroAddress,
     qusdc: "0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5",
     oracle: "0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17",
     nameRegistry: MAINNET_QIE_NAME_REGISTRY,

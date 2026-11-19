@@ -1,10 +1,11 @@
 import { BaseError, ContractFunctionRevertedError, encodeFunctionData, getAddress, type Hex } from "viem";
-import { registryAbi, vaultAbi } from "@/lib/chain/abi";
+import { bondAbi, registryAbi, vaultAbi } from "@/lib/chain/abi";
 import { AppError, COMMON_ERRORS, RELAY_ERRORS } from "../errors";
 import { waitForLock } from "../lock";
 import { log } from "../log";
 import type { LinkWalletRequest } from "../schemas";
-import { relayLockKey, type RelayerDeps } from "./queue";
+import { followUpRefreshes, relayLockKey, type RelayerDeps } from "./queue";
+import { refreshClaimRequest } from "./claims";
 import { sendSequential, type TxRequest } from "./sender";
 import { settleRequests, type SettleItem } from "./settle";
 
@@ -57,7 +58,7 @@ export async function relayLinkWallet(deps: RelayerDeps, req: LinkWalletRequest,
     gas: (gas * 125n) / 100n + 20_000n,
     label: "linkWallet",
   };
-  return sendUnderLock(deps, [link, ...settleRequests(chain, waitingForQieId)]);
+  return sendUnderLock(deps, [link, ...settleRequests(chain, waitingForQieId), ...(await followUpRefreshes(deps, waitingForQieId))]);
 }
 
 /** Pays out `claimable[token][account]` to the account's linked wallet (or the account). The relayer pays gas. */
@@ -89,5 +90,19 @@ export async function relaySettlements(deps: RelayerDeps, items: SettleItem[]): 
   } catch (error) {
     throw new AppError(503, COMMON_ERRORS.upstream, { cause: error });
   }
-  return sendUnderLock(deps, settleRequests(chain, items));
+  return sendUnderLock(deps, [...settleRequests(chain, items), ...(await followUpRefreshes(deps, items))]);
+}
+
+/** Cron sweep (audit I4-01): raises every open claim that sits below the live bonded exposure. */
+export async function relayClaimRefreshes(deps: RelayerDeps, challengeIds: bigint[]): Promise<Hex | null> {
+  if (challengeIds.length === 0) return null;
+  const { chain } = deps;
+  try {
+    for (const id of challengeIds) {
+      await chain.client.simulateContract({ address: chain.bond, abi: bondAbi, functionName: "refreshClaim", args: [id], account: chain.account.address });
+    }
+  } catch (error) {
+    throw new AppError(503, COMMON_ERRORS.upstream, { cause: error });
+  }
+  return sendUnderLock(deps, challengeIds.map((id) => refreshClaimRequest(chain, id)));
 }

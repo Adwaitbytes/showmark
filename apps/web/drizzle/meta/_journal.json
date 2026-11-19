@@ -15,6 +15,13 @@
       "when": 1795082114025,
       "tag": "0001_campaign_terms",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795087042681,
+      "tag": "0002_optins_challenges",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,8 @@ export interface ChainContext {
   client: PublicClient;
   registry: Address;
   vault: Address;
+  /** OrganizerBond, or zero when not configured. */
+  bond: Address;
   qusdc: Address;
   oracle: Address;
   /** QIE ID root registry (names and the QIE ID test), or zero when the network has none. */
@@ -36,6 +38,7 @@ export function chainContext(): ChainContext {
     client: publicClient,
     registry: addresses.registry,
     vault: addresses.vault,
+    bond: addresses.bond,
     qusdc: addresses.qusdc,
     oracle: addresses.qieUsdOracle,
     nameRegistry: qieNameRegistryAddress() ?? (activeChainId === 1990 ? MAINNET_QIE_NAME_REGISTRY : zeroAddress),
@@ -46,6 +49,11 @@ export function chainContext(): ChainContext {
 
 export function setChainContext(ctx: ChainContext | null): void {
   override = ctx;
+}
+
+/** The contracts whose logs the indexer reads: registry and vault, plus the bond when it is configured. */
+export function indexedContracts(ctx: ChainContext): Address[] {
+  return ctx.bond === zeroAddress ? [ctx.registry, ctx.vault] : [ctx.registry, ctx.vault, ctx.bond];
 }
 
 export function contractsDeployed(ctx: ChainContext): boolean {

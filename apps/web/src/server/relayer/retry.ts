@@ -2,7 +2,7 @@ import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import { getAddress } from "viem";
 import type { Db } from "../db/client";
 import * as t from "../db/schema";
-import { SETTLE_GRACE_MS } from "../payouts";
+import { campaignEligibleFor, SETTLE_GRACE_MS } from "../payouts";
 import type { SettleItem } from "./settle";
 
 /** Give the normal check-in path this long to settle before the cron treats an item as missed. */
@@ -17,8 +17,8 @@ export async function retryableSettlements(db: Db, limit: number, now = Date.now
   const rows = await db
     .select({ campaignId: t.campaigns.id, eventId: t.presences.eventId, attendee: t.presences.attendee })
     .from(t.presences)
-    .innerJoin(t.campaignEvents, and(eq(t.campaignEvents.eventId, t.presences.eventId), eq(t.campaignEvents.approved, true)))
-    .innerJoin(t.campaigns, eq(t.campaigns.id, t.campaignEvents.campaignId))
+    .innerJoin(t.events, eq(t.events.id, t.presences.eventId))
+    .innerJoin(t.campaigns, campaignEligibleFor(t.presences.eventId, t.events.organizer))
     .leftJoin(
       t.settlements,
       and(eq(t.settlements.campaignId, t.campaigns.id), eq(t.settlements.eventId, t.presences.eventId), eq(t.settlements.attendee, t.presences.attendee)),

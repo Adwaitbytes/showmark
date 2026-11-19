@@ -6,6 +6,7 @@ import { sleep, tryLock, type Lock } from "../lock";
 import { log } from "../log";
 import type { CheckInData } from "../schemas";
 import { LockLostError, sendSequential, type RelayerChain, type SentTx } from "./sender";
+import { refreshClaimRequest } from "./claims";
 import { settleItemsFor, settleRequests, type SettleItem } from "./settle";
 
 // Check-ins wait in a Redis list. Whoever holds the relayer lock drains up to 50 of them into one checkInBatch,
@@ -28,8 +29,10 @@ export const DEFAULT_RELAY_OPTIONS: RelayOptions = { batchMax: 50, waitMs: 20_00
 export interface RelayerDeps {
   chain: RelayerChain;
   kv: KeyValueStore;
-  /** Campaigns approved for an event that can still pay. */
+  /** Campaigns that can still pay for an event: approved, or open with the organizer opted in. */
   campaignsFor(eventId: bigint): Promise<bigint[]>;
+  /** Bond challenges to refresh right after these settlements (audit I4-01). Omitted when there is no bond. */
+  challengesAfter?(items: SettleItem[]): Promise<bigint[]>;
   /** Called after a batch with check-ins in it is sent. Used to stamp the door queue. */
   onSent?(items: CheckInData[], txHash: Hex): Promise<void>;
   options: RelayOptions;
@@ -165,7 +168,14 @@ export async function flushOnce(deps: RelayerDeps, lock: Lock): Promise<number> 
     }
   }
 
-  const { sent, error } = await sendSequential(chain, kv, lock, [{ to: chain.registry, data, gas, label: `checkInBatch(${items.length})` }, ...settleRequests(chain, settleItems)], deps.now);
+  const refreshes = await followUpRefreshes(deps, settleItems);
+  const { sent, error } = await sendSequential(
+    chain,
+    kv,
+    lock,
+    [{ to: chain.registry, data, gas, label: `checkInBatch(${items.length})` }, ...settleRequests(chain, settleItems), ...refreshes],
+    deps.now,
+  );
   const checkInTx: SentTx | undefined = sent[0];
   if (!checkInTx) {
     if (error instanceof LockLostError) {
@@ -202,6 +212,20 @@ export async function flushOnce(deps: RelayerDeps, lock: Lock): Promise<number> 
     log.warn("relayer.balance_check_failed", { error: balanceError });
   }
   return queued.length;
+}
+
+/**
+ * refreshClaim transactions to send right behind a settlement, so a challenged organizer's claim always covers
+ * what the campaign has paid through their bond. A lookup failure is logged; the cron sweep catches up.
+ */
+export async function followUpRefreshes(deps: RelayerDeps, settleItems: SettleItem[]) {
+  if (!deps.challengesAfter || settleItems.length === 0) return [];
+  try {
+    return (await deps.challengesAfter(settleItems)).map((id) => refreshClaimRequest(deps.chain, id));
+  } catch (error) {
+    log.warn("relayer.claim_refresh_lookup_failed", { items: settleItems.length, error });
+    return [];
+  }
 }
 
 /** Takes the lock if it is free and flushes one batch. Returns false when someone else holds the lock. */

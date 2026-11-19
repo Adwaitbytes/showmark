@@ -1,4 +1,4 @@
-import { BaseError, NonceTooLowError, isAddressEqual, keccak256, type Address, type Hex, type LocalAccount, type PublicClient } from "viem";
+import { BaseError, NonceTooLowError, isAddressEqual, keccak256, toFunctionSelector, zeroAddress, type Address, type Hex, type LocalAccount, type PublicClient } from "viem";
 import type { KeyValueStore } from "../kv";
 import type { Lock } from "../lock";
 import { log } from "../log";
@@ -13,6 +13,8 @@ export interface RelayerChain {
   account: LocalAccount;
   registry: Address;
   vault: Address;
+  /** OrganizerBond; the relayer may call only `refreshClaim` on it. Zero when not configured. */
+  bond: Address;
 }
 
 export interface TxRequest {
@@ -40,7 +42,7 @@ interface StoredNonce {
 
 export class RelayTargetError extends Error {
   constructor(to: Address) {
-    super(`Refusing to relay to ${to}: only the registry and the vault are allowed`);
+    super(`Refusing to relay to ${to}: only the registry, the vault and the bond's refreshClaim are allowed`);
     this.name = "RelayTargetError";
   }
 }
@@ -56,8 +58,13 @@ function nonceKey(chain: RelayerChain): string {
   return `relay:nonce:${chain.chainId}:${chain.account.address.toLowerCase()}`;
 }
 
-export function assertRelayTarget(chain: RelayerChain, to: Address): void {
-  if (!isAddressEqual(to, chain.registry) && !isAddressEqual(to, chain.vault)) throw new RelayTargetError(to);
+const REFRESH_CLAIM = toFunctionSelector("function refreshClaim(uint256 challengeId)");
+
+export function assertRelayTarget(chain: RelayerChain, to: Address, data: Hex): void {
+  if (isAddressEqual(to, chain.registry) || isAddressEqual(to, chain.vault)) return;
+  // Audit I4-01: the relayer keeps challenge claims current after bonded payouts, and may do nothing else there.
+  if (chain.bond !== zeroAddress && isAddressEqual(to, chain.bond) && data.slice(0, 10).toLowerCase() === REFRESH_CLAIM) return;
+  throw new RelayTargetError(to);
 }
 
 async function chainNonce(chain: RelayerChain): Promise<number> {
@@ -110,7 +117,7 @@ export async function sendSequential(
   requests: TxRequest[],
   now: () => number = Date.now,
 ): Promise<{ sent: SentTx[]; error: unknown }> {
-  for (const r of requests) assertRelayTarget(chain, r.to);
+  for (const r of requests) assertRelayTarget(chain, r.to, r.data);
   const sent: SentTx[] = [];
   if (requests.length === 0) return { sent, error: null };
 

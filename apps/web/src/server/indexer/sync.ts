@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { after } from "next/server";
 import type { Address } from "viem";
-import { chainContext, contractsDeployed, type ChainContext } from "../chain";
+import { chainContext, contractsDeployed, indexedContracts, type ChainContext } from "../chain";
 import { getDatabase, type Database } from "../db/client";
 import * as t from "../db/schema";
 import { teamAddresses } from "../env";
@@ -66,7 +66,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 async function nextBlock(deps: SyncDeps): Promise<bigint> {
   const { ctx, database } = deps;
   const rows = await database.db.select().from(t.syncState).where(eq(t.syncState.chainId, ctx.chainId));
-  const ours = new Set([ctx.registry.toLowerCase(), ctx.vault.toLowerCase()]);
+  const ours = new Set(indexedContracts(ctx).map((a) => a.toLowerCase()));
   const foreign = rows.filter((r) => !ours.has(r.contract));
   if (foreign.length > 0) {
     // Operators clear the old deployment's rows with resetIndex() below, then the indexer starts from deployBlock.
@@ -96,8 +96,8 @@ export async function syncOnce(options: SyncOptions, deps: SyncDeps = defaultDep
 
   while (from <= head && chunks < options.maxChunks && Date.now() - started < options.budgetMs) {
     const to = from + MAX_LOG_BLOCK_SPAN - 1n < head ? from + MAX_LOG_BLOCK_SPAN - 1n : head;
-    const raw = await ctx.client.getLogs({ address: [ctx.registry, ctx.vault], fromBlock: from, toBlock: to });
-    const logs = decodeShowmarkLogs(raw, { registry: ctx.registry, vault: ctx.vault });
+    const raw = await ctx.client.getLogs({ address: indexedContracts(ctx), fromBlock: from, toBlock: to });
+    const logs = decodeShowmarkLogs(raw, { registry: ctx.registry, vault: ctx.vault, bond: ctx.bond });
     const blocks = [...new Set(logs.map((l) => l.blockNumber))];
     const times = await mapLimit(blocks, BLOCK_FETCH_CONCURRENCY, async (blockNumber) => {
       const block = await ctx.client.getBlock({ blockNumber });
@@ -109,7 +109,7 @@ export async function syncOnce(options: SyncOptions, deps: SyncDeps = defaultDep
       return [id, { maxPerEvent: c.maxPerEvent, maxTotal: c.maxTotal, openToBonded: c.openToBonded, minBond: c.minBond } satisfies CampaignTerms] as const;
     });
     const statements = buildStatements(database.db, logs, new Map(times), { teamAddresses: team, campaignTerms: new Map(terms) });
-    statements.push(syncStateStatement(database.db, ctx.chainId, [ctx.registry, ctx.vault], to));
+    statements.push(syncStateStatement(database.db, ctx.chainId, indexedContracts(ctx), to));
     await database.batch(statements);
     if (logs.length > 0) log.info("indexer.range", { from, to, logs: logs.length, raw: raw.length });
     total += logs.length;

@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Passport } from "@/lib/api/types";
 import type { Db } from "./db/client";
 import * as t from "./db/schema";
@@ -12,16 +12,26 @@ export function attendeeShare(gross: bigint, feeBps: number, attendeeShareBps: n
   return ((gross - fee) * BigInt(attendeeShareBps)) / 10_000n;
 }
 
+
 /**
- * Payouts this pass is still owed: an approved campaign whose rules the presence meets, with no settlement yet.
+ * A campaign pays for an event when the sponsor approved the event, or when the campaign is open to bonded
+ * organizers and the event's organizer opted in (the vault then also checks the organizer's bond room).
+ */
+export function campaignEligibleFor(eventId: SQLWrapper | bigint, organizer: SQLWrapper | string): SQL {
+  return sql`(exists (select 1 from ${t.campaignEvents} where ${t.campaignEvents.campaignId} = ${t.campaigns.id} and ${t.campaignEvents.eventId} = ${eventId} and ${t.campaignEvents.approved})
+    or (${t.campaigns.openToBonded} and exists (select 1 from ${t.campaignOptIns} where ${t.campaignOptIns.campaignId} = ${t.campaigns.id} and ${t.campaignOptIns.organizer} = ${organizer} and ${t.campaignOptIns.optedIn})))`;
+}
+
+/**
+ * Payouts this pass is still owed: an eligible campaign whose rules the presence meets, with no settlement yet.
  * The latest skip status says why. Skips that can never succeed (caps reached, window passed) are not pending.
  */
 export async function pendingFor(db: Db, pass: string): Promise<Passport["pending"]> {
   const rows = await db
     .select({ campaignId: t.campaigns.id, eventId: t.presences.eventId, status: t.settlementSkips.status, endsAt: t.campaigns.endsAt })
     .from(t.presences)
-    .innerJoin(t.campaignEvents, and(eq(t.campaignEvents.eventId, t.presences.eventId), eq(t.campaignEvents.approved, true)))
-    .innerJoin(t.campaigns, eq(t.campaigns.id, t.campaignEvents.campaignId))
+    .innerJoin(t.events, eq(t.events.id, t.presences.eventId))
+    .innerJoin(t.campaigns, campaignEligibleFor(t.presences.eventId, t.events.organizer))
     .leftJoin(
       t.settlements,
       and(eq(t.settlements.campaignId, t.campaigns.id), eq(t.settlements.eventId, t.presences.eventId), eq(t.settlements.attendee, t.presences.attendee)),
@@ -51,12 +61,22 @@ export async function pendingFor(db: Db, pass: string): Promise<Passport["pendin
   return out;
 }
 
-/** Used by the cron route and the relayer: campaigns approved for an event that can still pay. */
+/** Campaigns that can still pay for an event: approved for it, or open with the organizer opted in (per the index). */
 export async function payingCampaignIds(db: Db, eventId: bigint): Promise<bigint[]> {
+  const [event] = await db.select({ organizer: t.events.organizer }).from(t.events).where(eq(t.events.id, eventId)).limit(1);
   const rows = await db
-    .select({ id: t.campaignEvents.campaignId })
-    .from(t.campaignEvents)
-    .innerJoin(t.campaigns, eq(t.campaigns.id, t.campaignEvents.campaignId))
-    .where(and(eq(t.campaignEvents.eventId, eventId), eq(t.campaignEvents.approved, true), gte(t.campaigns.endsAt, new Date(Date.now() - SETTLE_GRACE_MS))));
+    .select({ id: t.campaigns.id })
+    .from(t.campaigns)
+    .where(and(campaignEligibleFor(eventId, event?.organizer ?? ""), gte(t.campaigns.endsAt, new Date(Date.now() - SETTLE_GRACE_MS))))
+    .orderBy(asc(t.campaigns.id));
+  return rows.map((r) => r.id);
+}
+
+/** Open-to-bonded campaigns that can still pay, for the relayer's live opt-in check when the index lags. */
+export async function openCampaignIds(db: Db): Promise<bigint[]> {
+  const rows = await db
+    .select({ id: t.campaigns.id })
+    .from(t.campaigns)
+    .where(and(eq(t.campaigns.openToBonded, true), gte(t.campaigns.endsAt, new Date(Date.now() - SETTLE_GRACE_MS))));
   return rows.map((r) => r.id);
 }

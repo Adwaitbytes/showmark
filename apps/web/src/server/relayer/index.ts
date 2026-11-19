@@ -7,7 +7,8 @@ import * as t from "../db/schema";
 import { requireRelayerPrivateKey } from "../env";
 import { AppError, COMMON_ERRORS } from "../errors";
 import { getStore } from "../kv";
-import { payingCampaignIds } from "../payouts";
+import { openCampaignIds, payingCampaignIds } from "../payouts";
+import { challengesAfterSettlement, liveOptedInCampaigns } from "./claims";
 import { doorQueueId } from "./door-queue";
 import { DEFAULT_RELAY_OPTIONS, type RelayerDeps } from "./queue";
 import type { RelayerChain } from "./sender";
@@ -26,7 +27,7 @@ function account(): PrivateKeyAccount {
 export function relayerChain(): RelayerChain {
   const ctx = chainContext();
   if (!contractsDeployed(ctx)) throw new AppError(503, COMMON_ERRORS.notDeployed);
-  return { chainId: ctx.chainId, client: ctx.client, account: account(), registry: ctx.registry, vault: ctx.vault };
+  return { chainId: ctx.chainId, client: ctx.client, account: account(), registry: ctx.registry, vault: ctx.vault, bond: ctx.bond };
 }
 
 export function relayerDeps(): RelayerDeps {
@@ -35,7 +36,16 @@ export function relayerDeps(): RelayerDeps {
   return {
     chain,
     kv,
-    campaignsFor: (eventId) => payingCampaignIds(getDatabase().db, eventId),
+    async campaignsFor(eventId) {
+      const { db } = getDatabase();
+      const [indexed, open] = await Promise.all([payingCampaignIds(db, eventId), openCampaignIds(db)]);
+      const live = await liveOptedInCampaigns(chain, db, eventId, open.filter((id) => !indexed.includes(id)));
+      return [...indexed, ...live];
+    },
+    async challengesAfter(items) {
+      const { db } = getDatabase();
+      return challengesAfterSettlement(chain, db, items, new Set(await openCampaignIds(db)));
+    },
     async onSent(items, txHash) {
       // Only door-scans-you attestations pass through the door queue.
       const ids = items.filter((d) => d.mode === 2).map(doorQueueId);

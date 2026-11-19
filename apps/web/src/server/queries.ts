@@ -24,7 +24,7 @@ import { AppError, READ_ERRORS } from "./errors";
 import { ensureFresh } from "./indexer/sync";
 import { cacheStore } from "./kv";
 import { log } from "./log";
-import { attendeeShare, pendingFor, SETTLE_GRACE_MS } from "./payouts";
+import { attendeeShare, campaignEligibleFor, pendingFor, SETTLE_GRACE_MS } from "./payouts";
 import { chainTransactionsToday } from "./qie/blockscout";
 import { addressOf, holdsQieId, looksLikeName, nameOf } from "./qie/names";
 import { qieUsdPrice } from "./qie/price";
@@ -232,15 +232,13 @@ export async function getEvent(id: string | bigint): Promise<EventDetail | null>
       settled: settled.amount,
       refunded: refunded.amount,
     })
-    .from(t.campaignEvents)
-    .innerJoin(t.campaigns, eq(t.campaigns.id, t.campaignEvents.campaignId))
+    .from(t.campaigns)
     .leftJoin(funded, eq(funded.campaignId, t.campaigns.id))
     .leftJoin(settled, eq(settled.campaignId, t.campaigns.id))
     .leftJoin(refunded, eq(refunded.campaignId, t.campaigns.id))
     .where(
       and(
-        eq(t.campaignEvents.eventId, eventId),
-        eq(t.campaignEvents.approved, true),
+        campaignEligibleFor(eventId, row.organizer),
         gte(t.campaigns.endsAt, new Date(row.startsAt.getTime() - margin)),
         sql`${t.campaigns.startsAt} <= ${new Date(row.endsAt.getTime() + margin)}`,
       ),
@@ -469,9 +467,20 @@ async function selectCampaigns(r: Ready, where: SQL | undefined, limit: number, 
       maxTotal: c.maxTotal,
       openToBonded: c.openToBonded,
       minBond: c.minBond.toString(),
+      challengeDeadline: c.openToBonded ? await challengeDeadline(ctx, c.id) : null,
     });
   }
   return out;
+}
+
+/** Read live: closing a campaign early moves its challenge deadline. */
+async function challengeDeadline(ctx: ChainContext, campaignId: bigint): Promise<string> {
+  try {
+    const at = await ctx.client.readContract({ address: ctx.vault, abi: vaultAbi, functionName: "challengeDeadline", args: [campaignId] });
+    return new Date(Number(at) * 1000).toISOString();
+  } catch (error) {
+    throw new AppError(503, { code: "chain_read_failed", message: "Showmark could not read the campaign's challenge window.", action: "Try again in a few seconds." }, { cause: error });
+  }
 }
 
 export async function listCampaigns(filter: CampaignFilter = {}): Promise<CampaignSummary[]> {
