@@ -194,17 +194,17 @@ Showmark was built during QIE Hackathon 3.0 by [[FILL: team name]] with AI-assis
 
 | Requirement (source) | Where it is | Done |
 |---|---|---|
-| Mainnet deployment (FAQ) | Contract addresses above, verified on mainnet.qie.digital, recorded in `docs/EVIDENCE.md` | `[[FILL]]` |
-| Open-source smart contracts (FAQ) | `packages/contracts/` in the public repo, and verified source on the explorer | `[[FILL]]` |
-| Live public app (FAQ) | `[[FILL: production URL]]`, works on a mid-range Android phone and on desktop | `[[FILL]]` |
-| Public repository (FAQ, home page) | `[[FILL: repo URL]]` | `[[FILL]]` |
-| Demo video (FAQ) | `[[FILL: YouTube URL]]`, under three minutes | `[[FILL]]` |
-| Documentation (FAQ, Terms) | README, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/JUDGE_QA.md`, SDK docs, `docs/ORGANIZER_PLAYBOOK.md` and its Hindi version | `[[FILL]]` |
-| Team presentation (FAQ) | `[[FILL: deck URL]]`, built from `docs/DECK.md` | `[[FILL]]` |
-| Deployed contract address (home page) | In the description and the README | `[[FILL]]` |
-| Track (home page) | Consumer Apps & Social | `[[FILL]]` |
-| Valid QIE wallet address (Terms) | Step 4 of the form | `[[FILL]]` |
-| Everyone 18 or older, one project per team (Terms, brief) | Confirmed by Yathu | `[[FILL]]` |
+| Mainnet deployment (FAQ) | Contract addresses above, verified on mainnet.qie.digital, recorded in `docs/EVIDENCE.md` | `[[FILL: yes, with evidence link]]` |
+| Open-source smart contracts (FAQ) | `packages/contracts/` in the public repo, and verified source on the explorer | `[[FILL: yes, with evidence link]]` |
+| Live public app (FAQ) | `[[FILL: production URL]]`, works on a mid-range Android phone and on desktop | `[[FILL: yes, with evidence link]]` |
+| Public repository (FAQ, home page) | `[[FILL: repo URL]]` | `[[FILL: yes, with evidence link]]` |
+| Demo video (FAQ) | `[[FILL: YouTube URL]]`, under three minutes | `[[FILL: yes, with evidence link]]` |
+| Documentation (FAQ, Terms) | README, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/JUDGE_QA.md`, SDK docs, `docs/ORGANIZER_PLAYBOOK.md` and its Hindi version | `[[FILL: yes, with evidence link]]` |
+| Team presentation (FAQ) | `[[FILL: deck URL]]`, built from `docs/DECK.md` | `[[FILL: yes, with evidence link]]` |
+| Deployed contract address (home page) | In the description and the README | `[[FILL: yes, with evidence link]]` |
+| Track (home page) | Consumer Apps & Social | `[[FILL: yes, with evidence link]]` |
+| Valid QIE wallet address (Terms) | Step 4 of the form | `[[FILL: yes, with evidence link]]` |
+| Everyone 18 or older, one project per team (Terms, brief) | Confirmed by Yathu | `[[FILL: yes, with evidence link]]` |
 
 ## Final refresh on Mon 30 Nov (before 20:00 IST)
 
