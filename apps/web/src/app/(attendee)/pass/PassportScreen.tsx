@@ -5,6 +5,7 @@ import type { Address } from "viem";
 import { getCampaignBrief, getPassport, linkedWalletOf, type PassportData } from "@/lib/checkin/api-passport";
 import { localizedError } from "@/lib/checkin/i18n";
 import { localStamps, mergeStamps, OUTBOX_KEY, outboxEntries, STAMPS_KEY, type OutboxEntry } from "@/lib/checkin/local-records";
+import { useLinkedWallet } from "@/lib/checkin/link-state";
 import { usePassAddress, useStoredItem } from "@/lib/checkin/use-stored";
 import { useLocale } from "@/lib/checkin/locale";
 import { AddressChip } from "@/ui/AddressChip";
@@ -107,7 +108,7 @@ export function PassportScreen() {
 
   const pass = load.status === "ready" || load.status === "failed" ? load.pass : null;
   const passport = load.status === "ready" ? load.passport : null;
-  const wallet = passport && pass ? linkedWalletOf(passport, pass) : null;
+  const { wallet } = useLinkedWallet(pass, passport && pass ? linkedWalletOf(passport, pass) : null, reloadKey);
   const entries = useMemo(
     () => (load.status === "ready" ? load.entries : pass && rawStamps ? mergeStamps([], localStamps(pass)) : []),
     [load, pass, rawStamps],

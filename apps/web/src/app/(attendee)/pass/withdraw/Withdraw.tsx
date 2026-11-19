@@ -5,6 +5,7 @@ import type { Address, Hex } from "viem";
 import { getPassport, linkedWalletOf, postWithdraw, waitForTx, type PassportData } from "@/lib/checkin/api-passport";
 import { localizedError, type Copy } from "@/lib/checkin/i18n";
 import { useLocale } from "@/lib/checkin/locale";
+import { useLinkedWallet } from "@/lib/checkin/link-state";
 import { usePassAddress } from "@/lib/checkin/use-stored";
 import { AddressChip } from "@/ui/AddressChip";
 import { Amount } from "@/ui/Amount";
@@ -50,6 +51,9 @@ export function Withdraw() {
     return () => controller.abort();
   }, [pass, reloadKey, errors, t]);
 
+  // Live from the registry, so a link made a moment ago counts before the index catches up.
+  const linked = useLinkedWallet(pass, load.status === "ready" && pass ? linkedWalletOf(load.passport, pass) : null, reloadKey);
+
   if (hydrated && !pass) {
     return (
       <ErrorState as="h2" title={t.link.noPass.message} action={<Button href="/scan" variant="primary">{t.pass.scanCta}</Button>}>
@@ -89,7 +93,14 @@ export function Withdraw() {
     );
   }
 
-  const wallet = linkedWalletOf(load.passport, pass);
+  const wallet = linked.wallet;
+  if (!wallet && linked.checking) {
+    return (
+      <LoadingRegion label={t.common.loading}>
+        <SkeletonText lines={4} />
+      </LoadingRegion>
+    );
+  }
   if (!wallet) {
     return (
       <ErrorState

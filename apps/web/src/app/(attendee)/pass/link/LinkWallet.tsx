@@ -8,6 +8,7 @@ import { useLocale } from "@/lib/checkin/locale";
 import { linkDeadlineFromNow, linkWalletTypedData } from "@/lib/checkin/sign";
 import { connect, useWallet, walletClient } from "@/lib/wallet/use-wallet";
 import { parsePassKey, PASS_STORAGE_KEY } from "@/lib/checkin/pass-key";
+import { rememberLinkedWallet, useLinkedWallet } from "@/lib/checkin/link-state";
 import { usePassAddress, useStoredItem } from "@/lib/checkin/use-stored";
 import { privateKeyToAccount } from "viem/accounts";
 import { toWalletError } from "@/lib/wallet/wallet-store";
@@ -80,6 +81,8 @@ export function LinkWallet() {
     return () => controller.abort();
   }, [connected, pass]);
 
+  const linked = useLinkedWallet(pass?.address ?? null, passport.status === "ready" && pass ? linkedWalletOf(passport.passport, pass.address) : null);
+
   if (!hydrated || (pass && passport.status === "loading")) {
     return (
       <LoadingRegion label={t.common.loading}>
@@ -104,7 +107,7 @@ export function LinkWallet() {
     );
   }
 
-  const existing = passport.status === "ready" ? linkedWalletOf(passport.passport, pass.address) : null;
+  const existing = linked.wallet;
   if (existing && step.kind !== "linked") {
     return (
       <Notice tone="success" title={t.link.alreadyLinked} action={<Button href="/pass">{t.common.backToPassport}</Button>}>
@@ -168,7 +171,11 @@ export function LinkWallet() {
     const { txHash } = result.data;
     setStep({ kind: "confirming", txHash });
     const outcome = await waitForTx(txHash, new AbortController().signal);
-    if (outcome === "success") setStep({ kind: "linked", txHash, wallet: connected });
+    if (outcome === "success") {
+      // The index lags the chain; the next screens read this until it catches up.
+      rememberLinkedWallet(pass.address, connected);
+      setStep({ kind: "linked", txHash, wallet: connected });
+    }
     else setStep({ kind: "error", copy: outcome === "reverted" ? t.link.reverted : t.link.slow, txHash });
   }
 

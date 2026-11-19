@@ -1,6 +1,5 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
 import { getEvent, getTxStatus, postCheckIn, type CheckInEvent } from "@/lib/checkin/api";
@@ -17,9 +16,10 @@ import {
 } from "@/lib/checkin/local-records";
 import { useLocale } from "@/lib/checkin/locale";
 import { createWaiter, runCheckIn, type CheckInDeps, type CheckInPhase } from "@/lib/checkin/machine";
-import type { SignResult } from "@/lib/checkin/pass-signer";
+import { passAndSign, type SignResult } from "@/lib/checkin/pass-signer";
 import type { CheckInRequest } from "@/lib/checkin/sign";
-import { useDoorCode } from "@/lib/checkin/door-fragment";
+import { useDoorLocation, type DoorCode } from "@/lib/checkin/door-fragment";
+import { earlyCheckInFor, startEarlyCheckIn } from "@/lib/checkin/early";
 import { Amount } from "@/ui/Amount";
 import { Button } from "@/ui/Button";
 import { ErrorState } from "@/ui/ErrorState";
@@ -47,13 +47,8 @@ interface PriorStamp {
 
 const CHECK_IN_MARGIN_MS = 60 * 60_000;
 
-// The signing code (secp256k1 and EIP-712) is fetched only once a valid door code is in hand, and
-// then in parallel with the event lookup, so a broken link never downloads it.
-let signer: Promise<typeof import("@/lib/checkin/pass-signer")> | null = null;
-function loadSigner() {
-  signer ??= import("@/lib/checkin/pass-signer");
-  return signer;
-}
+// Start the check-in as soon as this code runs in the browser, before hydration (see early.ts).
+startEarlyCheckIn();
 
 /**
  * The door QR opens here. The check-in starts on load: scanning the code is the intent, a tap
@@ -61,8 +56,12 @@ function loadSigner() {
  * because the registry records one presence per event and person.
  */
 export function CheckInScreen() {
-  const params = useParams<{ token: string }>();
-  const code = useDoorCode(typeof params.token === "string" ? params.token : "");
+  const { token, fragment, code } = useDoorLocation();
+  // A new door code (a second scan in the same tab) gets a fresh screen, not the last one's state.
+  return <CheckInFlow key={`${token ?? ""}#${fragment ?? ""}`} code={code} token={token} fragment={fragment} />;
+}
+
+function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string | null; fragment: string | null }) {
   const door = code.status === "ok" ? code.door : null;
   const eventId = door ? door.eventId.toString() : null;
   const { t, errors } = useLocale();
@@ -86,10 +85,6 @@ export function CheckInScreen() {
   // Event details load next to the check-in, never in front of it.
   useEffect(() => {
     if (!eventId) return;
-    void loadSigner().catch(() => {
-      // Retried when the check-in actually needs it.
-      signer = null;
-    });
     const controller = new AbortController();
     rememberEvent({ eventId, name: null, openedAt: Date.now() });
     getEvent(eventId, { signal: controller.signal }).then((result) => {
@@ -112,8 +107,20 @@ export function CheckInScreen() {
     const controller = new AbortController();
     const { signal } = controller;
 
+    const early = token !== null && fragment !== null ? earlyCheckInFor(token, fragment) : null;
     const deps: CheckInDeps = {
-      postCheckIn: (request, s) => postCheckIn(request, { signal: s }),
+      async postCheckIn(request, s) {
+        // The first send already left before hydration; take its answer instead of sending again.
+        if (early && !early.adopted) {
+          const result = await early.post;
+          if (result && !s.aborted) {
+            early.adopted = true;
+            return result;
+          }
+          if (result) return result;
+        }
+        return postCheckIn(request, { signal: s });
+      },
       txStatus: (hash, s) => getTxStatus(hash, { signal: s }),
       now: Date.now,
       isOnline: () => navigator.onLine,
@@ -130,10 +137,9 @@ export function CheckInScreen() {
       if (!request) {
         let signed: SignResult;
         try {
-          const { passAndSign } = await loadSigner();
-          signed = await passAndSign(door);
+          signed = early ? await early.signed : await passAndSign(door);
         } catch {
-          // The signing code did not download: same as the relay being out of reach.
+          // Signing failed unexpectedly: offer a retry, as when the relay is out of reach.
           signed = { ok: false, reason: "sign" };
         }
         if (signal.aborted) return;
@@ -161,7 +167,7 @@ export function CheckInScreen() {
       controller.abort();
       window.removeEventListener("online", wake);
     };
-  }, [door, runKey, waiter]);
+  }, [door, runKey, waiter, token, fragment]);
 
   // Once the stamp is in: keep it on this phone for the passport, look up an earlier stamp, and
   // decide whether to suggest linking a wallet.
@@ -231,7 +237,7 @@ export function CheckInScreen() {
         ) : (
           <>
             <SheetSection className="flex flex-col items-center gap-5 pt-8 text-center sm:pt-10">
-              <StampStage phase={phase} pass={pass} eventId={eventId ?? "0"} eventName={eventName} city={loadedEvent?.metadata.city ?? ""} prior={priorStamp} startsAt={loadedEvent?.startsAt ?? null} />
+              <StampStage phase={phase} pass={pass} eventId={eventId ?? "0"} eventName={eventName} city={loadedEvent?.metadata.city ?? ""} prior={priorStamp} startsAt={loadedEvent?.startsAt ?? null} issuedAt={door ? new Date(Number(door.issuedAt) * 1000).toISOString() : null} />
               <div role="status" aria-live="polite" className="flex max-w-[24rem] flex-col items-center gap-2">
                 <h1 id="check-in-status" className="font-display text-3xl text-ink sm:text-4xl">
                   {headline(phase, t)}
@@ -372,7 +378,7 @@ function hint(phase: ScreenPhase, t: Dictionary, errors: ErrorTables | null, now
       return t.checkIn.sendingHint;
     case "waiting": {
       const copy = problemCopy(phase.problem, t, errors);
-      const countdown = phase.retryAt === null ? "" : ` ${t.errors.retryIn(Math.max(1, Math.ceil((phase.retryAt - now) / 1000)))}`;
+      const countdown = phase.retryAt === null || now === 0 ? "" : ` ${t.errors.retryIn(Math.max(1, Math.ceil((phase.retryAt - now) / 1000)))}`;
       return `${copy.message} ${copy.action}${countdown}`.trim();
     }
     case "confirming":
@@ -423,12 +429,14 @@ interface StampStageProps {
   city: string;
   prior: PriorStamp | null;
   startsAt: string | null;
+  /** When the door showed this code; dates the faint stamp without reading the clock during render. */
+  issuedAt: string | null;
 }
 
 /** Where the stamp lands: a faint impression while the network works, then the press. */
-function StampStage({ phase, pass, eventId, eventName, city, prior, startsAt }: StampStageProps) {
+function StampStage({ phase, pass, eventId, eventName, city, prior, startsAt, issuedAt }: StampStageProps) {
   const { t } = useLocale();
-  const [openedAt] = useState(() => new Date().toISOString());
+  const openedAt = issuedAt ?? startsAt;
   const base = { eventId, eventName, city, mode: 1 as const, holder: pass ?? undefined, className: "w-60 sm:w-64" };
 
   let content: React.ReactNode;
@@ -439,8 +447,9 @@ function StampStage({ phase, pass, eventId, eventName, city, prior, startsAt }: 
       </StampPress>
     );
   } else if (phase.kind === "already") {
-    content = <Stamp {...base} at={prior?.at ?? startsAt ?? openedAt} />;
-  } else if (pass) {
+    const at = prior?.at ?? openedAt;
+    content = at ? <Stamp {...base} at={at} /> : <SkeletonStamp className="w-60 sm:w-64" />;
+  } else if (pass && openedAt) {
     content = (
       <>
         <span className="block animate-ink-wait opacity-30 grayscale" aria-hidden="true">

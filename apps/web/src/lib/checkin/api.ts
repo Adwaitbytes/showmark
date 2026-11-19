@@ -44,6 +44,8 @@ export interface RequestOptions {
   fetch?: Fetcher;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Let the request finish even if the page is closed or navigates away (the check-in POST). */
+  keepalive?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -68,7 +70,7 @@ export async function apiRequest<T>(
   try {
     let response: Response;
     try {
-      response = await fetcher(path, { ...init, signal: controller.signal, headers: { accept: "application/json", ...init.headers } });
+      response = await fetcher(path, { ...init, keepalive: options.keepalive, signal: controller.signal, headers: { accept: "application/json", ...init.headers } });
     } catch {
       return { ok: false, failure: timedOut ? { kind: "timeout", code: "timeout" } : { kind: "network", code: "network" } };
     }
@@ -109,7 +111,8 @@ export const parseSubmitted: Parser<Submitted> = (body) =>
   isRecord(body) && isHex(body.txHash) && body.txHash.length === 66 && body.status === "submitted" ? { txHash: body.txHash, status: "submitted" } : null;
 
 export function postCheckIn(request: CheckInRequest, options?: RequestOptions): Promise<ApiResult<Submitted>> {
-  return apiRequest("/api/relay/check-in", postJson(request), parseSubmitted, options);
+  // keepalive: a check-in already signed should still reach the relay if the person locks the phone.
+  return apiRequest("/api/relay/check-in", postJson(request), parseSubmitted, { keepalive: true, ...options });
 }
 
 export interface TxState {

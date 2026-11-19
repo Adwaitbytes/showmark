@@ -22,7 +22,21 @@ function readFragment(): string {
 
 function subscribe(listener: () => void): () => void {
   window.addEventListener("hashchange", listener);
-  return () => window.removeEventListener("hashchange", listener);
+  window.addEventListener("popstate", listener);
+  return () => {
+    window.removeEventListener("hashchange", listener);
+    window.removeEventListener("popstate", listener);
+  };
+}
+
+/** The `{token}` in `/c/{token}`, or null for any other path. */
+export function doorTokenFromPath(pathname: string): string | null {
+  const match = /^\/c\/([^/]+)\/?$/.exec(pathname);
+  return match ? decodeSegment(match[1]) : null;
+}
+
+function readToken(): string {
+  return doorTokenFromPath(window.location.pathname) ?? "";
 }
 
 export type DoorCode =
@@ -51,10 +65,22 @@ function decodeSegment(raw: string): string {
   }
 }
 
-/** The door code for `/c/[token]`, combining the path token with the fragment read on the phone. */
-export function useDoorCode(rawToken: string): DoorCode {
+export interface DoorLocation {
+  /** The path token and fragment as read on the phone, or null during the server render and hydration. */
+  token: string | null;
+  fragment: string | null;
+  code: DoorCode;
+}
+
+/**
+ * The door code for `/c/[token]`, read from the address bar on the phone. Reading the path here
+ * instead of through route params keeps the page a static shell: no server render sits between
+ * the scan and the check-in.
+ */
+export function useDoorLocation(): DoorLocation {
+  const token = useSyncExternalStore(subscribe, readToken, () => null);
   const fragment = useSyncExternalStore(subscribe, readFragment, () => null);
-  const code = useMemo(() => classifyDoorCode(decodeSegment(rawToken), fragment), [rawToken, fragment]);
+  const code = useMemo(() => (token === null ? ({ status: "reading" } as const) : classifyDoorCode(token, fragment)), [token, fragment]);
 
   useEffect(() => {
     if (fragment === null || window.location.hash.length <= 1) return;
@@ -62,5 +88,5 @@ export function useDoorCode(rawToken: string): DoorCode {
     window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
   }, [fragment]);
 
-  return code;
+  return { token, fragment, code };
 }

@@ -7,7 +7,8 @@ import { useEffect, useState } from "react";
  * Pass a `key` (the retry deadline) to read the clock again as soon as it changes.
  */
 export function useNow(active: boolean, key: unknown = null, intervalMs = 1000): number {
-  const [now, setNow] = useState(() => Date.now());
+  // 0 until the first tick: the clock is never read during render, so a prerender stays deterministic.
+  const [now, setNow] = useState(0);
   useEffect(() => {
     if (!active) return;
     const tick = () => setNow(Date.now());

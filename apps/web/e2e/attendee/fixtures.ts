@@ -127,6 +127,8 @@ export interface MockOptions {
   /** Responses for GET /api/tx/{hash}, used in order; the last one repeats. */
   tx?: ("pending" | "success" | "reverted")[];
   passport?: "empty" | "full" | "linked" | "fail";
+  /** What registry.walletOf(pass) returns over the QIE RPC. Defaults to matching the passport mock. */
+  chainWallet?: "linked" | "unlinked" | "down";
 }
 
 export interface MockResponse {
@@ -182,6 +184,26 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
   await page.route(/\/api\/campaigns\/\d+$/, (route) => {
     const id = new URL(route.request().url()).pathname.split("/").pop();
     return json(route, { status: 200, body: { id, name: "Campus reach", sponsorName: "Lattice Labs", endsAt: "2026-11-30T18:30:00.000Z" } });
+  });
+  // The QIE RPC, for the live walletOf read. viem batches JSON-RPC calls, so answer arrays too.
+  const chainWallet = options.chainWallet ?? (options.passport === "linked" ? "linked" : "unlinked");
+  await page.route(/https:\/\/rpc\d(main|test)net\.qie\.digital/, async (route) => {
+    if (chainWallet === "down") return route.abort("connectionrefused");
+    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-allow-methods": "POST" };
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    const body: unknown = route.request().postDataJSON();
+    const answer = (call: { id: number; method: string }) => ({
+      jsonrpc: "2.0",
+      id: call.id,
+      result:
+        call.method === "eth_chainId"
+          ? `0x${CHAIN_ID.toString(16)}`
+          : call.method === "eth_call"
+            ? `0x${"0".repeat(24)}${(chainWallet === "linked" ? TEST_WALLET : zeroAddress).slice(2).toLowerCase()}`
+            : "0x0",
+    });
+    const reply = Array.isArray(body) ? body.map(answer) : answer(body as { id: number; method: string });
+    return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(reply) });
   });
   await page.route("**/api/relay/link-wallet", (route) => json(route, { status: 200, body: { txHash: TX_LINK } }));
   await page.route("**/api/relay/withdraw", (route) => json(route, { status: 200, body: { txHash: TX_WITHDRAW } }));
