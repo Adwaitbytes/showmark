@@ -357,7 +357,7 @@ export default function Home() {
             <h2 id="live-numbers" className="text-base font-medium text-ink">
               Read from the chain, not from us
             </h2>
-            <Link href="/traction" className="text-sm text-ink-soft underline underline-offset-4 hover:text-ink">
+            <Link href="/traction" className="inline-flex min-h-11 items-center text-sm text-ink-soft underline underline-offset-4 hover:text-ink">
               Full traction ledger
             </Link>
           </div>

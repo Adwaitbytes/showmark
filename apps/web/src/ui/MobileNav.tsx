@@ -41,7 +41,7 @@ export function MobileNav({ items, current }: MobileNavProps) {
         className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-doc px-2 text-ink transition-colors hover:bg-paper-deep"
       >
         {open ? <CloseIcon className="size-5" /> : <MenuIcon className="size-5" />}
-        <span className="text-base">{open ? "Close" : "Menu"}</span>
+        <span className="text-base">Menu</span>
       </button>
       <div
         id={panelId}

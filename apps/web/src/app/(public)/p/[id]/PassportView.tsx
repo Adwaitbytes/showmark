@@ -274,7 +274,10 @@ function Register({ stamps }: { stamps: StampRecord[] }) {
             key={`${stamp.eventId}-${stamp.tx}`}
             className="grid grid-cols-1 gap-1 border-b border-rule-soft py-3.5 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-6"
           >
-            <Link href={`/e/${stamp.eventId}`} className="font-medium text-ink underline decoration-transparent underline-offset-4 hover:decoration-current">
+            <Link
+              href={`/e/${stamp.eventId}`}
+              className="inline-flex min-h-11 items-center font-medium text-ink underline decoration-transparent underline-offset-4 hover:decoration-current sm:min-h-0"
+            >
               {stamp.eventName}
             </Link>
             <span className="text-sm text-ink-soft">
