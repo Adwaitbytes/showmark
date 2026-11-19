@@ -44,7 +44,14 @@ contract InvariantsTest is Test {
         oracle.setPrice(16_500_000, block.timestamp);
         bond = new OrganizerBond(owner);
         vault = new CampaignVault(
-            address(registry), address(new QieIdCheck(address(names))), address(oracle), address(bond), 36 hours, owner, makeAddr("fees"), 100
+            address(registry),
+            address(new QieIdCheck(address(names))),
+            address(oracle),
+            address(bond),
+            36 hours,
+            owner,
+            makeAddr("fees"),
+            100
         );
         vm.prank(owner);
         bond.setVault(address(vault));

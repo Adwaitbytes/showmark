@@ -58,16 +58,10 @@ contract CampaignVaultTest is ProtocolFixture {
         assertEq(ok.feeBps(), 500);
     }
 
-    function deployVault(
-        address r,
-        address z,
-        address o,
-        address b,
-        uint256 age,
-        address own,
-        address fees,
-        uint16 bps
-    ) external returns (address) {
+    function deployVault(address r, address z, address o, address b, uint256 age, address own, address fees, uint16 bps)
+        external
+        returns (address)
+    {
         return address(new CampaignVault(r, z, o, b, age, own, fees, bps));
     }
 
@@ -395,9 +389,7 @@ contract CampaignVaultTest is ProtocolFixture {
         assertEq(q, 6_060_606_060_606_060_606, "$1 at $0.165 is 6.0606e18 wei");
 
         vm.expectEmit(address(vault));
-        emit ICampaignVault.Settled(
-            id, eventId, attendee, organizer, q, q / 2, q - q / 2, 0, uint256(PRICE)
-        );
+        emit ICampaignVault.Settled(id, eventId, attendee, organizer, q, q / 2, q - q / 2, 0, uint256(PRICE));
         assertEq(vault.settle(id, eventId, attendee), q);
     }
 

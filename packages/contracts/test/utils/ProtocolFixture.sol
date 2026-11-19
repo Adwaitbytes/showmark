@@ -36,7 +36,14 @@ abstract contract ProtocolFixture is RegistryFixture {
         oracle.setPrice(PRICE, block.timestamp);
         bond = new OrganizerBond(owner);
         vault = new CampaignVault(
-            address(registry), address(qieIdCheck), address(oracle), address(bond), MAX_ORACLE_AGE, owner, feeRecipient, 0
+            address(registry),
+            address(qieIdCheck),
+            address(oracle),
+            address(bond),
+            MAX_ORACLE_AGE,
+            owner,
+            feeRecipient,
+            0
         );
         vm.prank(owner);
         bond.setVault(address(vault));

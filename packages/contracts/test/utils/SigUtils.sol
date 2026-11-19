@@ -18,9 +18,7 @@ library SigUtils {
         keccak256("LinkWallet(address pass,address wallet,uint64 deadline)");
 
     function domainSeparator(uint256 chainId, address registry) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(DOMAIN_TYPEHASH, keccak256("Showmark"), keccak256("1"), chainId, registry)
-        );
+        return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("Showmark"), keccak256("1"), chainId, registry));
     }
 
     function digest(bytes32 separator, bytes32 structHash) internal pure returns (bytes32) {

@@ -22,8 +22,7 @@ contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
     bytes32 public constant DOOR_ATTEST_TYPEHASH =
         keccak256("DoorAttest(uint256 eventId,address attendee,uint64 attestedAt)");
     /// @notice EIP-712 type signed by both the pass and the wallet to link them.
-    bytes32 public constant LINK_WALLET_TYPEHASH =
-        keccak256("LinkWallet(address pass,address wallet,uint64 deadline)");
+    bytes32 public constant LINK_WALLET_TYPEHASH = keccak256("LinkWallet(address pass,address wallet,uint64 deadline)");
 
     /// @notice Largest metadata string accepted, in bytes.
     uint256 public constant MAX_METADATA_BYTES = 2048;

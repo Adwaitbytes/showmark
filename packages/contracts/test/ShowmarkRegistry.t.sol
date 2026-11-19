@@ -457,8 +457,7 @@ contract ShowmarkRegistryTest is RegistryFixture {
     function test_checkIn_mode2_attestationOutsideWindow() public {
         _authorize(organizer, eventId, doorKey, T0 + EVENT_LENGTH + 3 days);
         vm.warp(T0 + EVENT_LENGTH + 2 hours);
-        IShowmarkRegistry.CheckInData memory d =
-            _mode2(eventId, attendeePk, doorPk, T0 + EVENT_LENGTH + 1 hours + 1);
+        IShowmarkRegistry.CheckInData memory d = _mode2(eventId, attendeePk, doorPk, T0 + EVENT_LENGTH + 1 hours + 1);
         vm.expectRevert(IShowmarkRegistry.OutsideEventWindow.selector);
         _checkIn(d);
 

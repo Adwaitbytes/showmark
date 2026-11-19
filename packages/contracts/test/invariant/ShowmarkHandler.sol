@@ -99,10 +99,18 @@ contract ShowmarkHandler is Test {
         separator = SigUtils.domainSeparator(block.chainid, address(registry));
         eventIds = events_;
 
-        for (uint256 i = 1; i <= 6; ++i) passPks.push(0x9A55_0000 + i);
-        for (uint256 i = 1; i <= 3; ++i) walletPks.push(0x3A11_0000 + i);
-        for (uint256 i; i < passPks.length; ++i) claimants.push(vm.addr(passPks[i]));
-        for (uint256 i; i < walletPks.length; ++i) claimants.push(vm.addr(walletPks[i]));
+        for (uint256 i = 1; i <= 6; ++i) {
+            passPks.push(0x9A55_0000 + i);
+        }
+        for (uint256 i = 1; i <= 3; ++i) {
+            walletPks.push(0x3A11_0000 + i);
+        }
+        for (uint256 i; i < passPks.length; ++i) {
+            claimants.push(vm.addr(passPks[i]));
+        }
+        for (uint256 i; i < walletPks.length; ++i) {
+            claimants.push(vm.addr(walletPks[i]));
+        }
         claimants.push(org);
         claimants.push(address(attacker));
         claimants.push(feeRecipient);
@@ -496,7 +504,9 @@ contract ShowmarkHandler is Test {
     function _authorized(uint256 eventId, uint256 doorPk, uint64 doorTime) internal view returns (bool) {
         IShowmarkRegistry.EventInfo memory e = registry.eventInfo(eventId);
         if (doorPk == DOOR_A) return doorTime <= uint256(e.endsAt) + 3 days;
-        if (doorPk == DOOR_C) return doorCActive && eventId == eventIds[0] && doorTime <= uint256(e.startsAt) + 1 hours;
+        if (doorPk == DOOR_C) {
+            return doorCActive && eventId == eventIds[0] && doorTime <= uint256(e.startsAt) + 1 hours;
+        }
         return false;
     }
 

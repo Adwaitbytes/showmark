@@ -37,7 +37,11 @@ interface IOrganizerBond {
     /// @param sponsor The challenger.
     /// @param reason Free-form reason, at most 2,048 bytes.
     event Challenged(
-        uint256 indexed challengeId, address indexed organizer, uint256 indexed campaignId, address sponsor, string reason
+        uint256 indexed challengeId,
+        address indexed organizer,
+        uint256 indexed campaignId,
+        address sponsor,
+        string reason
     );
 
     /// @notice Emitted when the arbitrator resolves a challenge.
