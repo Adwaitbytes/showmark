@@ -12,13 +12,13 @@ import {ICampaignVault} from "./interfaces/ICampaignVault.sol";
 import {IShowmarkRegistry} from "./interfaces/IShowmarkRegistry.sol";
 import {IOrganizerBond} from "./interfaces/IOrganizerBond.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
-import {IZone} from "./interfaces/IZone.sol";
+import {IQieIdCheck} from "./interfaces/IQieIdCheck.sol";
 
 /// @title CampaignVault
 /// @notice Sponsor escrow that pays per verified presence. Each settled presence moves `gross` from the campaign
 /// balance into claimable balances for the attendee, the organizer and the protocol fee recipient. Payouts are
 /// pulled with `withdraw`; unspent funds return to the sponsor with `refund` after the settlement grace period.
-/// @dev Reads the registry (presence, organizer, wallet links), the bond, the Zone contract and the QIE/USD oracle.
+/// @dev Reads the registry (presence, organizer, wallet links), the bond, the QIE ID check and the QIE/USD oracle.
 /// Accounting per token: `totalLiabilities == sum(campaign balances) + sum(claimables) <= balance held`.
 /// Pause blocks createCampaign, topUp and settlement only; refund and withdraw always work.
 contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuard {
@@ -49,8 +49,8 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
 
     /// @notice The Showmark registry presence is read from.
     IShowmarkRegistry public immutable registry;
-    /// @notice The QIE ID (Zone) contract used for `requireQieId`.
-    IZone public immutable zone;
+    /// @notice Decides whether a linked wallet holds a QIE ID, for `requireQieId`.
+    IQieIdCheck public immutable qieIdCheck;
     /// @notice The QIE/USD price feed used for UsdInNative campaigns.
     IAggregatorV3 public immutable oracle;
     /// @notice The organizer bond used for `openToBonded` campaigns.
@@ -76,7 +76,7 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
     mapping(address token => uint256) private _liabilities;
 
     /// @param registry_ The ShowmarkRegistry.
-    /// @param zone_ The QIE ID (Zone) ERC-721.
+    /// @param qieIdCheck_ The QIE ID check (QieIdCheck over QIE's name registry).
     /// @param oracle_ The QIE/USD aggregator.
     /// @param bond_ The OrganizerBond.
     /// @param maxOracleAge_ Oldest acceptable oracle update, in seconds.
@@ -85,7 +85,7 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
     /// @param feeBps_ Initial fee, at most MAX_FEE_BPS.
     constructor(
         address registry_,
-        address zone_,
+        address qieIdCheck_,
         address oracle_,
         address bond_,
         uint256 maxOracleAge_,
@@ -93,7 +93,7 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
         address feeRecipient_,
         uint16 feeBps_
     ) Ownable(owner_) {
-        if (registry_ == address(0) || zone_ == address(0) || oracle_ == address(0) || bond_ == address(0)) {
+        if (registry_ == address(0) || qieIdCheck_ == address(0) || oracle_ == address(0) || bond_ == address(0)) {
             revert ZeroAddress();
         }
         if (maxOracleAge_ == 0) revert InvalidOracleAge();
@@ -101,7 +101,7 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
         if (oracleDecimals > 18) revert UnsupportedOracle();
 
         registry = IShowmarkRegistry(registry_);
-        zone = IZone(zone_);
+        qieIdCheck = IQieIdCheck(qieIdCheck_);
         oracle = IAggregatorV3(oracle_);
         bond = IOrganizerBond(bond_);
         maxOracleAge = maxOracleAge_;
@@ -292,7 +292,7 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
     // ------------------------------------------------------------------ internals
 
     /// @dev Runs the checks in a fixed order and, when they all pass, applies the payout. Never reverts on a
-    /// settlement condition: third-party reads (Zone, oracle) are wrapped in try/catch.
+    /// settlement condition: the QIE ID check and the oracle are wrapped in try/catch.
     function _settle(uint256 campaignId, uint256 eventId, address attendee) private returns (uint8, uint256) {
         Campaign storage c = _campaigns[campaignId];
         if (c.sponsor == address(0)) return (UNKNOWN_CAMPAIGN, 0);
@@ -370,8 +370,8 @@ contract CampaignVault is ICampaignVault, Ownable2Step, Pausable, ReentrancyGuar
     function _holdsQieId(address pass) private view returns (bool) {
         address wallet = registry.walletOf(pass);
         if (wallet == address(0)) return false;
-        try zone.balanceOf(wallet) returns (uint256 names) {
-            return names != 0;
+        try qieIdCheck.hasQieId(wallet) returns (bool has) {
+            return has;
         } catch {
             return false;
         }

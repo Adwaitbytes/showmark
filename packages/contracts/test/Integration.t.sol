@@ -4,11 +4,12 @@ pragma solidity 0.8.38;
 import {IShowmarkRegistry} from "../src/interfaces/IShowmarkRegistry.sol";
 import {ICampaignVault} from "../src/interfaces/ICampaignVault.sol";
 import {ProtocolFixture} from "./utils/ProtocolFixture.sol";
+import {MockQieNameRegistry} from "./mocks/MockQieNameRegistry.sol";
 
 /// @notice End-to-end flows across registry, vault and bond.
 contract IntegrationTest is ProtocolFixture {
     /// Invariant 2: no vault state can make checkIn revert. Vault paused, campaign broke, oracle stale and
-    /// reverting, Zone broken: check-ins still record presence, single and batched.
+    /// reverting, name registry down: check-ins still record presence, single and batched.
     function test_checkInSucceedsWhateverTheVaultState() public {
         uint256 usd = _createApproved(_usdParams(1e6), 7 ether); // one payout only
         _checkInNow(eventId, 0x5EED);
@@ -18,7 +19,7 @@ contract IntegrationTest is ProtocolFixture {
         vault.pause();
         oracle.setPrice(PRICE, block.timestamp - MAX_ORACLE_AGE - 1);
         oracle.setReverting(true);
-        zone.setBroken(true);
+        names.setMode(MockQieNameRegistry.Mode.Reverts);
 
         assertTrue(_checkInNow(eventId, attendeePk));
 

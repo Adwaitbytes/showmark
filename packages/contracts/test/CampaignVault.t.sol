@@ -8,13 +8,14 @@ import {ICampaignVault} from "../src/interfaces/ICampaignVault.sol";
 import {ProtocolFixture} from "./utils/ProtocolFixture.sol";
 import {FeeOnTransferToken} from "./mocks/FeeOnTransferToken.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
+import {MockQieNameRegistry} from "./mocks/MockQieNameRegistry.sol";
 
 contract CampaignVaultTest is ProtocolFixture {
     // ---------------------------------------------------------------- constructor and fee
 
     function test_constructor_wiring() public view {
         assertEq(address(vault.registry()), address(registry));
-        assertEq(address(vault.zone()), address(zone));
+        assertEq(address(vault.qieIdCheck()), address(qieIdCheck));
         assertEq(address(vault.oracle()), address(oracle));
         assertEq(address(vault.bond()), address(bond));
         assertEq(vault.maxOracleAge(), MAX_ORACLE_AGE);
@@ -27,7 +28,7 @@ contract CampaignVaultTest is ProtocolFixture {
 
     function test_constructor_rejectsBadArgs() public {
         address r = address(registry);
-        address z = address(zone);
+        address z = address(qieIdCheck);
         address o = address(oracle);
         address b = address(bond);
         vm.expectRevert(ICampaignVault.ZeroAddress.selector);
@@ -413,15 +414,14 @@ contract CampaignVaultTest is ProtocolFixture {
         vm.expectRevert(ICampaignVault.NeedsQieId.selector);
         vault.settle(id, eventId, attendee);
 
-        // Zone unreadable
-        uint256 tokenId = zone.mint(wallet);
-        zone.setBroken(true);
+        // the name registry is down: settlement defers instead of reverting with the registry's error
+        names.setDomain(wallet, "attendee.qie");
+        names.setMode(MockQieNameRegistry.Mode.Reverts);
         vm.expectRevert(ICampaignVault.NeedsQieId.selector);
         vault.settle(id, eventId, attendee);
-        zone.setBroken(false);
+        names.setMode(MockQieNameRegistry.Mode.Normal);
 
         assertEq(vault.settle(id, eventId, attendee), 1 ether);
-        assertGt(tokenId, 0);
     }
 
     // ---------------------------------------------------------------- settle: deferrals
@@ -702,6 +702,35 @@ contract CampaignVaultTest is ProtocolFixture {
         items = new ICampaignVault.SettleItem[](1);
         items[0] = ICampaignVault.SettleItem(unapproved, eventId, attendee);
         assertEq(vault.settleBatch(items)[0], 11);
+    }
+
+    function test_settleBatch_hostileNameRegistryDefersWithNeedsQieId() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.requireQieId = true;
+        uint256 gated = _createApproved(p, 10 ether);
+        uint256 open = _createApproved(_params(NATIVE), 10 ether);
+        _checkInNow(eventId, attendeePk);
+        _linkWithQieId(attendeePk, walletPk);
+
+        ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](2);
+        items[0] = ICampaignVault.SettleItem(gated, eventId, attendee);
+        items[1] = ICampaignVault.SettleItem(open, eventId, attendee);
+
+        MockQieNameRegistry.Mode[4] memory hostile = [
+            MockQieNameRegistry.Mode.Reverts,
+            MockQieNameRegistry.Mode.GasBurner,
+            MockQieNameRegistry.Mode.HugeLength,
+            MockQieNameRegistry.Mode.TruncatedPayload
+        ];
+        for (uint256 i; i < hostile.length; ++i) {
+            names.setMode(hostile[i]);
+            uint8[] memory s = vault.settleBatch(items);
+            assertEq(s[0], 8, "gated item defers");
+            assertEq(s[1], i == 0 ? 0 : 1, "the rest of the batch still settles");
+        }
+
+        names.setMode(MockQieNameRegistry.Mode.Normal);
+        assertEq(vault.settleBatch(items)[0], 0);
     }
 
     function test_settleBatch_pausedReturns12() public {

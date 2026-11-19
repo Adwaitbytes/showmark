@@ -6,17 +6,19 @@ import {CampaignVault} from "../../src/CampaignVault.sol";
 import {OrganizerBond} from "../../src/OrganizerBond.sol";
 import {ICampaignVault} from "../../src/interfaces/ICampaignVault.sol";
 import {MockQUSDC} from "../mocks/MockQUSDC.sol";
-import {MockZone} from "../mocks/MockZone.sol";
+import {MockQieNameRegistry} from "../mocks/MockQieNameRegistry.sol";
+import {QieIdCheck} from "../../src/QieIdCheck.sol";
 import {MockAggregator} from "../mocks/MockAggregator.sol";
 
-/// @notice Registry fixture plus vault, bond, QUSDC, Zone and oracle mocks, a funded sponsor and campaign helpers.
+/// @notice Registry fixture plus vault, bond, QIE ID check, QUSDC, name registry and oracle mocks, a funded sponsor and campaign helpers.
 abstract contract ProtocolFixture is RegistryFixture {
     uint256 internal constant MAX_ORACLE_AGE = 36 hours;
     int256 internal constant PRICE = 16_500_000; // $0.165 per QIE, 8 decimals
     string internal constant CAMPAIGN_META = '{"v":1,"name":"Demo","sponsor":"Acme","description":"x"}';
 
     MockQUSDC internal qusdc;
-    MockZone internal zone;
+    MockQieNameRegistry internal names;
+    QieIdCheck internal qieIdCheck;
     MockAggregator internal oracle;
     OrganizerBond internal bond;
     CampaignVault internal vault;
@@ -28,12 +30,13 @@ abstract contract ProtocolFixture is RegistryFixture {
     function setUp() public virtual override {
         super.setUp();
         qusdc = new MockQUSDC();
-        zone = new MockZone();
+        names = new MockQieNameRegistry();
+        qieIdCheck = new QieIdCheck(address(names));
         oracle = new MockAggregator(8);
         oracle.setPrice(PRICE, block.timestamp);
         bond = new OrganizerBond(owner);
         vault = new CampaignVault(
-            address(registry), address(zone), address(oracle), address(bond), MAX_ORACLE_AGE, owner, feeRecipient, 0
+            address(registry), address(qieIdCheck), address(oracle), address(bond), MAX_ORACLE_AGE, owner, feeRecipient, 0
         );
         vm.prank(owner);
         bond.setVault(address(vault));
@@ -85,6 +88,6 @@ abstract contract ProtocolFixture is RegistryFixture {
         uint64 deadline = uint64(block.timestamp + 1 hours);
         (bytes memory p, bytes memory w) = _linkSigs(passPk, signerPk, pass, wal, deadline);
         registry.linkWallet(pass, wal, deadline, p, w, new uint256[](0));
-        zone.mint(wal);
+        names.setDomain(wal, "attendee.qie");
     }
 }
