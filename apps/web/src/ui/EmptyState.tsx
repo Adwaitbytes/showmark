@@ -9,7 +9,7 @@ export interface EmptyStateProps {
   /** The next action, usually a <Button>. */
   action?: ReactNode;
   /** Heading level so the empty state fits the page outline. */
-  as?: "h2" | "h3";
+  as?: "h1" | "h2" | "h3";
   align?: "start" | "center";
   className?: string;
 }

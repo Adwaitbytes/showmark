@@ -6,6 +6,8 @@ export const TOKEN_DECIMALS: Record<TokenSymbol, number> = { QIE: 18, QUSDC: 6 }
 
 /** How many fraction digits a person needs to see for each token. */
 const DISPLAY_FRACTION: Record<TokenSymbol, number> = { QIE: 4, QUSDC: 2 };
+/** Dollar stablecoins always show cents; QIE drops trailing zeros. */
+const MIN_FRACTION: Record<TokenSymbol, number> = { QIE: 0, QUSDC: 2 };
 
 /**
  * Events are run in India first, so times show in IST and say so. Every formatter pins the
@@ -61,13 +63,15 @@ export function formatTokenAmount(baseUnits: string, symbol: TokenSymbol, maxFra
     throw new Error(`Expected base units as a decimal string, got "${baseUnits}"`);
   }
   const raw = BigInt(baseUnits);
-  if (raw === BigInt(0)) return "0";
+  if (raw === BigInt(0)) return MIN_FRACTION[symbol] ? `0.${"0".repeat(MIN_FRACTION[symbol])}` : "0";
   const fractionDigits = maxFraction ?? DISPLAY_FRACTION[symbol];
   const [integerPart, fractionPart = ""] = formatUnits(raw, TOKEN_DECIMALS[symbol]).split(".");
-  const fraction = fractionPart.slice(0, fractionDigits).replace(/0+$/, "");
-  if (integerPart === "0" && fraction === "") {
+  const significant = fractionPart.slice(0, fractionDigits).replace(/0+$/, "");
+  if (integerPart === "0" && significant === "") {
     return `<0.${"0".repeat(Math.max(fractionDigits - 1, 0))}1`;
   }
+  const minDigits = Math.min(MIN_FRACTION[symbol], fractionDigits);
+  const fraction = significant.padEnd(minDigits, "0");
   const grouped = groupDigits(integerPart ?? "0");
   return fraction ? `${grouped}.${fraction}` : grouped;
 }

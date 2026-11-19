@@ -137,7 +137,8 @@ function rosette(seed: string, detail: number): GuillocheGeometry {
 function band(seed: string, detail: number): GuillocheGeometry {
   const rng = createRng(`band:${seed}`);
   const [primary, secondary] = rng.pick(INK_PAIRS);
-  const width = 960;
+  // Wide canvas so long, short bands fill by width without cropping the weave vertically.
+  const width = 2400;
   const height = 96;
   const mid = height / 2;
   const key = hashSeed(seed).toString(36);
@@ -147,7 +148,7 @@ function band(seed: string, detail: number): GuillocheGeometry {
   const amp = rng.range(18, 25);
   const slowAmp = rng.range(5, 10);
   const phase = rng.range(0, Math.PI * 2);
-  const step = Math.max(1.5, 960 / (detail * 3));
+  const step = Math.max(2, 960 / (detail * 3));
   const parts: string[] = [];
   for (let x = -wavelength; x <= width + wavelength; x += step) {
     const y =
