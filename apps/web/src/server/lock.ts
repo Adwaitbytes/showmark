@@ -6,6 +6,8 @@ export interface Lock {
   token: string;
   /** Pushes the expiry out again. Returns false when the lock was lost (expired and taken by someone else). */
   extend(ttlMs: number): Promise<boolean>;
+  /** Unix ms when the lock was taken or last extended, so holders skip a Redis round trip when it is fresh. */
+  refreshedAt: number;
   release(): Promise<void>;
 }
 
@@ -20,14 +22,20 @@ export async function tryLock(kv: KeyValueStore, key: string, ttlMs: number): Pr
   const token = randomToken();
   const acquired = await kv.set(key, token, { nx: true, px: ttlMs });
   if (!acquired) return null;
-  return {
+  const lock: Lock = {
     key,
     token,
-    extend: (ms) => kv.extendIfEquals(key, token, ms),
+    refreshedAt: Date.now(),
+    extend: async (ms) => {
+      const ok = await kv.extendIfEquals(key, token, ms);
+      if (ok) lock.refreshedAt = Date.now();
+      return ok;
+    },
     release: async () => {
       await kv.deleteIfEquals(key, token);
     },
   };
+  return lock;
 }
 
 export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

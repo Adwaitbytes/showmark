@@ -23,10 +23,11 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { getAddress, isAddress, type Address, type Hex } from "viem";
+import { createPublicClient, getAddress, http, isAddress, parseAbi, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 export const MAINNET_CHAIN_ID = 1990;
+const presenceAbi = parseAbi(["struct Presence { uint8 mode; uint64 at; }", "function presenceOf(uint256 eventId, address attendee) view returns (Presence)"]);
 const DOOR_ROTATE_MS = 15_000;
 
 // Mirrors src/lib/chain/eip712.ts (INTERFACES section 2.2); scripts/loadtest.test.ts keeps the two in sync.
@@ -62,10 +63,15 @@ export interface LoadTestConfig {
   rate: number;
   doorKey: Hex;
   timeoutMs: number;
+  /** RPC used to verify on chain how many check-ins were recorded. */
+  rpc: string;
 }
 
 export interface Sample {
+  /** Time until the response to the POST. */
   ms: number;
+  /** Time until a tx hash was known (after polling a "queued" answer), or null if never. */
+  hashMs: number | null;
   status: number;
   code: string;
   txHash: string | null;
@@ -86,10 +92,11 @@ export function percentile(sorted: number[], p: number): number {
 }
 
 export function summarize(samples: Sample[], wallMs: number) {
-  const ok = samples.filter((s) => s.status === 200);
+  const ok = samples.filter((s) => s.txHash !== null);
   const latencies = samples.map((s) => s.ms).sort((a, b) => a - b);
+  const toHash = samples.flatMap((s) => (s.hashMs === null ? [] : [s.hashMs])).sort((a, b) => a - b);
   const failures: Record<string, number> = {};
-  for (const s of samples) if (s.status !== 200) failures[`${s.status} ${s.code}`] = (failures[`${s.status} ${s.code}`] ?? 0) + 1;
+  for (const s of samples) if (s.txHash === null) failures[`${s.status} ${s.code}`] = (failures[`${s.status} ${s.code}`] ?? 0) + 1;
   const txs = new Set(ok.map((s) => s.txHash));
   return {
     requests: samples.length,
@@ -103,6 +110,12 @@ export function summarize(samples: Sample[], wallMs: number) {
       p99: percentile(latencies, 99),
       max: latencies.at(-1) ?? 0,
     },
+    hashMs: {
+      p50: percentile(toHash, 50),
+      p95: percentile(toHash, 95),
+      max: toHash.at(-1) ?? 0,
+    },
+    answeredQueued: samples.filter((s) => s.status === 202).length,
     transactions: txs.size,
     checkInsPerTransaction: txs.size ? Number((ok.length / txs.size).toFixed(2)) : 0,
     wallSeconds: Number((wallMs / 1000).toFixed(1)),
@@ -130,6 +143,7 @@ function parseConfig(): LoadTestConfig & { chainId: number } {
       count: { type: "string", default: "100" },
       rate: { type: "string", default: "2" },
       "timeout-ms": { type: "string", default: "30000" },
+      rpc: { type: "string", default: "https://rpc1testnet.qie.digital" },
     },
   });
   const doorKey = process.env.LOADTEST_DOOR_KEY;
@@ -149,7 +163,37 @@ function parseConfig(): LoadTestConfig & { chainId: number } {
     rate,
     doorKey: doorKey as Hex,
     timeoutMs: Number(values["timeout-ms"]),
+    rpc: values.rpc,
   };
+}
+
+/** Follows a 202 "queued" answer the way the app does, until the hash arrives or 60 s pass. */
+async function pollQueued(config: LoadTestConfig, id: string, t0: number, first: Sample): Promise<Sample> {
+  const deadline = performance.now() + 60_000;
+  while (performance.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 750));
+    try {
+      const res = await fetch(`${config.url}/api/relay/check-in/${id}`, { signal: AbortSignal.timeout(10_000) });
+      const json = (await res.json()) as { txHash?: string; error?: { code: string } };
+      if (json.txHash) return { ...first, hashMs: Math.round(performance.now() - t0), txHash: json.txHash };
+      if (res.status !== 202) return { ...first, status: res.status, code: json.error?.code ?? "poll_failed" };
+    } catch {
+      // A failed poll is retried until the deadline.
+    }
+  }
+  return { ...first, code: "queued_timeout" };
+}
+
+/** Reads presenceOf for every pass on chain, so the report says how many check-ins were actually recorded. */
+async function countRecorded(rpc: string, registry: Address, eventId: bigint, passes: Address[]): Promise<number> {
+  const client = createPublicClient({ transport: http(rpc, { batch: { batchSize: 50 } }) });
+  let recorded = 0;
+  for (let i = 0; i < passes.length; i += 50) {
+    const slice = passes.slice(i, i + 50);
+    const presences = await Promise.all(slice.map((attendee) => client.readContract({ address: registry, abi: presenceAbi, functionName: "presenceOf", args: [eventId, attendee] })));
+    recorded += presences.filter((p) => p.mode !== 0).length;
+  }
+  return recorded;
 }
 
 async function run(config: LoadTestConfig, chainId: number): Promise<Sample[]> {
@@ -203,17 +247,25 @@ async function run(config: LoadTestConfig, chainId: number): Promise<Sample[]> {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(config.timeoutMs),
       });
-      const json = (await res.json()) as { txHash?: string; error?: { code: string } };
-      sample = { ms: Math.round(performance.now() - t0), status: res.status, code: json.error?.code ?? "ok", txHash: json.txHash ?? null };
+      const json = (await res.json()) as { txHash?: string; id?: string; status?: string; error?: { code: string } };
+      const ms = Math.round(performance.now() - t0);
+      sample = { ms, hashMs: json.txHash ? ms : null, status: res.status, code: json.error?.code ?? json.status ?? "ok", txHash: json.txHash ?? null };
+      if (res.status === 202 && json.id) sample = await pollQueued(config, json.id, t0, sample);
     } catch (error) {
-      sample = { ms: Math.round(performance.now() - t0), status: 0, code: error instanceof Error ? error.name : "network_error", txHash: null };
+      // Report the low-level cause (for example UND_ERR_CONNECT_TIMEOUT) instead of a bare "TypeError".
+      const cause = error instanceof Error && error.cause instanceof Error ? ((error.cause as Error & { code?: string }).code ?? error.cause.name) : null;
+      sample = { ms: Math.round(performance.now() - t0), hashMs: null, status: 0, code: error instanceof Error ? `${error.name}${cause ? `:${cause}` : ""}` : "network_error", txHash: null };
     }
     samples.push(sample);
     if ((i + 1) % 50 === 0) process.stdout.write(`${i + 1}/${config.count} sent\n`);
   });
   await Promise.all(inflight);
   clearInterval(timer);
-  process.stdout.write(`${JSON.stringify(summarize(samples, Date.now() - started), null, 2)}\n`);
+  const report = summarize(samples, Date.now() - started);
+  // Give the last batches a few blocks to land, then count what the chain actually recorded.
+  await new Promise((r) => setTimeout(r, 15_000));
+  const recorded = await countRecorded(config.rpc, config.registry, config.eventId, passes.map((p) => p.address));
+  process.stdout.write(`${JSON.stringify({ ...report, recordedOnChain: recorded, lost: passes.length - recorded }, null, 2)}\n`);
   return samples;
 }
 

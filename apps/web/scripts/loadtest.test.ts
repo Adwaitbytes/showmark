@@ -19,9 +19,9 @@ describe("load test script", () => {
     expect(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 99)).toBe(10);
     const report = summarize(
       [
-        { ms: 100, status: 200, code: "ok", txHash: "0xa" },
-        { ms: 200, status: 200, code: "ok", txHash: "0xa" },
-        { ms: 300, status: 429, code: "rate_limited", txHash: null },
+        { ms: 100, hashMs: 100, status: 200, code: "ok", txHash: "0xa" },
+        { ms: 200, hashMs: 200, status: 200, code: "ok", txHash: "0xa" },
+        { ms: 300, hashMs: null, status: 429, code: "rate_limited", txHash: null },
       ],
       1_000,
     );

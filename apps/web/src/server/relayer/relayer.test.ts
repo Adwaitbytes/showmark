@@ -17,7 +17,7 @@ import { checkInStatusCopy, settleStatusCopy } from "../errors";
 import { MemoryStore } from "../kv";
 import { tryLock } from "../lock";
 import type { CheckInData } from "../schemas";
-import { flushOnce, relayCheckIns, relayLockKey, type RelayerDeps } from "./queue";
+import { drainQueue, enqueueCheckIns, flushIfFree, flushOnce, flushSettlements, readResult, relayCheckIns, relayLockKey, type RelayerDeps } from "./queue";
 import { RelayTargetError, sendSequential, type RelayerChain } from "./sender";
 import { settleGasLimit } from "./settle";
 
@@ -155,12 +155,13 @@ describe("check-in micro-batching", () => {
     const [result] = await relayCheckIns({ ...deps, background: (task) => void later.push(task) }, [checkIn(attendees[0])]);
     expect(result.ok).toBe(true);
     expect(state.sent).toHaveLength(1);
-    // The lock is still held for the settlement, so nobody else can take the next nonce meanwhile.
-    expect(await tryLock(kv, relayLockKey(deps.chain), 5_000)).toBeNull();
+    // The lock is already free: the next check-in batch never waits behind this settlement.
+    const next = await tryLock(kv, relayLockKey(deps.chain), 5_000);
+    expect(next).not.toBeNull();
+    await next?.release();
     await later[0]();
     expect(state.sent).toHaveLength(2);
     expect(decodeSent(state.sent[1]).tx.nonce).toBe((decodeSent(state.sent[0]).tx.nonce ?? 0) + 1);
-    expect(await tryLock(kv, relayLockKey(deps.chain), 5_000)).not.toBeNull();
   });
 
   it("returns the registry status for items the batch would reject and sends the rest", async () => {
@@ -208,11 +209,35 @@ describe("check-in micro-batching", () => {
     expect(state.sent).toHaveLength(1);
   });
 
+  it("recovers a batch a dead instance took but never sent, without resending what it did send", async () => {
+    const wire = (id: string, a: Address) => JSON.stringify({ id, d: { ...checkIn(a), eventId: "1", doorTime: "1795000000" } });
+    // The dead holder broadcast item "done" (its result exists) but not item "lost".
+    await kv.set(`relay:r:${qieTestnet.id}:done`, JSON.stringify({ ok: true, txHash: `0x${"aa".repeat(32)}` }));
+    await kv.set(`relay:inflight:${qieTestnet.id}`, JSON.stringify({ at: Date.now() - 60_000, raw: [wire("done", attendees[0]), wire("lost", attendees[1])] }));
+    expect(await flushIfFree(deps)).toBe(true);
+    expect(await readResult(deps, "lost")).toMatchObject({ ok: true });
+    const { call } = decodeSent(state.sent[0]);
+    expect((call.args?.[0] as readonly CheckInData[]).map((d) => d.attendee)).toEqual([attendees[1]]);
+    expect(await kv.get(`relay:inflight:${qieTestnet.id}`)).toBeNull();
+  });
+
+  it("holds settlements back while check-ins are waiting", async () => {
+    await kv.rpush(`relay:settle:${qieTestnet.id}`, [JSON.stringify({ campaignId: "3", eventId: "1", attendee: attendees[0] })]);
+    await enqueueCheckIns(deps, [checkIn(attendees[1])]);
+    expect(await flushSettlements(deps)).toBe(0);
+    await drainQueue(deps);
+    const labels = state.sent.map((raw) => decodeSent(raw).call.functionName);
+    expect(labels[0]).toBe("checkInBatch");
+    expect(labels).toContain("settleBatch");
+    expect(await kv.llen(`relay:settle:${qieTestnet.id}`)).toBe(0);
+  });
+
   it("puts items back when the lock is lost before sending", async () => {
     await kv.rpush(`relay:q:${qieTestnet.id}`, [JSON.stringify({ id: "x", d: { ...checkIn(attendees[0]), eventId: "1", doorTime: "1" } })]);
     const lock = await tryLock(kv, relayLockKey(deps.chain), 5_000);
     if (!lock) throw new Error("lock");
     await kv.del(relayLockKey(deps.chain));
+    lock.refreshedAt = 0;
     expect((await flushOnce(deps, lock)).processed).toBe(0);
     expect(state.sent).toHaveLength(0);
     expect(await kv.llen(`relay:q:${qieTestnet.id}`)).toBe(1);

@@ -1,20 +1,25 @@
-import type { NextRequest } from "next/server";
-import type { RelaySubmitted } from "@/lib/api/types";
+import { after, type NextRequest } from "next/server";
+import type { RelayQueued, RelaySubmitted } from "@/lib/api/types";
 import { relayLimits } from "@/server/env";
 import { AppError, checkInStatusCopy, RELAY_ERRORS } from "@/server/errors";
 import { clientIp, enforceLimit, handle, json, readJson } from "@/server/http";
 import { rateLimiter } from "@/server/kv";
 import { log } from "@/server/log";
 import { relayerDeps } from "@/server/relayer";
-import { relayCheckIns } from "@/server/relayer/queue";
+import { awaitCheckIns, enqueueCheckIns, flushSettlements } from "@/server/relayer/queue";
 import { checkInDataSchema } from "@/server/schemas";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
+
+/** How long the request itself waits for a tx hash before answering 202 queued. */
+const ANSWER_WITHIN_MS = 3_000;
+/** How long this invocation keeps flushing after answering, so a queued check-in never waits for the cron. */
+const KEEP_FLUSHING_MS = 40_000;
 
 /**
  * Gasless check-in. The batch flush simulates every item with checkInBatch, so a rejected check-in costs no gas
- * and gets exact copy, and the answer comes back as soon as the transaction is broadcast (the settlement behind
- * it goes out after the response). No Postgres on this path.
+ * and gets exact copy, and the hash comes back as soon as the transaction is broadcast. During a burst the answer
+ * is 202 `{ status: "queued", id }` after about 3 s; poll /api/relay/check-in/{id}. No Postgres on this path.
  */
 export async function POST(request: NextRequest): Promise<Response> {
   return handle("relay.check-in", async () => {
@@ -28,8 +33,23 @@ export async function POST(request: NextRequest): Promise<Response> {
     ]);
     const limitedAt = Date.now();
 
-    const [result] = await relayCheckIns(relayerDeps(), [item]);
-    log.info("relay.check_in", { eventId: item.eventId, ok: result.ok, rateLimitMs: limitedAt - started, relayMs: Date.now() - limitedAt, totalMs: Date.now() - started });
+    const deps = relayerDeps();
+    const [id] = await enqueueCheckIns(deps, [item]);
+    const [result] = await awaitCheckIns(deps, [id], ANSWER_WITHIN_MS);
+    log.info("relay.check_in", { eventId: item.eventId, id, outcome: result === null ? "queued" : result.ok ? "sent" : "rejected", rateLimitMs: limitedAt - started, relayMs: Date.now() - limitedAt, totalMs: Date.now() - started });
+
+    if (result === null) {
+      // Keep this invocation working on the queue after answering; the cron is the backstop.
+      after(async () => {
+        try {
+          await awaitCheckIns(deps, [id], KEEP_FLUSHING_MS);
+          await flushSettlements(deps);
+        } catch (error) {
+          log.warn("relay.keep_flushing_failed", { id, error });
+        }
+      });
+      return json({ id, status: "queued" } satisfies RelayQueued, { status: 202 });
+    }
     if (!result.ok) {
       if ("status" in result) throw new AppError(422, checkInStatusCopy(result.status));
       throw new AppError(502, RELAY_ERRORS.sendFailed);

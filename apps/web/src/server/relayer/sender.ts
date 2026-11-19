@@ -34,6 +34,7 @@ export interface SentTx {
 /** A Redis nonce older than this is ignored in favour of the chain, so a dropped transaction cannot leave a gap. */
 const NONCE_TRUST_MS = 60_000;
 const LOCK_TTL_MS = 5_000;
+const LOCK_FRESH_MS = 2_000;
 
 interface StoredNonce {
   nonce: number;
@@ -137,6 +138,8 @@ export async function sendSequential(
   requests: TxRequest[],
   now: () => number = Date.now,
   prepared?: PreparedSend,
+  /** Runs right after each broadcast, concurrently with the rest (for example writing the check-in result). */
+  onBroadcast?: (tx: SentTx) => Promise<void>,
 ): Promise<{ sent: SentTx[]; error: unknown }> {
   for (const r of requests) {
     assertRelayTarget(chain, r.to, r.data);
@@ -150,8 +153,17 @@ export async function sendSequential(
   let nonce = ready.nonce;
   const gasPrice = ready.gasPrice;
 
+  // Bookkeeping writes (stored nonce, results) overlap with the next signature; all of them finish before return.
+  const pending: Promise<void>[] = [];
+  const settle = async <T>(value: T): Promise<T> => {
+    const outcomes = await Promise.allSettled(pending);
+    for (const o of outcomes) if (o.status === "rejected") log.error("relayer.bookkeeping_failed", { error: o.reason });
+    return value;
+  };
+
   for (const request of requests) {
-    if (!(await lock.extend(LOCK_TTL_MS))) return { sent, error: new LockLostError() };
+    // A lock taken or extended in the last 2 s has at least 3 s left; skip the Redis round trip.
+    if (now() - lock.refreshedAt > LOCK_FRESH_MS && !(await lock.extend(LOCK_TTL_MS))) return settle({ sent, error: new LockLostError() });
     let attempt = 0;
     for (;;) {
       try {
@@ -171,9 +183,11 @@ export async function sendSequential(
         } catch (error) {
           if (!isAlreadyKnown(error)) throw error;
         }
-        sent.push({ hash, nonce, label: request.label });
+        const tx: SentTx = { hash, nonce, label: request.label };
+        sent.push(tx);
         nonce += 1;
-        await kv.set(nonceKey(chain), JSON.stringify({ nonce, at: now() } satisfies StoredNonce), { px: 10 * 60_000 });
+        pending.push(kv.set(nonceKey(chain), JSON.stringify({ nonce, at: now() } satisfies StoredNonce), { px: 10 * 60_000 }).then(() => undefined));
+        if (onBroadcast) pending.push(onBroadcast(tx));
         log.info("relayer.tx_sent", { label: request.label, hash, nonce: nonce - 1, gas: request.gas, gasPrice });
         break;
       } catch (error) {
@@ -185,9 +199,9 @@ export async function sendSequential(
           continue;
         }
         log.error("relayer.send_failed", { label: request.label, nonce, error });
-        return { sent, error };
+        return settle({ sent, error });
       }
     }
   }
-  return { sent, error: null };
+  return settle({ sent, error: null });
 }

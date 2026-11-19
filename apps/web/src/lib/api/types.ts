@@ -144,6 +144,16 @@ export interface RelaySubmitted {
   status: "submitted";
 }
 
+/**
+ * POST /api/relay/check-in answers 202 with this when the check-in is accepted but not yet broadcast after about
+ * 3 s (for example during a burst). Poll GET /api/relay/check-in/{id} until it returns RelaySubmitted (200) or
+ * an ApiError (422 when the registry rejected it). The check-in is never dropped.
+ */
+export interface RelayQueued {
+  id: string;
+  status: "queued";
+}
+
 export interface TxStatus {
   // With ?event=&attendee=, a mined batch whose item for that attendee was rejected reads "reverted".
   status: "pending" | "success" | "reverted";
