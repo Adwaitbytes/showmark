@@ -223,6 +223,16 @@ describe("input validation", () => {
     );
   });
 
+  it("checksums lowercase addresses and rejects a wrong checksum as a typo", async () => {
+    const lower = attendeeAccount.address.toLowerCase() as Address;
+    expect(hashCheckIn({ chainId: 1983, registry: registry.toLowerCase() as Address }, { eventId: 1n, attendee: lower })).toBe(
+      hashCheckIn(domain, { eventId: 1n, attendee: attendeeAccount.address }),
+    );
+    const badChecksum = attendeeAccount.address.replace(/[a-f]/, (c) => c.toUpperCase()) as Address;
+    expect(() => hashCheckIn(domain, { eventId: 1n, attendee: badChecksum })).toThrow(ShowmarkInputError);
+    await expect(signCheckIn({ chainId: 1983, registry: badChecksum, signer: attendeeAccount, eventId: 1n })).rejects.toBeInstanceOf(ShowmarkInputError);
+  });
+
   it("binds signatures to the chain and the registry", () => {
     const message = { eventId: 42n, attendee: attendeeAccount.address };
     const base = hashCheckIn(domain, message);

@@ -1,4 +1,5 @@
 import {
+  getAddress,
   hashTypedData,
   isAddress,
   type Account,
@@ -80,9 +81,10 @@ function requireUint(name: string, value: bigint, max: bigint): bigint {
   return value;
 }
 
+// Lowercase addresses are accepted and checksummed; a mixed-case address with a wrong checksum is a typo and fails.
 function requireAddress(name: string, value: string): Address {
-  if (!isAddress(value, { strict: false })) throw new ShowmarkInputError(`${name} is not a valid address: ${value}`);
-  return value;
+  if (!isAddress(value)) throw new ShowmarkInputError(`${name} is not a valid address or its checksum is wrong: ${value}`);
+  return getAddress(value);
 }
 
 export function showmarkDomain({ chainId, registry }: ShowmarkDomainParams): ShowmarkDomain {

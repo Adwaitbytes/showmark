@@ -4,6 +4,7 @@ import {
   ContractFunctionZeroDataError,
   createPublicClient,
   fallback,
+  getAddress,
   http,
   isAddress,
   zeroAddress,
@@ -163,9 +164,11 @@ export class ShowmarkClient {
   constructor(options: ShowmarkClientOptions) {
     this.chain = resolveChain(options.chain);
     const official = isSupportedChainId(this.chain.id) ? showmarkDeployments[this.chain.id] : undefined;
-    const addresses: Partial<ShowmarkAddresses> = { ...official, ...options.addresses };
-    for (const [name, value] of Object.entries(addresses)) {
-      if (value !== undefined && !isAddress(value, { strict: false })) throw new ShowmarkConfigError(`addresses.${name} is not a valid address: ${value}`);
+    const addresses: Partial<ShowmarkAddresses> = {};
+    for (const [name, value] of Object.entries({ ...official, ...options.addresses }) as [keyof ShowmarkAddresses, Address | undefined][]) {
+      if (value === undefined) continue;
+      if (!isAddress(value)) throw new ShowmarkConfigError(`addresses.${name} is not a valid address or its checksum is wrong: ${value}`);
+      addresses[name] = getAddress(value);
     }
     this.addresses = addresses;
     this.publicClient =
@@ -264,6 +267,17 @@ export class ShowmarkClient {
       this.publicClient.readContract({ address: lens, abi: presenceAbi, functionName: "attendedCount", args: [account, eventIds] }),
     );
     return Number(count);
+  }
+
+  /**
+   * The address presence is keyed by for this account: its linked pass, or itself when unlinked. Key
+   * one-per-person rewards by this value, since a pass and its wallet both pass hasAttended.
+   */
+  async presenceKeyOf(account: Address): Promise<Address> {
+    const lens = this.address("lens");
+    return this.read("presenceKeyOf", () =>
+      this.publicClient.readContract({ address: lens, abi: presenceAbi, functionName: "presenceKeyOf", args: [account] }),
+    );
   }
 
   /** The campaign as the vault stores it, or null when no campaign has this id. */

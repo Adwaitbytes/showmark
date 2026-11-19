@@ -107,6 +107,23 @@ describe("ShowmarkClient reads", () => {
     expect(await client.getEvent(999n)).toBeNull();
   });
 
+  it("returns null when the registry reverts with UnknownEvent", async () => {
+    const { publicClient } = mockedClient(() => {
+      throw Object.assign(new Error("execution reverted"), {
+        code: 3,
+        data: encodeErrorResult({ abi: errorsAbi, errorName: "UnknownEvent" }),
+      });
+    });
+    const client = new ShowmarkClient({ chain: 1983, publicClient, addresses: { registry } });
+    expect(await client.getEvent(404n)).toBeNull();
+  });
+
+  it("resolves the presence key through PresenceLens", async () => {
+    const { publicClient } = mockedClient(() => encodeFunctionResult({ abi: presenceAbi, functionName: "presenceKeyOf", result: organizer }));
+    const client = new ShowmarkClient({ chain: 1983, publicClient, addresses: { lens } });
+    expect(await client.presenceKeyOf(alice)).toBe(organizer);
+  });
+
   it("decodes hasAttended, presenceOf and claimable", async () => {
     const { publicClient, calls } = mockedClient((call) => {
       if (call.functionName === "hasAttended") return encodeFunctionResult({ abi: registryAbi, functionName: "hasAttended", result: true });

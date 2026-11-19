@@ -142,7 +142,7 @@ function malformed(path: string): ShowmarkNetworkError {
 
 function serializeCheckIn(d: CheckInData): Json {
   if (d.mode !== 1 && d.mode !== 2) throw new ShowmarkInputError(`mode must be 1 or 2, got ${String(d.mode)}`);
-  if (!isAddress(d.attendee, { strict: false })) throw new ShowmarkInputError(`attendee is not a valid address: ${d.attendee}`);
+  if (!isAddress(d.attendee)) throw new ShowmarkInputError(`attendee is not a valid address or its checksum is wrong: ${d.attendee}`);
   if (!isHex(d.attendeeSig) || !isHex(d.doorSig)) throw new ShowmarkInputError("attendeeSig and doorSig must be 0x-prefixed hex");
   if (d.eventId < 0n || d.doorTime < 0n) throw new ShowmarkInputError("eventId and doorTime must not be negative");
   return {
@@ -183,7 +183,7 @@ export async function relayCheckInBatch(options: RelayOptions, items: readonly C
 /** POST /api/relay/link-wallet. Needs the LinkWallet signature from both the pass key and the wallet. */
 export async function relayLinkWallet(options: RelayOptions, req: LinkWalletRequest): Promise<RelayTx> {
   for (const [name, value] of [["pass", req.pass], ["wallet", req.wallet]] as const) {
-    if (!isAddress(value, { strict: false })) throw new ShowmarkInputError(`${name} is not a valid address: ${value}`);
+    if (!isAddress(value)) throw new ShowmarkInputError(`${name} is not a valid address or its checksum is wrong: ${value}`);
   }
   if (!isHex(req.passSig) || !isHex(req.walletSig)) throw new ShowmarkInputError("passSig and walletSig must be 0x-prefixed hex");
   const path = "/api/relay/link-wallet";
@@ -204,7 +204,7 @@ export async function relayLinkWallet(options: RelayOptions, req: LinkWalletRequ
 /** POST /api/relay/withdraw. Pays the account's claimable balance to its linked wallet, or to the account itself. */
 export async function relayWithdraw(options: RelayOptions, req: WithdrawRequest): Promise<RelayTx> {
   for (const [name, value] of [["token", req.token], ["account", req.account]] as const) {
-    if (!isAddress(value, { strict: false })) throw new ShowmarkInputError(`${name} is not a valid address: ${value}`);
+    if (!isAddress(value)) throw new ShowmarkInputError(`${name} is not a valid address or its checksum is wrong: ${value}`);
   }
   const path = "/api/relay/withdraw";
   const body = await request(options, path, { method: "POST", body: { token: req.token, account: req.account } });
