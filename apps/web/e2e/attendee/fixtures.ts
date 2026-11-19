@@ -5,7 +5,7 @@
  */
 import type { Page, Route } from "@playwright/test";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { getAddress, zeroAddress, type Address, type Hex } from "viem";
+import { encodeAbiParameters, getAddress, toEventSelector, toFunctionSelector, zeroAddress, type Address, type Hex } from "viem";
 import { doorPassUrl } from "../../src/lib/qr/payload";
 
 export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 1983);
@@ -129,6 +129,8 @@ export interface MockOptions {
   passport?: "empty" | "full" | "linked" | "fail";
   /** What registry.walletOf(pass) returns over the QIE RPC. Defaults to matching the passport mock. */
   chainWallet?: "linked" | "unlinked" | "down";
+  /** registry.presenceOf turns true this long after the first check-in POST. Unset: never. */
+  presenceAfterMs?: number;
 }
 
 export interface MockResponse {
@@ -167,7 +169,9 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
     return json(route, { status: 200, body: testEvent(id, options.eventOverrides) });
   });
   await page.route(/\/api\/events\?/, (route) => json(route, { status: 200, body: testUpcoming() }));
+  let firstPostAt: number | null = null;
   await page.route("**/api/relay/check-in", async (route) => {
+    firstPostAt ??= Date.now();
     checkIns.push(route.request().postDataJSON());
     const next = checkInQueue.length > 1 ? checkInQueue.shift() : checkInQueue[0];
     if (next === "hang" || !next) return; // never answers: the screen stays in "sending"
@@ -192,22 +196,65 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
     const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-allow-methods": "POST" };
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     const body: unknown = route.request().postDataJSON();
-    const answer = (call: { id: number; method: string }) => ({
-      jsonrpc: "2.0",
-      id: call.id,
-      result:
-        call.method === "eth_chainId"
-          ? `0x${CHAIN_ID.toString(16)}`
-          : call.method === "eth_call"
-            ? `0x${"0".repeat(24)}${(chainWallet === "linked" ? TEST_WALLET : zeroAddress).slice(2).toLowerCase()}`
-            : "0x0",
-    });
-    const reply = Array.isArray(body) ? body.map(answer) : answer(body as { id: number; method: string });
+    const present = options.presenceAfterMs !== undefined && firstPostAt !== null && Date.now() - firstPostAt >= options.presenceAfterMs;
+    const answer = (call: RpcCall) => ({ jsonrpc: "2.0", id: call.id, result: rpcResult(call, { chainWallet, present }) });
+    const reply = Array.isArray(body) ? body.map(answer) : answer(body as RpcCall);
     return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(reply) });
   });
   await page.route("**/api/relay/link-wallet", (route) => json(route, { status: 200, body: { txHash: TX_LINK } }));
   await page.route("**/api/relay/withdraw", (route) => json(route, { status: 200, body: { txHash: TX_WITHDRAW } }));
   return { checkIns };
+}
+
+interface RpcCall {
+  id: number;
+  method: string;
+  params?: unknown[];
+}
+
+const WALLET_OF = toFunctionSelector("walletOf(address)");
+const PRESENCE_OF = toFunctionSelector("presenceOf(uint256,address)");
+const CHECKED_IN = toEventSelector("CheckedIn(uint256,address,uint8,address,uint64,uint32)");
+const MOCK_BLOCK = BigInt(4_410_021);
+
+/** Answers the JSON-RPC calls the attendee app makes directly against QIE. */
+function rpcResult(call: RpcCall, state: { chainWallet: "linked" | "unlinked"; present: boolean }): unknown {
+  switch (call.method) {
+    case "eth_chainId":
+      return `0x${CHAIN_ID.toString(16)}`;
+    case "eth_blockNumber":
+      return `0x${MOCK_BLOCK.toString(16)}`;
+    case "eth_getTransactionReceipt":
+      return null;
+    case "eth_call": {
+      const data = String((call.params?.[0] as { data?: string; input?: string } | undefined)?.data ?? (call.params?.[0] as { input?: string } | undefined)?.input ?? "");
+      if (data.startsWith(PRESENCE_OF)) {
+        return encodeAbiParameters([{ type: "uint8" }, { type: "uint64" }], state.present ? [1, BigInt(Math.floor(Date.now() / 1000))] : [0, BigInt(0)]);
+      }
+      if (data.startsWith(WALLET_OF)) return encodeAbiParameters([{ type: "address" }], [state.chainWallet === "linked" ? TEST_WALLET : zeroAddress]);
+      return "0x";
+    }
+    case "eth_getLogs": {
+      if (!state.present) return [];
+      const filter = call.params?.[0] as { address?: string; topics?: (string | null)[] } | undefined;
+      const topics = filter?.topics ?? [];
+      return [
+        {
+          address: filter?.address ?? REGISTRY,
+          topics: [CHECKED_IN, topics[1] ?? `0x${"0".repeat(64)}`, topics[2] ?? `0x${"0".repeat(64)}`],
+          data: encodeAbiParameters([{ type: "uint8" }, { type: "address" }, { type: "uint64" }, { type: "uint32" }], [1, zeroAddress, BigInt(0), 0]),
+          blockNumber: `0x${MOCK_BLOCK.toString(16)}`,
+          blockHash: `0x${"cd".repeat(32)}`,
+          transactionHash: TX_CHECK_IN,
+          transactionIndex: "0x0",
+          logIndex: "0x0",
+          removed: false,
+        },
+      ];
+    }
+    default:
+      return "0x0";
+  }
 }
 
 /** Puts the fixed test pass on the phone before any page script runs. */

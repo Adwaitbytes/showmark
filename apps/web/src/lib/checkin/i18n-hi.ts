@@ -62,6 +62,7 @@ export const hi: Dictionary = {
     receiptPending: "ब्लॉक का इंतज़ार है",
     receiptNotSent: "अभी भेजा नहीं गया",
     receiptEarlier: "पहले दर्ज हो चुका",
+    receiptTxLoading: "ट्रांज़ैक्शन लिंक आ रहा है",
   },
   errors: {
     invalidCode: {

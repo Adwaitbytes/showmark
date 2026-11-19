@@ -16,6 +16,7 @@ import {
 } from "@/lib/checkin/local-records";
 import { useLocale } from "@/lib/checkin/locale";
 import { createWaiter, runCheckIn, type CheckInDeps, type CheckInPhase } from "@/lib/checkin/machine";
+import { raceTxStatus } from "@/lib/checkin/tx-race";
 import { passAndSign, type SignResult } from "@/lib/checkin/pass-signer";
 import type { CheckInRequest } from "@/lib/checkin/sign";
 import { useDoorLocation, type DoorCode } from "@/lib/checkin/door-fragment";
@@ -50,6 +51,16 @@ const CHECK_IN_MARGIN_MS = 60 * 60_000;
 // Start the check-in as soon as this code runs in the browser, before hydration (see early.ts).
 startEarlyCheckIn();
 
+// Direct chain reads (presence, receipts, the CheckedIn log), fetched while the relay request is out.
+let chainWatch: Promise<typeof import("@/lib/checkin/chain-watch")> | null = null;
+function loadChainWatch() {
+  chainWatch ??= import("@/lib/checkin/chain-watch");
+  chainWatch.catch(() => {
+    chainWatch = null;
+  });
+  return chainWatch;
+}
+
 /**
  * The door QR opens here. The check-in starts on load: scanning the code is the intent, a tap
  * would only cost a second of the door code's short life, and checking in twice is harmless
@@ -76,6 +87,8 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
   const [prior, setPrior] = useState<PriorStamp | null>(null);
   const [showLinkPrompt, setShowLinkPrompt] = useState(false);
   const [runKey, setRunKey] = useState(0);
+  // Set when the stamp was confirmed by reading the chain directly and the transaction is looked up after.
+  const [foundTx, setFoundTx] = useState<Hex | null>(null);
 
   const requestRef = useRef<CheckInRequest | null>(null);
   const finishedRef = useRef(false);
@@ -121,7 +134,12 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
         }
         return postCheckIn(request, { signal: s });
       },
-      txStatus: (hash, s) => getTxStatus(hash, { signal: s }),
+      txStatus: (hash, s) =>
+        raceTxStatus(
+          loadChainWatch().then((m) => m.chainReceipt(hash)),
+          getTxStatus(hash, { signal: s }),
+        ),
+      presence: (request, s) => (s.aborted ? Promise.resolve(null) : loadChainWatch().then((m) => m.chainPresence(BigInt(request.eventId), request.attendee))),
       now: Date.now,
       isOnline: () => navigator.onLine,
       wait: waiter.wait,
@@ -133,6 +151,7 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
 
     async function go() {
       if (!door) return;
+      void loadChainWatch();
       let request = requestRef.current;
       if (!request) {
         let signed: SignResult;
@@ -169,6 +188,31 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
     };
   }, [door, runKey, waiter, token, fragment]);
 
+  // Presence was seen on chain before the relay answered: find the transaction from the CheckedIn log.
+  const needsTx = phase.kind === "stamped" && phase.txHash === null && !foundTx;
+  useEffect(() => {
+    if (!needsTx || !pass || !eventId) return;
+    let cancelled = false;
+    (async () => {
+      const { findCheckInTx } = await loadChainWatch();
+      for (let attempt = 0; attempt < 15 && !cancelled; attempt++) {
+        const tx = await findCheckInTx(BigInt(eventId), pass);
+        if (cancelled) return;
+        if (tx) {
+          setFoundTx(tx);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
+    })().catch(() => {
+      // The stamp stands without a link; the passport shows the transaction once indexed.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsTx, pass, eventId]);
+  const stampTx = phase.kind === "stamped" ? (phase.txHash ?? foundTx) : null;
+
   // Once the stamp is in: keep it on this phone for the passport, look up an earlier stamp, and
   // decide whether to suggest linking a wallet.
   useEffect(() => {
@@ -176,14 +220,14 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
     const controller = new AbortController();
     const eventName = eventNameRef.current ?? t.common.eventFallback(eventId);
 
-    if (phase.kind === "stamped") {
+    if (phase.kind === "stamped" && stampTx) {
       recordLocalStamp({
         eventId,
         eventName,
         city: event.status === "ready" ? event.event.metadata.city : "",
         at: new Date(phase.at).toISOString(),
         mode: 1,
-        tx: phase.txHash,
+        tx: stampTx,
         streak: 0,
         holder: pass,
       });
@@ -205,7 +249,7 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
     return () => controller.abort();
     // eventFallback only formats the id; the stamp is recorded once per phase change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, pass, eventId]);
+  }, [phase, pass, eventId, stampTx]);
 
   const now = useNow(phase.kind === "waiting" && phase.retryAt !== null, phase.kind === "waiting" ? phase.retryAt : null);
   // A stamp this phone confirmed earlier answers "already checked in" before the index does.
@@ -257,7 +301,7 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
             </SheetSection>
             <Perforation />
             <SheetSection>
-              <Receipt phase={phase} prior={priorStamp} />
+              <Receipt phase={phase} prior={priorStamp} stampTx={stampTx} />
             </SheetSection>
           </>
         )}
@@ -442,7 +486,7 @@ function StampStage({ phase, pass, eventId, eventName, city, prior, startsAt, is
   let content: React.ReactNode;
   if (phase.kind === "stamped") {
     content = (
-      <StampPress pressKey={phase.txHash}>
+      <StampPress pressKey={phase.txHash ?? `chain-${phase.at}`}>
         <Stamp {...base} at={new Date(phase.at).toISOString()} />
       </StampPress>
     );
@@ -465,12 +509,19 @@ function StampStage({ phase, pass, eventId, eventName, city, prior, startsAt, is
   return <div className="grid min-h-64 place-items-center sm:min-h-72">{content}</div>;
 }
 
-function Receipt({ phase, prior }: { phase: ScreenPhase; prior: PriorStamp | null }) {
+function Receipt({ phase, prior, stampTx }: { phase: ScreenPhase; prior: PriorStamp | null; stampTx: Hex | null }) {
   const { t } = useLocale();
   const at = phase.kind === "stamped" ? new Date(phase.at).toISOString() : phase.kind === "already" ? (prior?.at ?? null) : null;
-  const tx = phase.kind === "stamped" || phase.kind === "confirming" ? phase.txHash : phase.kind === "already" ? (prior?.tx ?? null) : null;
+  const tx = phase.kind === "stamped" ? stampTx : phase.kind === "confirming" ? phase.txHash : phase.kind === "already" ? (prior?.tx ?? null) : null;
   if (phase.kind === "already" && !at && !tx) return null;
-  const waitingWord = phase.kind === "confirming" ? t.checkIn.receiptPending : phase.kind === "already" ? t.checkIn.receiptEarlier : t.checkIn.receiptNotSent;
+  const waitingWord =
+    phase.kind === "confirming"
+      ? t.checkIn.receiptPending
+      : phase.kind === "stamped"
+        ? t.checkIn.receiptTxLoading
+        : phase.kind === "already"
+          ? t.checkIn.receiptEarlier
+          : t.checkIn.receiptNotSent;
   return (
     <Ledger label={t.checkIn.receiptLabel}>
       <LedgerRow

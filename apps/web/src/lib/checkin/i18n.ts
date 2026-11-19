@@ -73,6 +73,7 @@ const english = {
     receiptPending: "Waiting for the block",
     receiptNotSent: "Not sent yet",
     receiptEarlier: "Recorded earlier",
+    receiptTxLoading: "Transaction link loading",
   },
   errors: {
     invalidCode: {

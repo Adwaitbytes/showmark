@@ -112,7 +112,8 @@ export const parseSubmitted: Parser<Submitted> = (body) =>
 
 export function postCheckIn(request: CheckInRequest, options?: RequestOptions): Promise<ApiResult<Submitted>> {
   // keepalive: a check-in already signed should still reach the relay if the person locks the phone.
-  return apiRequest("/api/relay/check-in", postJson(request), parseSubmitted, { keepalive: true, ...options });
+  // 6 s: the chain is watched in parallel, so a lost response is retried rather than waited out.
+  return apiRequest("/api/relay/check-in", postJson(request), parseSubmitted, { keepalive: true, timeoutMs: 6_000, ...options });
 }
 
 export interface TxState {

@@ -12,6 +12,11 @@ import type { CheckInRequest } from "./sign";
  *      |  \-> already                      (one presence per event: show the stamp they have)
  *      |  \-> failed                       (final: stale code, full event, window closed, rejected)
  *      \-> waiting -> sending ...          (offline, relay down, rate limited: the signed check-in is kept)
+ *
+ * In parallel, from the first send, the chain itself is asked every second whether presence is
+ * recorded. Whichever answers first wins: a relay hash with a mined receipt, or presence on chain
+ * (then the stamp shows without a hash until the screen finds the transaction). A lost or slow HTTP
+ * response therefore never costs more than about a second.
  */
 export type CheckInPhase =
   | { kind: "sending"; attempt: number }
@@ -23,7 +28,7 @@ export type CheckInPhase =
       retryAt: number | null;
     }
   | { kind: "confirming"; txHash: Hex; since: number }
-  | { kind: "stamped"; txHash: Hex; at: number; blockNumber?: string }
+  | { kind: "stamped"; txHash: Hex | null; at: number; blockNumber?: string }
   | { kind: "already" }
   | { kind: "failed"; problem: CheckInProblem; txHash?: Hex };
 
@@ -36,6 +41,8 @@ export interface CheckInDeps {
   wait(ms: number | null, signal: AbortSignal): Promise<void>;
   /** Keeps the signed check-in on the phone until the relay has it. */
   outbox?: { save(request: CheckInRequest): void; remove(request: CheckInRequest): void };
+  /** Asks the chain whether presence is recorded: true, false, or null when it cannot be read. */
+  presence?(request: CheckInRequest, signal: AbortSignal): Promise<boolean | null>;
 }
 
 export interface CheckInOptions {
@@ -45,12 +52,62 @@ export interface CheckInOptions {
   pollMs: number;
   /** How long to wait for the transaction before saying it is slow. */
   confirmTimeoutMs: number;
+  /** How often to ask the chain directly whether presence is recorded. */
+  presencePollMs: number;
 }
 
-export const DEFAULT_CHECK_IN_OPTIONS: CheckInOptions = { maxAttempts: 20, pollMs: 700, confirmTimeoutMs: 45_000 };
+export const DEFAULT_CHECK_IN_OPTIONS: CheckInOptions = { maxAttempts: 20, pollMs: 700, confirmTimeoutMs: 45_000, presencePollMs: 1_000 };
 
 /** Runs one signed check-in to a final phase and returns it. Stops quietly when `signal` aborts. */
 export async function runCheckIn(
+  request: CheckInRequest,
+  deps: CheckInDeps,
+  emit: (phase: CheckInPhase) => void,
+  signal: AbortSignal,
+  options: CheckInOptions = DEFAULT_CHECK_IN_OPTIONS,
+): Promise<CheckInPhase | null> {
+  if (!deps.presence) return runThroughRelay(request, deps, emit, signal, options);
+
+  const inner = new AbortController();
+  const stop = () => inner.abort();
+  signal.addEventListener("abort", stop, { once: true });
+  let settled = false;
+  const guarded = (phase: CheckInPhase) => {
+    if (!settled) emit(phase);
+  };
+  try {
+    const relay = runThroughRelay(request, deps, guarded, inner.signal, options).then((phase) => ({ from: "relay" as const, phase }));
+    const chain = watchPresence(request, deps, inner.signal, options).then((recorded) => ({ from: "chain" as const, recorded }));
+    const first = await Promise.race([relay, chain]);
+    if (first.from === "relay") return first.phase;
+    if (!first.recorded || signal.aborted) return relay.then((r) => r.phase);
+    settled = true;
+    deps.outbox?.remove(request);
+    const phase: CheckInPhase = { kind: "stamped", txHash: null, at: deps.now() };
+    emit(phase);
+    return phase;
+  } finally {
+    inner.abort();
+    signal.removeEventListener("abort", stop);
+  }
+}
+
+/** Polls the chain until presence is recorded (true) or the run stops (null). */
+async function watchPresence(request: CheckInRequest, deps: CheckInDeps, signal: AbortSignal, options: CheckInOptions): Promise<boolean | null> {
+  while (!signal.aborted) {
+    try {
+      await deps.wait(options.presencePollMs, signal);
+    } catch {
+      return null;
+    }
+    const recorded = await deps.presence?.(request, signal);
+    if (signal.aborted) return null;
+    if (recorded) return true;
+  }
+  return null;
+}
+
+async function runThroughRelay(
   request: CheckInRequest,
   deps: CheckInDeps,
   emit: (phase: CheckInPhase) => void,

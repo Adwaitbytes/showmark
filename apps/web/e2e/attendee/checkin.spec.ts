@@ -63,6 +63,18 @@ test.describe("check-in from a door code", () => {
     await expect(page.getByRole("link", { name: "Link QIE Wallet" })).toBeHidden();
   });
 
+  test("shows the stamp from the chain when the relay never answers", async ({ page }) => {
+    // Live journey finding: the relay broadcast at 2.5 s but its HTTP response never arrived.
+    const { checkIns } = await mockApi(page, { checkIn: ["hang"], presenceAfterMs: 2_000 });
+    await page.goto(await doorPath(12n));
+    await expect.poll(() => checkIns.length).toBe(1);
+    const posted = Date.now();
+    await expect(page.getByRole("heading", { level: 1, name: "You are checked in" })).toBeVisible({ timeout: 4_000 });
+    expect(Date.now() - posted).toBeLessThan(4_000);
+    // The transaction is found from the CheckedIn log, so the receipt still links to the explorer.
+    await expect(page.getByRole("link", { name: /transaction 0x5c1f9e2d/ })).toBeVisible({ timeout: 4_000 });
+  });
+
   test("shows the stamp they already have instead of an error", async ({ page }) => {
     await mockApi(page, { checkIn: [ERRORS.already] });
     await page.goto(await doorPath(12n));

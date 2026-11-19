@@ -48,7 +48,7 @@ function harness(posts: ApiResult<Submitted>[], statuses: ApiResult<TxState>[] =
   return { deps, phases: [], waits, outbox };
 }
 
-async function run(h: Harness, options = { maxAttempts: 5, pollMs: 700, confirmTimeoutMs: 45_000 }) {
+async function run(h: Harness, options = { maxAttempts: 5, pollMs: 700, confirmTimeoutMs: 45_000, presencePollMs: 1_000 }) {
   return runCheckIn(request, h.deps, (p) => h.phases.push(p), new AbortController().signal, options);
 }
 
@@ -106,7 +106,7 @@ describe("runCheckIn", () => {
 
   it("gives up after the last attempt but leaves the check-in saved for later", async () => {
     const h = harness([], [], true);
-    const final = await run(h, { maxAttempts: 3, pollMs: 700, confirmTimeoutMs: 45_000 });
+    const final = await run(h, { maxAttempts: 3, pollMs: 700, confirmTimeoutMs: 45_000, presencePollMs: 1_000 });
     expect(final).toMatchObject({ kind: "failed", problem: { kind: "relay", retryable: true } });
     expect(h.deps.postCheckIn).toHaveBeenCalledTimes(3);
     expect(h.outbox.removed).toBe(0);
@@ -119,7 +119,7 @@ describe("runCheckIn", () => {
 
   it("says the network is slow, with the transaction, when no block confirms in time", async () => {
     const h = harness([submitted], []);
-    const final = await run(h, { maxAttempts: 5, pollMs: 10_000, confirmTimeoutMs: 30_000 });
+    const final = await run(h, { maxAttempts: 5, pollMs: 10_000, confirmTimeoutMs: 30_000, presencePollMs: 1_000 });
     expect(final).toMatchObject({ kind: "failed", problem: { kind: "unconfirmed" }, txHash: TX });
   });
 
@@ -173,5 +173,57 @@ describe("createWaiter", () => {
     const waiting = waiter.wait(null, controller.signal);
     controller.abort();
     await expect(waiting).rejects.toThrow("Aborted");
+  });
+});
+
+describe("runCheckIn with the chain watched in parallel", () => {
+  const fast = { maxAttempts: 3, pollMs: 5, confirmTimeoutMs: 1_000, presencePollMs: 10 };
+
+  function liveDeps(overrides: Partial<CheckInDeps>): CheckInDeps & { removed: number } {
+    const waiter = createWaiter();
+    const deps = {
+      removed: 0,
+      postCheckIn: () => new Promise<ApiResult<Submitted>>(() => undefined),
+      txStatus: async () => tx("pending"),
+      now: Date.now,
+      isOnline: () => true,
+      wait: waiter.wait,
+      outbox: { save: () => undefined, remove: () => void deps.removed++ },
+      ...overrides,
+    };
+    return deps;
+  }
+
+  it("shows the stamp from the chain when the relay response never arrives", async () => {
+    let reads = 0;
+    const deps = liveDeps({ presence: async () => ++reads >= 3 });
+    const phases: CheckInPhase[] = [];
+    const final = await runCheckIn(request, deps, (p) => phases.push(p), new AbortController().signal, fast);
+    expect(final).toMatchObject({ kind: "stamped", txHash: null });
+    expect(reads).toBe(3);
+    expect(deps.removed).toBe(1);
+    expect(phases.at(-1)).toEqual(final);
+  });
+
+  it("uses the relay's hash when the receipt lands before the chain read", async () => {
+    const deps = liveDeps({ postCheckIn: async () => submitted, txStatus: async () => tx("success"), presence: async () => false });
+    const final = await runCheckIn(request, deps, () => undefined, new AbortController().signal, fast);
+    expect(final).toMatchObject({ kind: "stamped", txHash: TX });
+  });
+
+  it("keeps waiting on the relay when the chain cannot be read", async () => {
+    const deps = liveDeps({ postCheckIn: async () => submitted, txStatus: async () => tx("success"), presence: async () => null });
+    expect((await runCheckIn(request, deps, () => undefined, new AbortController().signal, fast))?.kind).toBe("stamped");
+  });
+
+  it("emits nothing from the relay once the chain has decided", async () => {
+    let release: (value: ApiResult<Submitted>) => void = () => undefined;
+    const deps = liveDeps({ postCheckIn: () => new Promise((resolve) => (release = resolve)), presence: async () => true });
+    const phases: CheckInPhase[] = [];
+    await runCheckIn(request, deps, (p) => phases.push(p), new AbortController().signal, fast);
+    const count = phases.length;
+    release(submitted);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(phases).toHaveLength(count);
   });
 });

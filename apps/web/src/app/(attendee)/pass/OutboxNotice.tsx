@@ -40,9 +40,9 @@ export function OutboxNotice({ entry, onSettled }: { entry: OutboxEntry; onSettl
       },
       setPhase,
       controller.signal,
-      { maxAttempts: 1, pollMs: 700, confirmTimeoutMs: 45_000 },
+      { maxAttempts: 1, pollMs: 700, confirmTimeoutMs: 45_000, presencePollMs: 1_000 },
     );
-    if (final?.kind === "stamped") {
+    if (final?.kind === "stamped" && final.txHash) {
       recordLocalStamp({
         eventId: entry.request.eventId,
         eventName,
