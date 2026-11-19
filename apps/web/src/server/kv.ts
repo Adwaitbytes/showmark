@@ -250,6 +250,22 @@ export function setStore(next: KeyValueStore | null): void {
   store = next;
 }
 
+let processCache: MemoryStore | null = null;
+
+/**
+ * For caches only (names, explorer stats): the shared store when it is available, otherwise a per-process memory
+ * cache, so read pages keep working while Redis is down or not yet provisioned. Never use this for locks.
+ */
+export function cacheStore(): KeyValueStore {
+  try {
+    return getStore();
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    processCache ??= new MemoryStore();
+    return processCache;
+  }
+}
+
 type Window = `${number} s` | `${number} m`;
 
 function windowMs(window: Window): number {

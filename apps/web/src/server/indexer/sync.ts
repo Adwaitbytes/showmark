@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { after } from "next/server";
 import type { Address } from "viem";
 import { chainContext, contractsDeployed, type ChainContext } from "../chain";
 import { getDatabase, type Database } from "../db/client";
@@ -10,6 +11,7 @@ import { tryLock } from "../lock";
 import { log } from "../log";
 import { buildStatements, syncStateStatement } from "./apply";
 import { decodeShowmarkLogs } from "./decode";
+import { refreshProfiles } from "./profiles";
 
 /**
  * eth_getLogs block span. Probed on 19 Nov 2026: rpc1..rpc5 mainnet and rpc1 testnet accept at most 10,001 blocks
@@ -152,6 +154,32 @@ export async function ensureFresh(options: { kv?: KeyValueStore; deps?: SyncDeps
     log.warn("indexer.catch_up_failed", { error });
   } finally {
     await lock.release();
+  }
+  scheduleProfileRefresh(kv, deps);
+}
+
+const PROFILE_REFRESH_EVERY_MS = 60_000;
+
+/**
+ * Names and first-seen facts come from RPC and the explorer, so they are filled in after the response is sent
+ * (Next.js `after`), at most once a minute, a few addresses at a time. Outside a request there is nothing to
+ * run after, and the cron route does the same work on its own schedule.
+ */
+function scheduleProfileRefresh(kv: KeyValueStore, deps: SyncDeps): void {
+  const task = async () => {
+    const lock = await tryLock(kv, `idx:profiles:${deps.ctx.chainId}`, PROFILE_REFRESH_EVERY_MS);
+    if (!lock) return;
+    try {
+      await refreshProfiles(5, { ctx: deps.ctx, database: deps.database, kv });
+    } catch (error) {
+      log.warn("indexer.profile_refresh_failed", { error });
+    }
+    // The lock is left to expire on purpose: it doubles as the once-a-minute throttle.
+  };
+  try {
+    after(task);
+  } catch (error) {
+    log.debug("indexer.profile_refresh_not_scheduled", { reason: error instanceof Error ? error.message : String(error) });
   }
 }
 

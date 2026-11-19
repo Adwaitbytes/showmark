@@ -3,7 +3,7 @@ import { getAddress } from "viem";
 import { chainContext, type ChainContext } from "../chain";
 import { getDatabase, type Database } from "../db/client";
 import * as t from "../db/schema";
-import { getStore, type KeyValueStore } from "../kv";
+import { cacheStore, type KeyValueStore } from "../kv";
 import { log } from "../log";
 import { hadActivityBefore } from "../qie/blockscout";
 import { holdsQieId, nameOf } from "../qie/names";
@@ -21,7 +21,7 @@ function defaults(partial?: Partial<ProfileDeps>): ProfileDeps {
   return {
     ctx: partial?.ctx ?? chainContext(),
     database: partial?.database ?? getDatabase(),
-    kv: partial?.kv ?? getStore(),
+    kv: partial?.kv ?? cacheStore(),
     fetchImpl: partial?.fetchImpl ?? fetch,
   };
 }

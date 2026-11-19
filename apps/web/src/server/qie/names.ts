@@ -1,7 +1,7 @@
 import { BaseError, ContractFunctionRevertedError, getAddress, isAddressEqual, parseAbi, zeroAddress, type Address } from "viem";
 import { chainContext, type ChainContext } from "../chain";
 import { AppError, COMMON_ERRORS } from "../errors";
-import { getStore, type KeyValueStore } from "../kv";
+import { cacheStore, type KeyValueStore } from "../kv";
 import { log } from "../log";
 
 // QIE ID names, read from the QIE ID root registry (mainnet 0x1D69...f62e, an ERC1967 proxy), verified against
@@ -55,7 +55,7 @@ interface NameDeps {
 }
 
 function deps(partial?: Partial<NameDeps>): NameDeps {
-  return { ctx: partial?.ctx ?? chainContext(), kv: partial?.kv ?? getStore() };
+  return { ctx: partial?.ctx ?? chainContext(), kv: partial?.kv ?? cacheStore() };
 }
 
 /** Owner of `fqn` in one registry, or null when the registry has no such name (or no such function). */

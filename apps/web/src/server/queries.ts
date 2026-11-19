@@ -21,7 +21,7 @@ import { getDatabase, type Db } from "./db/client";
 import * as t from "./db/schema";
 import { AppError, READ_ERRORS } from "./errors";
 import { ensureFresh } from "./indexer/sync";
-import { getStore } from "./kv";
+import { cacheStore } from "./kv";
 import { log } from "./log";
 import { attendeeShare, pendingFor, SETTLE_GRACE_MS } from "./payouts";
 import { chainTransactionsToday } from "./qie/blockscout";
@@ -541,7 +541,7 @@ const CHAIN_STATS_KEY = "traction:chain-today";
 const CHAIN_STATS_MS = 5 * 60_000;
 
 async function chainToday(chainId: number): Promise<number | null> {
-  const kv = getStore();
+  const kv = cacheStore();
   const key = `${CHAIN_STATS_KEY}:${chainId}`;
   const cached = await kv.get(key);
   if (cached !== null) return cached === "" ? null : Number(cached);
