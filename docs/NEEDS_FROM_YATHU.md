@@ -2,6 +2,10 @@
 
 Written once. Everything else is being built without waiting. Secrets go only into `.env.local` at the repo root, never into chat or a web page.
 
+## Blocking right now
+
+0. **GitHub workflow scope.** The public repo is https://github.com/23f2000979/showmark but pushes are rejected because the CLI token lacks the `workflow` scope (needed for CI). Run `! gh auth refresh -h github.com -s workflow` in this session and approve in the browser.
+
 ## Blocking mainnet (needed by Mon 23 Nov)
 
 1. **Fund two addresses with mainnet QIE.** The keys were generated locally and live only in `.env.local` (gitignored). Send about 60 QIE to the deployer and 40 QIE to the relayer. The addresses are listed in `docs/STATUS.md` under "Wallets".
