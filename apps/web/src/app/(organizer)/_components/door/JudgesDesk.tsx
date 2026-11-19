@@ -39,14 +39,17 @@ const HONEST_LINE = "This desk is run by the Showmark team so judges can try a r
 function useDeskPass(enabled: boolean) {
   const [code, setCode] = useState<DeskCode | null>(null);
   const [error, setError] = useState<ErrorCopy | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  // Starts at 0 so the server prerender never reads the clock; the first pass and the tick set real time.
+  const [now, setNow] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPass = useCallback(async () => {
     try {
       const pass = await requestJson("/api/judges-desk/pass", passSchema);
       const svg = await doorQrSvg(pass.url);
-      setCode({ url: pass.url, svg, issuedAt: String(Math.floor(Date.parse(pass.issuedAt) / 1000)), expiresAt: Date.parse(pass.expiresAt), receivedAt: Date.now() });
+      const receivedAt = Date.now();
+      setNow(receivedAt);
+      setCode({ url: pass.url, svg, issuedAt: String(Math.floor(Date.parse(pass.issuedAt) / 1000)), expiresAt: Date.parse(pass.expiresAt), receivedAt });
       setError(null);
     } catch (e) {
       setError(e instanceof ApiRequestError ? e.copy : errorCopy(e));
