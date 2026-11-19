@@ -9,10 +9,14 @@ describe("door pass codec", () => {
     const p = { eventId: 42n, issuedAt: 1795073006n, doorSig: sig, ticketKey };
     expect(decodeDoorPass(encodeDoorPass(p))).toEqual(p);
     expect(decodeDoorPass(doorPassUrl("https://showmark.example/", p))).toEqual(p);
+    // The ticket key travels only in the fragment, never in the path a server would log.
+    const url = new URL(doorPassUrl("https://showmark.example/", p));
+    expect(url.pathname).not.toContain(encodeDoorPass(p).split("#")[1]);
+    expect(url.hash.length).toBeGreaterThan(40);
   });
 
   it("rejects malformed input instead of throwing", () => {
-    for (const bad of ["", "1.2", "x.2.abc", "1.2.!!!", `1.2.${"A".repeat(10)}`, "https://x/c/1.2", `1.2.${"q".repeat(87)}`, `1.2.${"q".repeat(87)}.${"A".repeat(43)}`]) {
+    for (const bad of ["", "1.2", "x.2.abc", "1.2.!!!", `1.2.${"A".repeat(10)}`, "https://x/c/1.2", `1.2.${"q".repeat(87)}`, `1.2.${"q".repeat(87)}#${"A".repeat(43)}`, `1.2.${"q".repeat(87)}.${"5c".repeat(21)}`]) {
       expect(decodeDoorPass(bad)).toBeNull();
     }
   });

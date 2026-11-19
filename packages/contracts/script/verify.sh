@@ -48,9 +48,11 @@ verify() {
     echo
   else
     echo "verifying $target at $address"
-    "${cmd[@]}"
+    # Keep going: Blockscout can lag on contracts created inside another constructor (PresenceStamp).
+    "${cmd[@]}" || { echo "FAILED to verify $target at $address; rerun this script later" >&2; FAILED=1; }
   fi
 }
+FAILED=0
 
 verify "$QIE_ID_CHECK" src/QieIdCheck.sol:QieIdCheck \
   "$(cast abi-encode 'constructor(address)' "$NAME_REGISTRY")"
@@ -72,3 +74,5 @@ if [ "$TESTNET_MOCKS" = "true" ]; then
   verify "$ORACLE" src/testnet/TestnetAggregator.sol:TestnetAggregator \
     "$(cast abi-encode 'constructor(address,int256)' "$DEPLOYER" "$(field testnetInitialPrice)")"
 fi
+
+exit "$FAILED"

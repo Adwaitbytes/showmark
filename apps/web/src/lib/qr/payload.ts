@@ -3,9 +3,10 @@ import { bytesToHex, hexToBytes, isAddress, getAddress, type Address, type Hex }
 // Wire formats for the two QR codes in Showmark. Kept short so codes stay readable from the back of a hall.
 //
 // Door pass (mode 1), shown on the door screen and opened by any phone camera:
-//   {origin}/c/{eventId}.{issuedAt}.{doorSig base64url}.{ticketKey base64url}
+//   {origin}/c/{eventId}.{issuedAt}.{doorSig base64url}#{ticketKey base64url}
 // The ticket key is a throwaway private key for this 15 second rotation. Only people who see the QR have it,
 // and the chain only ever sees its signatures, so a door pass read from calldata cannot admit anyone else.
+// It rides in the URL fragment, which browsers never send to a server, so it stays out of hosting logs (audit N-03).
 // Attendee code (mode 2, door scans you), shown on the attendee's phone and scanned by the door app:
 //   SM2.{eventId}.{attendee}.{attendeeSig base64url}
 
@@ -69,20 +70,27 @@ function decodeKey(text: string): Hex | null {
 }
 
 export function encodeDoorPass(p: DoorPassPayload): string {
-  return `${p.eventId}.${p.issuedAt}.${encodeSig(p.doorSig)}.${encodeKey(p.ticketKey)}`;
+  return `${p.eventId}.${p.issuedAt}.${encodeSig(p.doorSig)}#${encodeKey(p.ticketKey)}`;
 }
 
 export function doorPassUrl(origin: string, p: DoorPassPayload): string {
   return `${origin.replace(/\/$/, "")}/c/${encodeDoorPass(p)}`;
 }
 
-/** Accepts the bare token or a full URL containing /c/{token}. Returns null for anything malformed. */
+/**
+ * Accepts the bare token (`{eventId}.{issuedAt}.{sig}#{key}`) or a full URL containing /c/{token}#{key}.
+ * Returns null for anything malformed.
+ */
 export function decodeDoorPass(input: string): DoorPassPayload | null {
   const trimmed = input.trim();
-  const token = trimmed.includes("/c/") ? trimmed.slice(trimmed.lastIndexOf("/c/") + 3).split(/[?#]/)[0] : trimmed;
+  const afterPath = trimmed.includes("/c/") ? trimmed.slice(trimmed.lastIndexOf("/c/") + 3) : trimmed;
+  const hashAt = afterPath.indexOf("#");
+  if (hashAt < 0) return null;
+  const token = afterPath.slice(0, hashAt).split("?")[0];
+  const key = afterPath.slice(hashAt + 1);
   const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [eventId, issuedAt, sig, key] = parts;
+  if (parts.length !== 3) return null;
+  const [eventId, issuedAt, sig] = parts;
   if (!DECIMAL.test(eventId) || !DECIMAL.test(issuedAt)) return null;
   const doorSig = decodeSig(sig);
   const ticketKey = decodeKey(key);

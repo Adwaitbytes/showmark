@@ -329,7 +329,7 @@ Plain words, sentence case, specific numbers. No em or en dashes, no emoji, no e
 
 ## 8. QR payloads (`apps/web/src/lib/qr/payload.ts`, mirrored by the SDK)
 
-- Door pass (mode 1): `{origin}/c/{eventId}.{issuedAt}.{doorSig base64url}.{ticketKey base64url}` (ticketKey is the 32 byte ephemeral private key; its address is derived, not transmitted). Any phone camera opens it straight into the attendee app at `/c/[token]`. The door screen re-signs every 15 seconds.
+- Door pass (mode 1): `{origin}/c/{eventId}.{issuedAt}.{doorSig base64url}#{ticketKey base64url}`. The ticket key is the 32 byte ephemeral private key; its address is derived, not transmitted. It rides in the URL fragment so it never reaches a server or its logs (audit N-03). Any phone camera opens it straight into the attendee app at `/c/[token]`. The door screen re-signs every 15 seconds.
 - Attendee code (mode 2): `SM2.{eventId}.{attendee}.{attendeeSig base64url}`, shown in the attendee app and scanned by the door app.
 - Signatures are 65 bytes. Decoders return null on any malformed input and never throw.
 
