@@ -76,12 +76,26 @@ export function formatTokenAmount(baseUnits: string, symbol: TokenSymbol, maxFra
   return fraction ? `${grouped}.${fraction}` : grouped;
 }
 
+/**
+ * Dollars for reading. A non-zero value under a cent shows as "<$0.01" so real money never reads
+ * as nothing; zero is always "$0.00"; cents show below $10 and are dropped above it.
+ */
 export function formatUsd(value: number): string {
+  if (value !== 0 && Math.abs(value) < 0.01) return "<$0.01";
+  const cents = Math.abs(value) < 10;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: value !== 0 && Math.abs(value) < 10 ? 2 : 0,
+    minimumFractionDigits: cents ? 2 : 0,
+    maximumFractionDigits: cents ? 2 : 0,
   }).format(value);
+}
+
+const pluralRules = new Intl.PluralRules("en-US");
+
+/** "1 person", "3 people", "1,250 events". The count is grouped; the plural defaults to noun + "s". */
+export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${formatCount(count)} ${pluralRules.select(count) === "one" ? singular : pluralForm}`;
 }
 
 export function formatPercent(ratio: number, fractionDigits = 0): string {

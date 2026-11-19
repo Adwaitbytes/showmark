@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { basisPointsToPercent, formatEventWindow, formatTokenAmount, shortAddress, shortHash } from "./format";
+import { basisPointsToPercent, formatEventWindow, formatTokenAmount, formatUsd, plural, shortAddress, shortHash } from "./format";
 
 describe("formatTokenAmount", () => {
   it("formats QUSDC base units with cents", () => {
@@ -61,5 +61,27 @@ describe("basisPointsToPercent", () => {
   it("prints whole and fractional percentages", () => {
     expect(basisPointsToPercent(6000)).toBe("60%");
     expect(basisPointsToPercent(250)).toBe("2.50%");
+  });
+});
+
+describe("formatUsd", () => {
+  it("never shows a non-zero amount as zero", () => {
+    expect(formatUsd(0.0017)).toBe("<$0.01");
+    expect(formatUsd(-0.004)).toBe("<$0.01");
+  });
+
+  it("uses one zero format and cents below ten dollars", () => {
+    expect(formatUsd(0)).toBe("$0.00");
+    expect(formatUsd(1.2)).toBe("$1.20");
+    expect(formatUsd(431.4)).toBe("$431");
+  });
+});
+
+describe("plural", () => {
+  it("picks the noun form from the count", () => {
+    expect(plural(1, "person", "people")).toBe("1 person");
+    expect(plural(0, "person", "people")).toBe("0 people");
+    expect(plural(1250, "event")).toBe("1,250 events");
+    expect(plural(1, "organizer")).toBe("1 organizer");
   });
 });

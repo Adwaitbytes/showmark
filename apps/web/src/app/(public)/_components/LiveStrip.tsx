@@ -5,19 +5,19 @@ import { isDeployed } from "@/lib/chain/addresses";
 import { activeChain } from "@/lib/chain/chains";
 import { getTraction } from "@/server/queries";
 import { BlankStampMark } from "@/ui/EmptyState";
-import { formatCount, formatTime, formatTokenAmount, formatUsd } from "@/ui/format";
+import { formatCount, formatTime, formatTokenAmount, formatUsd, plural } from "@/ui/format";
 import { Notice } from "@/ui/Notice";
 import { Skeleton } from "@/ui/Skeleton";
 import { load } from "./load";
 
-function settledSummary(traction: Traction): string {
-  const parts = traction.settled
+/** Token amounts settled, largest first. The token amount leads; dollars are only a reading aid. */
+function settledParts(traction: Traction): string[] {
+  return traction.settled
     .map((row) => {
       const total = (BigInt(row.teamFunded) + BigInt(row.external)).toString();
       return total === "0" ? null : `${formatTokenAmount(total, row.symbol)} ${row.symbol}`;
     })
     .filter((part): part is string => part !== null);
-  return parts.length ? parts.join(" and ") : "Nothing settled yet";
 }
 
 function Cell({ label, value, note }: { label: string; value: string; note: string }) {
@@ -78,6 +78,13 @@ export async function LiveStrip() {
   }
 
   const usd = traction.settledUsd.teamFunded + traction.settledUsd.external;
+  const [firstSettled, ...moreSettled] = settledParts(traction);
+  const settledNote = [
+    ...moreSettled.map((part) => `and ${part}`),
+    traction.settledUsd.price > 0 && firstSettled ? `about ${formatUsd(usd)} at today's oracle price` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     <>
       <dl className={frame}>
@@ -87,11 +94,11 @@ export async function LiveStrip() {
           note="Distinct passes with a recorded presence"
         />
         <Cell
-          label="Events with check-ins"
+          label="Events"
           value={formatCount(traction.eventsWithCheckIns)}
-          note={`Run by ${formatCount(traction.organizers)} organizers`}
+          note={`With check-ins, run by ${plural(traction.organizers, "organizer")}`}
         />
-        <Cell label="Settled to people" value={usd > 0 ? formatUsd(usd) : "0"} note={settledSummary(traction)} />
+        <Cell label="Settled to people" value={firstSettled ?? "0"} note={settledNote || "Nothing settled yet"} />
         <Cell
           label="Showmark transactions"
           value={formatCount(traction.showmarkTransactions)}
