@@ -29,8 +29,9 @@
   --rule-soft: rgb(20 19 17 / 0.13); /* decorative hairlines */
   --focus: #2b4bd9;
   --chart-1: #2b4bd9; /* check-ins; validated with the dataviz palette checks */
-  --chart-2: #e4442b; /* settlements */
+  --chart-2: #1e7a4c; /* settlements: money paid out reads as ledger green */
   --shadow-color: 32 28 20;
+  --sheet-edge: 0 0 0 1px rgb(20 19 17 / 0.06);
   --duration-press: 180ms;
   --duration-page: 220ms;
   --ease-press: cubic-bezier(0.2, 1.4, 0.4, 1);
@@ -43,22 +44,23 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #12110f;
-    --paper-deep: #23211d;
+    --paper-deep: #2b2823;
     --ink: #ede7db;
     --ink-soft: #a9a296;
     --vermilion: #eb5a40;
     --stamp-blue: #8da0ff;
     --ledger-green: #58b987;
-    --sheet: #1a1916;
-    --ink-faint: #938c80;
-    --vermilion-ink: #eb5a40;
+    --sheet: #201e1a;
+    --ink-faint: #9a9387;
+    --vermilion-ink: #f0664d;
     --on-vermilion: #12110f;
-    --rule: #757064;
+    --rule: #7d776b;
     --rule-soft: rgb(237 231 219 / 0.12);
     --focus: #8da0ff;
     --chart-1: #7489f2;
-    --chart-2: #eb5a40;
+    --chart-2: #52a77a;
     --shadow-color: 0 0 0;
+    --sheet-edge: inset 0 1px 0 rgb(237 231 219 / 0.05), 0 0 0 1px rgb(237 231 219 / 0.07);
     --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .9 0 0 0 0 .85 0 0 0 .15 -.05'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
@@ -66,22 +68,23 @@
 
 :root[data-theme="dark"] {
   --paper: #12110f;
-  --paper-deep: #23211d;
+  --paper-deep: #2b2823;
   --ink: #ede7db;
   --ink-soft: #a9a296;
   --vermilion: #eb5a40;
   --stamp-blue: #8da0ff;
   --ledger-green: #58b987;
-  --sheet: #1a1916;
-  --ink-faint: #938c80;
-  --vermilion-ink: #eb5a40;
+  --sheet: #201e1a;
+  --ink-faint: #9a9387;
+  --vermilion-ink: #f0664d;
   --on-vermilion: #12110f;
-  --rule: #757064;
+  --rule: #7d776b;
   --rule-soft: rgb(237 231 219 / 0.12);
   --focus: #8da0ff;
   --chart-1: #7489f2;
-  --chart-2: #eb5a40;
+  --chart-2: #52a77a;
   --shadow-color: 0 0 0;
+  --sheet-edge: inset 0 1px 0 rgb(237 231 219 / 0.05), 0 0 0 1px rgb(237 231 219 / 0.07);
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .9 0 0 0 0 .85 0 0 0 .15 -.05'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
@@ -126,11 +129,9 @@
 
   --shadow-*: initial;
   --shadow-sheet:
-    0 0 0 1px rgb(var(--shadow-color) / 0.06), 0 1px 1px rgb(var(--shadow-color) / 0.05),
-    0 12px 28px -18px rgb(var(--shadow-color) / 0.32);
+    var(--sheet-edge), 0 1px 1px rgb(var(--shadow-color) / 0.05), 0 12px 28px -18px rgb(var(--shadow-color) / 0.32);
   --shadow-lift:
-    0 0 0 1px rgb(var(--shadow-color) / 0.07), 0 2px 3px rgb(var(--shadow-color) / 0.06),
-    0 22px 44px -22px rgb(var(--shadow-color) / 0.4);
+    var(--sheet-edge), 0 2px 3px rgb(var(--shadow-color) / 0.06), 0 22px 44px -22px rgb(var(--shadow-color) / 0.4);
 }
 
 @theme {
