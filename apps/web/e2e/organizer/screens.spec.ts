@@ -119,7 +119,7 @@ const shots: Shot[] = [
     path: "/door/1/scan",
     state: () => createState({ authorizeAll: true }),
     prepare: async (page) => {
-      await page.getByLabel("Or type a code").fill(encodeAttendeeCode({ eventId: 7n, attendee: "0x7aE3b1c9D4f20a8E6B5c3D1f9A2e4B6c8D0f1A3b", attendeeSig: `0x${"11".repeat(65)}` }));
+      await page.getByLabel("Or type a code").fill(encodeAttendeeCode({ eventId: 7n, attendee: "0x7ae3b1c9d4f20a8e6b5c3d1f9a2e4b6c8d0f1a3b", attendeeSig: `0x${"11".repeat(65)}` }));
       await page.getByRole("button", { name: "Check in", exact: true }).click();
       await expect(page.getByTestId("scan-result")).toBeVisible();
     },
