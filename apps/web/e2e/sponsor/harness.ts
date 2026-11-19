@@ -350,6 +350,10 @@ export async function mockApi(page: Page, mocks: ApiMocks = {}): Promise<{ signe
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path === "/api/auth/session" && route.request().method() === "DELETE") {
+      signedIn = false;
+      return json(route, 200, { signedOut: true });
+    }
     if (path === "/api/auth/session") return signedIn ? json(route, 200, session()) : json(route, 401, { error: { code: "unauthorized", message: "Not signed in.", action: "Sign in." } });
     if (path === "/api/auth/nonce") {
       const nonce = "testnonce12345";

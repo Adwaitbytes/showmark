@@ -74,4 +74,15 @@ test.describe("campaign console", () => {
     await expect(page.getByRole("button", { name: "Revoke" })).toHaveCount(0);
     await expect(page.getByLabel("Find events to fund")).toHaveCount(0);
   });
+
+  test("signing out ends the session and returns to the connect screen", async ({ page }) => {
+    await installWallet(page);
+    await mockChain(page, chainState());
+    const api = await mockApi(page, { signedIn: true, campaigns: [CAMPAIGN_SUMMARY] });
+    await page.goto("/sponsor");
+    await page.getByRole("button", { name: "Connect QIE Wallet" }).click();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page.getByRole("button", { name: "Connect QIE Wallet" })).toBeVisible();
+    expect(api.signedIn()).toBe(false);
+  });
 });

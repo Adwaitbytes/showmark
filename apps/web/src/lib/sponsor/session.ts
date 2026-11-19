@@ -60,3 +60,19 @@ export async function signIn(client: WalletClient, address: Address): Promise<Se
   const signature = await client.signMessage({ account: address, message: challenge.message });
   return apiPost("/api/auth/verify", { message: challenge.message, signature }, sessionSchema);
 }
+
+const SIGN_OUT_FAILED = {
+  message: "Showmark could not end your session just now.",
+  action: "Try again. The session also ends by itself after 15 minutes idle.",
+};
+
+/** Ends the session (DELETE /api/auth/session). The caller disconnects the wallet afterwards. */
+export async function signOut(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/session", { method: "DELETE", credentials: "same-origin" });
+  } catch {
+    throw new ApiRequestError(0, SIGN_OUT_FAILED);
+  }
+  if (!response.ok) throw new ApiRequestError(response.status, SIGN_OUT_FAILED);
+}

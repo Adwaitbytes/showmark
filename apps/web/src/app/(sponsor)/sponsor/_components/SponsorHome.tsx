@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { Address } from "viem";
 import type { CampaignSummary } from "@/lib/api/types";
 import { campaignSummarySchema, listOf, sponsorApi } from "@/lib/sponsor/api";
 import { presencesCovered } from "@/lib/sponsor/math";
+import { signOut } from "@/lib/sponsor/session";
 import { useApi } from "@/lib/sponsor/use-api";
+import { disconnect } from "@/lib/wallet/use-wallet";
 import { AddressChip } from "@/ui/AddressChip";
 import { Button } from "@/ui/Button";
 import { cn } from "@/ui/cn";
@@ -130,6 +133,36 @@ function Totals({ campaigns }: { campaigns: CampaignSummary[] }) {
   );
 }
 
+function SignOut() {
+  const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
+  async function run() {
+    setState("busy");
+    try {
+      await signOut();
+      disconnect();
+    } catch {
+      setState("failed");
+    }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void run()}
+        disabled={state === "busy"}
+        className="inline-flex min-h-8 items-center rounded-doc px-2 text-sm text-ink-soft underline decoration-transparent underline-offset-4 transition-colors hover:text-ink hover:decoration-current disabled:opacity-50"
+      >
+        Sign out
+      </button>
+      {state === "failed" ? (
+        <span role="alert" className="w-full text-sm font-medium text-vermilion-ink">
+          Showmark could not end your session just now. Try again; it also ends by itself after 15 minutes idle.
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function Campaigns({ seat }: { seat: SponsorSeat }) {
   const { state, reload } = useApi(sponsorApi.campaigns(seat.account as Address), campaignsSchema, { pollMs: 30_000 });
 
@@ -141,6 +174,7 @@ function Campaigns({ seat }: { seat: SponsorSeat }) {
           <h1 className="font-display text-3xl sm:text-4xl">Your campaigns</h1>
           <p className="flex flex-wrap items-center gap-2 text-sm text-ink-soft">
             {seat.safe ? "Funding from Safe" : "Signed in as"} <AddressChip address={seat.account} name={seat.name} />
+            {seat.safe ? null : <SignOut />}
           </p>
         </div>
         <Button variant="primary" href="/sponsor/new" trailing={<ArrowRightIcon className="size-4" />}>
