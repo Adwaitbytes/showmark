@@ -5,7 +5,7 @@
  */
 import type { Page, Route } from "@playwright/test";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { zeroAddress, type Address, type Hex } from "viem";
+import { getAddress, zeroAddress, type Address, type Hex } from "viem";
 import { doorPassUrl } from "../../src/lib/qr/payload";
 
 export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 1983);
@@ -35,7 +35,7 @@ export const domainForTests = domain;
 /** A fixed pass key so screenshots and passport mocks line up. Test-only. */
 export const TEST_PASS_KEY: Hex = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 export const TEST_PASS = privateKeyToAccount(TEST_PASS_KEY).address;
-export const TEST_WALLET: Address = "0x2F9d41aE7b3C5e8D1a6F0b4C9e2D7a5B3c1E8f06";
+export const TEST_WALLET: Address = getAddress("0x2f9d41ae7b3c5e8d1a6f0b4c9e2d7a5b3c1e8f06");
 export const QUSDC: Address = "0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5";
 
 function hoursFromNow(h: number): string {
@@ -184,4 +184,34 @@ export async function seedPass(page: Page): Promise<void> {
   await page.addInitScript((key) => {
     window.localStorage.setItem("showmark.pass.v1", JSON.stringify({ version: 1, privateKey: key, createdAt: "2026-11-19T10:00:00.000Z", origin: "random" }));
   }, TEST_PASS_KEY);
+}
+
+/**
+ * A stand-in QIE Wallet announced over EIP-6963, already on the app's chain. It returns a fixed,
+ * well-formed signature: the relay is mocked, so nothing verifies it. Test-only.
+ */
+export async function installFakeWallet(page: Page): Promise<void> {
+  await page.addInitScript(
+    ({ account, chainId }) => {
+      const provider = {
+        async request({ method }: { method: string }) {
+          if (method === "eth_requestAccounts" || method === "eth_accounts") return [account];
+          if (method === "eth_chainId") return `0x${chainId.toString(16)}`;
+          if (method === "eth_signTypedData_v4") return `0x${"ab".repeat(64)}1b`;
+          if (method === "wallet_switchEthereumChain") return null;
+          throw Object.assign(new Error(`unsupported ${method}`), { code: 4200 });
+        },
+        on() {},
+        removeListener() {},
+      };
+      const announce = () =>
+        window.dispatchEvent(
+          new CustomEvent("eip6963:announceProvider", {
+            detail: Object.freeze({ info: { uuid: "test-qie-wallet", name: "QIE Wallet", icon: "", rdns: "me.qiewallet" }, provider }),
+          }),
+        );
+      window.addEventListener("eip6963:requestProvider", announce);
+    },
+    { account: TEST_WALLET, chainId: CHAIN_ID },
+  );
 }

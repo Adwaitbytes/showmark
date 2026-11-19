@@ -25,12 +25,18 @@ export default defineConfig({
     {
       name: "phone",
       testMatch: /checkin\.spec\.ts|scan\.spec\.ts|pass\.spec\.ts/,
-      use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 }, browserName: "chromium" },
+      use: {
+        ...devices["Pixel 7"],
+        viewport: { width: 390, height: 844 },
+        browserName: "chromium",
+        launchOptions: { args: ["--use-fake-device-for-media-stream"] },
+      },
     },
     {
       name: "capture",
       testMatch: /capture\.spec\.ts/,
-      use: { browserName: "chromium", reducedMotion: "reduce" },
+      // A fake camera device (Chromium's test pattern); access still needs grantPermissions.
+      use: { browserName: "chromium", channel: "chromium", reducedMotion: "reduce", launchOptions: { args: ["--use-fake-device-for-media-stream"] } },
     },
   ],
 });

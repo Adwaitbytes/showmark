@@ -178,12 +178,12 @@ export function LinkWallet() {
                 {t.link.step1}
               </StepTitle>
               {connected ? (
-                <div className="flex flex-col gap-1.5 pl-10">
+                <div className="flex flex-col gap-1.5 sm:pl-10">
                   <span className="text-sm text-ink-soft">{t.link.connectedAs}</span>
                   <AddressChip address={connected} />
                 </div>
               ) : (
-                <div className="flex flex-col gap-3 pl-10">
+                <div className="flex flex-col gap-3 sm:pl-10">
                   <Button
                     variant="primary"
                     size="lg"
@@ -217,7 +217,7 @@ export function LinkWallet() {
               <StepTitle n={2} done={false}>
                 {t.link.step2}
               </StepTitle>
-              <div className="flex flex-col gap-4 pl-10">
+              <div className="flex flex-col gap-4 sm:pl-10">
                 <p className="text-base text-ink-soft">{t.link.signExplain}</p>
                 {stampIds.length > 0 ? (
                   <label htmlFor={checkboxId} className="flex min-h-11 cursor-pointer items-center gap-3 text-base text-ink">

@@ -163,7 +163,7 @@ function Cover({ pass, wallet, qieName, count, loading }: { pass: Address | null
   return (
     <Sheet as="header" className="overflow-hidden">
       {pass ? (
-        <Guilloche seed={pass} variant="rosette" detail={180} label={t.pass.guillocheLabel} className="pointer-events-none absolute -top-16 -right-20 size-72 opacity-70 sm:-right-10 sm:size-80" />
+        <Guilloche seed={pass} variant="rosette" detail={180} label={t.pass.guillocheLabel} className="pointer-events-none absolute -top-20 -right-28 size-72 opacity-45 sm:-top-16 sm:-right-12 sm:size-80 sm:opacity-60" />
       ) : null}
       <SheetSection className="relative flex flex-col gap-2 pb-6 sm:pb-8">
         <p className="text-sm font-medium tracking-[0.08em] text-ink-soft uppercase">Showmark</p>
@@ -175,22 +175,30 @@ function Cover({ pass, wallet, qieName, count, loading }: { pass: Address | null
         {loading ? (
           <SkeletonText lines={2} />
         ) : pass ? (
-          <Ledger>
-            <LedgerRow label={t.pass.passLabel} value={<AddressChip address={pass} />} />
-            <LedgerRow
-              label={t.pass.walletLabel}
-              value={
-                wallet ? (
+          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-[1fr_1fr_auto]">
+            <div className="flex min-w-0 flex-col items-start gap-1.5">
+              <dt className="text-sm text-ink-soft">{t.pass.passLabel}</dt>
+              <dd className="max-w-full">
+                <AddressChip address={pass} />
+              </dd>
+            </div>
+            <div className="flex min-w-0 flex-col items-start gap-1.5">
+              <dt className="text-sm text-ink-soft">{t.pass.walletLabel}</dt>
+              <dd className="max-w-full">
+                {wallet ? (
                   <AddressChip address={wallet} name={qieName} />
                 ) : (
-                  <Button href="/pass/link" variant="quiet" leading={<WalletIcon className="size-4" />} className="font-sans">
+                  <Button href="/pass/link" variant="quiet" leading={<WalletIcon className="size-4" />}>
                     {t.checkIn.linkNow}
                   </Button>
-                )
-              }
-            />
-            <LedgerRow label={t.pass.stampsTitle} value={String(count)} />
-          </Ledger>
+                )}
+              </dd>
+            </div>
+            <div className="flex flex-col items-start gap-1.5 sm:items-end">
+              <dt className="text-sm text-ink-soft">{t.pass.stampsTitle}</dt>
+              <dd className="font-display text-3xl leading-none text-ink">{count}</dd>
+            </div>
+          </dl>
         ) : (
           <p className="text-base text-ink-soft">{t.pass.noPassNote}</p>
         )}
@@ -268,11 +276,6 @@ function Pending({ passport, entries, deadlines }: { passport: PassportData; ent
             <li key={`${p.campaignId}-${p.eventId}`} className="flex flex-col gap-1 py-3">
               <span className="text-base font-medium text-ink">{t.pass.pendingFor(eventName)}</span>
               <span className="text-sm text-ink-soft">{reason}</span>
-              {p.reason === "NeedsQieId" ? (
-                <Button href="/pass/link" variant="quiet" className="mt-1.5 self-start">
-                  {t.checkIn.linkNow}
-                </Button>
-              ) : null}
             </li>
           );
         })}

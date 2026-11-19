@@ -163,7 +163,7 @@ function FullscreenCode({ svg, label, eventName, onClose }: { svg: string; label
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    dialog?.showModal();
+    if (dialog && !dialog.open) dialog.showModal();
     let lock: WakeLockSentinel | null = null;
     navigator.wakeLock
       ?.request("screen")
@@ -174,8 +174,8 @@ function FullscreenCode({ svg, label, eventName, onClose }: { svg: string; label
         // Wake lock is a nicety; the code works without it.
       });
     return () => {
+      // No dialog.close() here: its close event would report a dismissal the person never made.
       void lock?.release().catch(() => undefined);
-      dialog?.close();
     };
   }, []);
 

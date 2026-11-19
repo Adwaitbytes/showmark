@@ -45,9 +45,9 @@ export function StampBooklet({ entries, holder }: { entries: readonly BookletEnt
           </EmptyState>
         </div>
       ) : (
-        <ol className="grid grid-cols-2 gap-px overflow-hidden rounded-doc bg-rule-soft shadow-sheet sm:grid-cols-3 xl:grid-cols-4">
+        <ol className="grid grid-cols-2 overflow-hidden rounded-doc bg-sheet grain shadow-sheet sm:grid-cols-3 xl:grid-cols-4">
           {entries.map(({ stamp, indexed }) => (
-            <li key={stamp.eventId} className="flex flex-col items-center gap-3 bg-sheet grain px-3 pt-6 pb-4 text-center">
+            <li key={stamp.eventId} className="flex flex-col items-center gap-3 px-3 pt-6 pb-4 text-center shadow-[0_0_0_0.5px_var(--rule-soft)]">
               <Stamp
                 eventId={stamp.eventId}
                 eventName={stamp.eventName}

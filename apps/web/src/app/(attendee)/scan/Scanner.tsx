@@ -67,7 +67,7 @@ async function canvasReader(): Promise<Reader> {
 function cameraState(error: unknown): CameraState {
   const name = error instanceof DOMException || error instanceof Error ? error.name : "";
   if (name === "NotAllowedError" || name === "SecurityError") return "denied";
-  if (name === "NotFoundError" || name === "OverconstrainedError" || name === "TypeError") return "no-camera";
+  if (name === "NotFoundError" || name === "OverconstrainedError" || name === "NotSupportedError" || name === "TypeError") return "no-camera";
   if (name === "NotReadableError" || name === "AbortError") return "busy";
   return "failed";
 }
