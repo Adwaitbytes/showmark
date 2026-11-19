@@ -63,31 +63,34 @@ export const campaignSummarySchema = z.object({
   settledAmount: uintString,
   teamFunded: z.boolean(),
   status: z.enum(["scheduled", "live", "ended", "refundable", "refunded"]),
+  maxPerEvent: z.number().int().min(0),
+  maxTotal: z.number().int().min(0),
+  openToBonded: z.boolean(),
+  minBond: uintString,
 }) satisfies z.ZodType<CampaignSummary>;
 
-/** Settlement plus the optional .qie names the API may add (requested from workstream B). */
 export const settlementSchema = z.object({
   campaignId: uintString,
   eventId: uintString,
   eventName: z.string(),
   attendee: address,
-  attendeeName: z.string().nullable().optional(),
+  attendeeName: z.string().nullable(),
   organizer: address,
-  organizerName: z.string().nullable().optional(),
+  organizerName: z.string().nullable(),
   gross: uintString,
   toAttendee: uintString,
   toOrganizer: uintString,
   fee: uintString,
   at: iso,
   tx: hex,
-});
-export type SponsorSettlement = Settlement & { attendeeName?: string | null; organizerName?: string | null };
+}) satisfies z.ZodType<Settlement>;
+export type SponsorSettlement = Settlement;
 
 export const campaignDetailSchema = campaignSummarySchema.extend({
   events: z.array(eventSummarySchema.extend({ approved: z.boolean(), settled: z.number().int() })),
   settlements: z.array(settlementSchema),
 });
-export type SponsorCampaignDetail = Omit<CampaignDetail, "settlements"> & { settlements: SponsorSettlement[] };
+export type SponsorCampaignDetail = CampaignDetail;
 
 /** `/api/campaigns/[id]/report?format=json`: the campaign with every settlement, not just the latest 200. */
 export const reportSchema = z.object({ generatedAt: iso, campaign: campaignDetailSchema });

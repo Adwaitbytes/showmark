@@ -155,6 +155,10 @@ export const CAMPAIGN_SUMMARY: CampaignSummary = {
   settledAmount: SETTLED_AMOUNT.toString(),
   teamFunded: false,
   status: "live",
+  maxPerEvent: 150,
+  maxTotal: 0,
+  openToBonded: false,
+  minBond: "0",
 };
 
 export const CAMPAIGNS: CampaignSummary[] = [

@@ -42,17 +42,13 @@ export function CampaignFacts({ c, chain }: { c: CampaignSummary; chain: OnChain
       <LedgerRow label="QIE ID needed" value={<Word>{c.requireQieId ? "Yes" : "No"}</Word>} />
       <LedgerRow label="From" value={when(startsAt)} />
       <LedgerRow label="Until" value={when(endsAt)} note={chain && chain.endsAt < Math.floor(Date.parse(c.endsAt) / 1000) ? "Closed early by the sponsor" : undefined} />
-      {chain ? (
-        <>
-          <LedgerRow label="Per event cap" value={chain.maxPerEvent === 0 ? <Word>None</Word> : formatCount(chain.maxPerEvent)} />
-          <LedgerRow label="Total cap" value={chain.maxTotal === 0 ? <Word>None</Word> : formatCount(chain.maxTotal)} />
-          <LedgerRow
-            label="Bonded organizers"
-            value={<Word>{chain.openToBonded ? "Paid" : "Not paid"}</Word>}
-            note={chain.openToBonded ? `Organizers with a bond of ${formatUnits(chain.minBond, 18)} QIE or more are paid without approval` : "Only events the sponsor approved are paid"}
-          />
-        </>
-      ) : null}
+      <LedgerRow label="Per event cap" value={c.maxPerEvent === 0 ? <Word>None</Word> : formatCount(c.maxPerEvent)} />
+      <LedgerRow label="Total cap" value={c.maxTotal === 0 ? <Word>None</Word> : formatCount(c.maxTotal)} />
+      <LedgerRow
+        label="Bonded organizers"
+        value={<Word>{c.openToBonded ? "Paid" : "Not paid"}</Word>}
+        note={c.openToBonded ? `Organizers with a bond of ${formatUnits(BigInt(c.minBond), 18)} QIE or more are paid without approval` : "Only events the sponsor approved are paid"}
+      />
     </Ledger>
   );
 }
