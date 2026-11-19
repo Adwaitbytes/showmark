@@ -1,14 +1,14 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/copy/site";
 
-/** Makes the attendee app installable: it opens straight into the passport, with scan one tap away. */
+/** Makes the attendee app installable: it opens on the pass, with scan and passport one tap away. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
     name: SITE.name,
     short_name: SITE.name,
     description: SITE.description,
-    start_url: "/me",
+    start_url: "/pass",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

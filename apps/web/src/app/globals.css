@@ -123,8 +123,8 @@
   --color-chart-2: var(--chart-2);
 
   --font-*: initial;
-  --font-display: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-instrument-serif), var(--font-devanagari-display), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-geist), var(--font-devanagari), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
   --shadow-*: initial;

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif, Noto_Sans_Devanagari, Tiro_Devanagari_Hindi } from "next/font/google";
 import { ViewTransition } from "react";
 import { SITE } from "@/lib/copy/site";
 import { THEME_STORAGE_KEY } from "@/ui/theme";
@@ -23,6 +23,23 @@ const mono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
   display: "swap",
+});
+
+// Hindi copy: Geist and Instrument Serif have no Devanagari, so these fill in for those glyphs only.
+// Not preloaded; the browser fetches them only when a page actually contains Devanagari text.
+const devanagari = Noto_Sans_Devanagari({
+  subsets: ["devanagari"],
+  variable: "--font-devanagari",
+  display: "swap",
+  preload: false,
+});
+
+const devanagariDisplay = Tiro_Devanagari_Hindi({
+  weight: "400",
+  subsets: ["devanagari"],
+  variable: "--font-devanagari-display",
+  display: "swap",
+  preload: false,
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -55,7 +72,7 @@ const restoreTheme = `try{var t=localStorage.getItem(${JSON.stringify(THEME_STOR
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable} ${devanagari.variable} ${devanagariDisplay.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: restoreTheme }} />
       </head>

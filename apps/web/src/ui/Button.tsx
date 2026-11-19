@@ -23,7 +23,13 @@ type NativeAnchorProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "classNam
 
 export type ButtonProps =
   | (CommonProps & NativeButtonProps & { href?: undefined; pending?: boolean })
-  | (CommonProps & NativeAnchorProps & { href: string; external?: boolean });
+  | (CommonProps &
+      NativeAnchorProps & {
+        href: string;
+        external?: boolean;
+        /** Passed to next/link. Set false to keep a heavy destination out of this page's first load. */
+        prefetch?: boolean;
+      });
 
 const base =
   "group/button relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-doc font-medium " +
@@ -68,7 +74,7 @@ export function Button(props: ButtonProps) {
   const classes = cn(base, variants[variant], sizes[size], block && "w-full", className);
 
   if (native.href !== undefined) {
-    const { href, external = false, ...anchorProps } = native;
+    const { href, external = false, prefetch, ...anchorProps } = native;
     if (external) {
       return (
         <a href={href} target="_blank" rel="noopener noreferrer" className={classes} {...anchorProps}>
@@ -80,7 +86,7 @@ export function Button(props: ButtonProps) {
       );
     }
     return (
-      <Link href={href} className={classes} {...anchorProps}>
+      <Link href={href} prefetch={prefetch} className={classes} {...anchorProps}>
         {leading}
         {children}
         {trailing}

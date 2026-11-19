@@ -21,6 +21,7 @@ const DEFAULT_ROUTES = [
   "/",
   "/traction",
   "/e/1",
+  "/e/2",
   "/p/0x7aE3b1c9D4f20a8E6B5c3D1f9A2e4B6c8D0f1A3b",
   "/docs",
   "/docs/check-in",
