@@ -229,6 +229,15 @@ contract ShowmarkRegistry is IShowmarkRegistry, Ownable2Step, Pausable, EIP712 {
         }
     }
 
+    /// @inheritdoc IShowmarkRegistry
+    function relocateStamps(address pass, uint256[] calldata eventIds) external {
+        address wallet = _walletOf[pass];
+        if (wallet == address(0)) revert NotLinked();
+        for (uint256 i; i < eventIds.length; ++i) {
+            _stamp.relocate(pass, wallet, eventIds[i]);
+        }
+    }
+
     // ------------------------------------------------------------------ views
 
     /// @notice The EIP-712 domain separator (name "Showmark", version "1", this chain, this contract).

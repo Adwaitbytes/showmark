@@ -632,6 +632,24 @@ contract ShowmarkRegistryTest is RegistryFixture {
         assertEq(registry.presenceOf(eventId, wallet).mode, 0, "presence stays keyed by pass");
     }
 
+    function test_relocateStamps_movesMissedStampsToTheLinkedWalletOnly() public {
+        _checkInNow(eventId, attendeePk);
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = eventId;
+        ids[1] = 777; // not held, skipped
+
+        vm.expectRevert(IShowmarkRegistry.NotLinked.selector);
+        registry.relocateStamps(attendee, ids);
+
+        _link(attendeePk, walletPk); // linked with an empty relocation list
+        assertEq(stamp.balanceOf(attendee, eventId), 1);
+
+        vm.prank(makeAddr("anyone"));
+        registry.relocateStamps(attendee, ids);
+        assertEq(stamp.balanceOf(attendee, eventId), 0);
+        assertEq(stamp.balanceOf(wallet, eventId), 1);
+    }
+
     function test_linkWallet_laterStampsMintToWallet() public {
         _link(attendeePk, walletPk);
         _checkInNow(eventId, attendeePk);

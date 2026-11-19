@@ -150,6 +150,8 @@ interface IShowmarkRegistry {
     error BadPassSig();
     /// @notice The wallet signature (ECDSA or ERC-1271) over LinkWallet is invalid.
     error BadWalletSig();
+    /// @notice The pass has no linked wallet.
+    error NotLinked();
 
     /// @notice Opens a series of recurring events owned by the caller.
     /// @param metadata Free-form JSON describing the series, at most 2,048 bytes.
@@ -220,6 +222,12 @@ interface IShowmarkRegistry {
         bytes calldata walletSig,
         uint256[] calldata relocateEventIds
     ) external;
+
+    /// @notice Moves stamps a linked pass still holds to its wallet. Anyone may call; stamps can only go to the
+    /// pass's own linked wallet. Covers ids left out of the (unsigned) relocation list given to linkWallet.
+    /// @param pass A linked pass.
+    /// @param eventIds Stamp ids to move; ids the pass does not hold are skipped.
+    function relocateStamps(address pass, uint256[] calldata eventIds) external;
 
     /// @notice Returns an event. All fields are zero for an unknown id.
     /// @param eventId The event.
