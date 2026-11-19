@@ -3,7 +3,7 @@
 Run from `packages/contracts` with `slither .` (Slither 0.11.6, 102 detectors). `slither.config.json` limits the
 report to `src/` by filtering `lib/`, `test/` and `script/`.
 
-Result on 19 Nov 2026, after the audit and both re-reviews' fixes: 30 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
+Result on 19 Nov 2026, after the audit and all three re-reviews' fixes: 30 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
 below with the reason it is accepted. Two lint-level items found earlier by `forge lint` were fixed in code: the
 `CheckedIn` event is emitted before the stamp mint, and the `uint64(block.timestamp)` cast is annotated.
 
@@ -47,7 +47,7 @@ below with the reason it is accepted. Two lint-level items found earlier by `for
 |---|---|
 | `CampaignVault.topUp`, `closeCampaign`, `refund`, `_settle`, `_quote` | Campaign windows, the 3 day grace period and the 48 hour oracle age are hours to days long; validator drift of a few seconds cannot change an outcome that matters. |
 | `OrganizerBond.completeUnbond` | 7 day unbond delay; seconds of drift are irrelevant. |
-| `CampaignVault.releaseExposure` | Releases a campaign's bonded exposure only after `endsAt + SETTLE_GRACE` (3 days); seconds of drift cannot let a still-payable campaign release early in any way that matters, because settlement uses the same bound. |
+| `CampaignVault.releaseExposure` | Releases a campaign's bonded exposure only after `challengeDeadline` (`endsAt + SETTLE_GRACE + REVIEW_PERIOD`, 10 days after the end); seconds of drift are irrelevant at that scale. |
 | `OrganizerBond._locked` | False positive: `claimed < stake` compares amounts only; Slither taints `stake` because it is read next to the pending unbond's `availableAt`. The same taint adds the `locked > bonded` and `pending <= held` amount comparisons to the `completeUnbond` entry. |
 | `ShowmarkRegistry.linkWallet` | Signature deadline chosen by the signer, minutes long. |
 | `ShowmarkRegistry._validate` | Check-in freshness and windows are the product's core rule and are defined against block time by the spec; a 30 second clock-skew allowance is built in, and the residual risk (a relayed rotating QR) is documented in the threat model. |

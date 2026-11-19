@@ -14,8 +14,8 @@ Development was AI-assisted; every line was written for this project.
 |---|---|---|
 | `ShowmarkRegistry` | Events, series, door keys, check-ins (single and batched), streaks and pass-to-wallet links. Verifies the attendee's `CheckIn` (which binds the proof mode), the door's `DoorPass` or `DoorAttest`, and for mode 1 the rotation ticket's `Ticket` EIP-712 signatures (domain `Showmark`, version `1`). Never calls the vault. Deploys the stamp in its constructor. | 15,387 B |
 | `PresenceStamp` | Soulbound ERC-1155, token id = event id. Only the registry mints and relocates; transfers and approvals revert with `Soulbound()`. `uri(id)` is `{baseURI}{id}`. | 6,323 B |
-| `CampaignVault` | Sponsor escrow. Pays per verified presence in a token amount or in USD converted to QIE at the oracle price, splits fee, attendee and organizer shares into claimable balances, and refunds the rest after the grace period. | 18,446 B |
-| `OrganizerBond` | Organizers stake QIE so sponsors can open a campaign to any bonded organizer. Sponsors challenge, the protocol Safe arbitrates and may slash. Arbitration is centralized in v1. | 7,084 B |
+| `CampaignVault` | Sponsor escrow. Pays per verified presence in a token amount or in USD converted to QIE at the oracle price, splits fee, attendee and organizer shares into claimable balances, and refunds the rest after the grace period. | 18,564 B |
+| `OrganizerBond` | Organizers stake QIE so sponsors can open a campaign to any bonded organizer. Sponsors challenge, the protocol Safe arbitrates and may slash. Arbitration is centralized in v1. | 7,498 B |
 | `PresenceLens` | `IPresence` over the registry for other contracts and the SDK. Resolves a linked wallet to its pass. | 1,856 B |
 | `QieIdCheck` | Says whether a wallet holds a QIE ID by reading QIE's name registry (`userDomain(wallet)` non-empty). Never reverts. | 550 B |
 | `examples/PresenceGatedMint` | Reference integration: one souvenir NFT per person per attended event. | 5,848 B |
@@ -92,13 +92,18 @@ links on the registry. It never stops `refund` or `withdraw`.
     through bonded eligibility. A payout that would take the total above the organizer's current bond returns
     status 5 `EventNotEligible`, so one stake backs at most its own value across all accepted campaigns at once.
     Payouts for explicitly approved events are not counted.
-  - Once a campaign can no longer pay (now > `endsAt + SETTLE_GRACE`) and its sponsor has no open challenge against
-    the organizer, anyone may call `releaseExposure(campaignId, organizer)` to give that campaign's share back.
+  - A campaign's exposure stays held through a review period after it can no longer pay: once
+    now > `challengeDeadline(campaignId)` (= `endsAt + SETTLE_GRACE + REVIEW_PERIOD`, with `REVIEW_PERIOD` 7 days)
+    and its sponsor has no open challenge against the organizer, anyone may call
+    `releaseExposure(campaignId, organizer)` to give that campaign's share back. Until then the sponsor can still
+    challenge (re-review N3-02). The sponsor UI should show `challengeDeadline`.
 - **Arbitration.** The OrganizerBond owner (the protocol Safe) resolves challenges. Rules (audit L-03, re-reviews
   N-02, N2-01, N2-02):
   - A challenge is a claim on the bond, and only a campaign the bond actually backed has one: the campaign must be
-    open to bonded organizers and `vault.exposureOf(campaignId, organizer)` must be positive. That exposure, read
-    when the challenge is filed, is the claim. Token campaigns and approved-only events never drew on the bond, so
+    open to bonded organizers and `vault.exposureOf(campaignId, organizer)` must be positive. That exposure is the
+    claim. Exposure can only grow while the challenge is open, so anyone may call `refreshClaim(challengeId)` to
+    raise the claim to the live exposure (it never lowers), and `resolve` refreshes before slashing; filing early is
+    never worse than filing late (re-review N3-01). Token campaigns and approved-only events never drew on the bond, so
     they cannot challenge it.
   - The sponsor posts exactly `challengeDeposit` in QIE (1 QIE on mainnet, set at deploy), and at most one challenge
     per (campaign, organizer) is open. The deposit returns to the challenger if the Safe slashes and goes to the
@@ -150,19 +155,20 @@ disagreement with the contracts. Unit tests pin the same properties down case by
 | 9 | No upgradeability; pause never blocks refund or withdraw | `invariant_9_immutableAndExitsNeverPaused` (code hashes constant; every claim withdrawn while paused) | `test_refund_worksWhilePausedAndForErc20`, `test_withdraw_worksWhilePausedAndForErc20` |
 | 10 | Stale or non-positive price defers (status 9), never misprices | `invariant_10_oracleNeverMisprices` | `test_oracle_*`, `testFuzz_usdPricing` |
 
-A full run checks every invariant against real traffic. Totals for one run of the suite after the second
+A full run checks every invariant against real traffic. Totals for one run of the suite after the third
 re-review fixes (256 runs, 32,768 calls, no handler reverts even with fail-on-revert; from the `ACC` log line at
-`-vv`): 949 check-ins recorded and 1,922 rejected, 119 presences settled (34 through the organizer's bond), 55
-settlements deferred for price, 57 withdrawals, 84 refunds, 31 exits while paused, 210 opt-ins, 43 challenges filed
-and 22 resolved. Disabling the ticket check makes
+`-vv`): 934 check-ins recorded and 1,894 rejected, 89 presences settled (25 through the organizer's bond), 36
+settlements deferred for price, 50 withdrawals, 85 refunds, 32 exits while paused, 207 opt-ins, 35 challenges filed
+and 18 resolved, with claims refreshed along the way. Disabling the ticket check makes
 invariant 6 fail, so the new replay cases are not vacuous.
 
 `test/invariant/BondInvariants.t.sol` stresses the bond alone (256 runs, 32,768 calls): many concurrent claims
 against one organizer, filed, slashed and dismissed in any order, with bonding, unbonding and deposit claims in
 between. It asserts the claim identity (`claimedOf` equals the sum of open claims, `lockedOf == min(stake, open
 claims)`), that no unbond pays out claimed stake, that no slash exceeds `min(claim, current stake)`, and that
-holdings equal stake plus deposits held. Clearing all claims on one resolution, or ignoring claims in
-`completeUnbond`, both make it fail.
+holdings equal stake plus deposits held, and that a refresh sets a claim to max(claim, live exposure) while
+`resolve` slashes against the live claim. Clearing all claims on one resolution, ignoring claims in
+`completeUnbond`, or disabling the refresh each make it fail.
 
 ## Differences from docs/INTERFACES.md
 
@@ -195,7 +201,8 @@ Each is the safest correct variant of a gap or flaw found while building, and is
   re-review fixes add the vault's `optInOpenCampaign`, `optOutOpenCampaign`, `releaseExposure`, `optedIn` and
   `exposureOf` (N-01), and the bond's `challengeDeposit` constructor parameter, payable `challenge`,
   `claimedOf`, `lockedOf`, `depositOwed`, `claimDeposit` and the `claim` and `deposit` fields of `Challenge`
-  (N-02, N2-01). The vault's `exposureOf` is part of `ICampaignVault` because the bond sizes claims with it.
+  (N-02, N2-01). The third re-review adds the bond's `refreshClaim` and `ClaimRefreshed`, and the vault's
+  `REVIEW_PERIOD` and `challengeDeadline` (N3-01, N3-02). The vault's `exposureOf` is part of `ICampaignVault` because the bond sizes claims with it.
 - **A USD quote that rounds to zero defers** with `PriceStale` instead of spending the presence's single settlement
   on a zero payout.
 - **`topUp` after `endsAt` reverts** (`CampaignEnded`) and **`approveEvents` rejects ids that do not exist yet**
@@ -230,13 +237,13 @@ including the testnet stand-ins:
 
 | Lines | Statements | Branches | Functions |
 |---|---|---|---|
-| 100% (643/643) | 100% (808/808) | 100% (178/178) | 100% (120/120) |
+| 100% (659/659) | 100% (825/825) | 100% (179/179) | 100% (125/125) |
 
 Constructor revert tests deploy through an external self-call (`this.deployVault(...)`). In this forge version
 `new X(...)` in a test compiles to a `deployCode` cheatcode, and a constructor that reverts as expected would end
 the test at that line, silently skipping every later check.
 
-Gas on the anvil run (`docs/anvil-e2e.txt`): mode 1 check-in with ticket 115,464, settle 217,276 (first payout,
+Gas on the anvil run (`docs/anvil-e2e.txt`): mode 1 check-in with ticket 115,488, settle 217,276 (first payout,
 cold storage), withdraw about 46,000, wallet link with one relocation 120,824, create event 82,021, create campaign
 160,329.
 
