@@ -1477,6 +1477,19 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "REVIEW_PERIOD",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "SETTLE_GRACE",
     "inputs": [],
     "outputs": [
@@ -1650,6 +1663,25 @@ export const vaultAbi = [
     "type": "function",
     "name": "campaignCount",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "challengeDeadline",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -3357,6 +3389,19 @@ export const bondAbi = [
   },
   {
     "type": "function",
+    "name": "refreshClaim",
+    "inputs": [
+      {
+        "name": "challengeId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
@@ -3523,6 +3568,31 @@ export const bondAbi = [
       },
       {
         "name": "deposit",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ClaimRefreshed",
+    "inputs": [
+      {
+        "name": "challengeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "organizer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "claim",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
