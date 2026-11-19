@@ -1,0 +1,597 @@
+/**
+ * Every string on the attendee screens, in English and Hindi. The Hindi is the everyday Hindi a
+ * college student speaks: common English words for tech things (QR कोड, वॉलेट, स्टैम्प) written in
+ * Devanagari, not formal Sanskritised Hindi.
+ *
+ * Copy rules (docs/INTERFACES.md section 7) apply to both languages: plain words, sentence case,
+ * no dashes as punctuation, no emoji, no exclamation marks, and every error says what happened and
+ * what to do next.
+ */
+
+export type Locale = "en" | "hi";
+
+export const LOCALES: readonly Locale[] = ["en", "hi"];
+
+const en = {
+  lang: {
+    /** The toggle shows the language you would switch to, written in that language. */
+    switchTo: "हिन्दी",
+    switchLabel: "Switch the language to Hindi",
+  },
+  nav: {
+    passport: "Passport",
+    scan: "Scan",
+    home: "Showmark, home",
+    attendee: "Attendee",
+  },
+  common: {
+    retry: "Try again",
+    retryNow: "Try now",
+    backToPassport: "Back to passport",
+    loading: "Loading",
+    explorer: "View on the QIE explorer",
+    eventFallback: (id: string) => `Event ${id}`,
+    stampCount: (n: number) => (n === 1 ? "1 stamp" : `${n} stamps`),
+  },
+  checkIn: {
+    metaTitle: "Check in",
+    eyebrow: "Checking in to",
+    eyebrowDone: "Checked in to",
+    signing: "Checking you in",
+    sending: "Checking you in",
+    sendingHint: "Sending your signed check-in to Showmark.",
+    confirming: "Recording your stamp on QIE",
+    confirmingHint: "This usually takes about 4 seconds.",
+    stamped: "You are checked in",
+    stampedHint: "Your stamp is recorded on the QIE network and lives in your passport.",
+    already: "You were already checked in",
+    alreadyHint: "You get one stamp per event, and this one is already in your passport.",
+    waitingTitle: "Your check-in is saved on this phone",
+    checkInButton: "Check in",
+    checkedInAt: (time: string) => `Checked in at ${time}`,
+    openPassport: "Open my passport",
+    noWalletNeeded:
+      "No wallet or sign-up needed. This phone keeps a private pass that signs your check-in, and Showmark pays the network fee.",
+    pendingStampLabel: (event: string) => `Your stamp for ${event}, waiting for the network`,
+    rewardsTitle: "Rewards for being here",
+    rewardLine: (sponsor: string) => `${sponsor} pays each verified guest`,
+    rewardNeedsQieId: "Paid once you link QIE Wallet that holds a QIE ID.",
+    rewardDoorScan: "Paid only when a door volunteer scans your code.",
+    noRewards: "No sponsor is paying for this event right now. You still get the stamp.",
+    eventLoadFailed: "The event details did not load, but your check-in carries on.",
+    linkPromptTitle: "Keep your stamps and rewards in QIE Wallet",
+    linkWhy:
+      "Linking moves your stamps into QIE Wallet, lets you withdraw rewards, and lets you join campaigns that need a QIE ID.",
+    linkNow: "Link QIE Wallet",
+    notNow: "Not now",
+    opensAt: (time: string) => `Check-in for this event opens at ${time}.`,
+    scanAgain: "Scan the door code",
+  },
+  errors: {
+    invalidCode: {
+      message: "This link is not a Showmark door code.",
+      action: "Scan the QR code on the door screen again with your camera.",
+    },
+    storage: {
+      message: "This browser does not let Showmark save a pass.",
+      action: "Open this page in your normal browser, not a private window.",
+    },
+    offline: {
+      message: "Your phone is offline.",
+      action: "Your check-in is saved on this phone and goes through as soon as you are back online. Keep this screen open.",
+    },
+    relay: {
+      message: "Showmark could not reach the network just now.",
+      action: "Your check-in is saved on this phone. Showmark tries again on its own, or you can try now.",
+    },
+    retryIn: (seconds: number) => (seconds <= 1 ? "Trying again now." : `Trying again in ${seconds} seconds.`),
+    confirmTimeout: {
+      message: "The network is taking longer than usual to confirm your check-in.",
+      action: "It was sent. Check your passport in a minute, or open the transaction on the explorer.",
+    },
+    reverted: {
+      message: "The network did not record this check-in.",
+      action: "Scan the door code again.",
+    },
+    unknown: {
+      message: "Something went wrong with this check-in.",
+      action: "Scan the door code again. If it keeps happening, tell the organizer.",
+    },
+  },
+  scan: {
+    metaTitle: "Scan a door code",
+    title: "Scan the door code",
+    instructions: "Point your camera at the QR code on the door screen. Your check-in starts as soon as it reads the code.",
+    tip: "Hold the phone about an arm's length from the screen and keep the whole code inside the frame.",
+    startCamera: "Turn on camera",
+    starting: "Starting the camera",
+    torchOn: "Turn on the light",
+    torchOff: "Turn off the light",
+    viewfinderLabel: "Camera view. Point it at the door code.",
+    found: "Door code found. Opening your check-in.",
+    cameraDenied: {
+      message: "Showmark is not allowed to use your camera.",
+      action: "Allow camera access for this site in your browser settings, then try again. You can also scan the door code with your phone's camera app.",
+    },
+    noCamera: {
+      message: "This device has no camera Showmark can use.",
+      action: "Scan the door code with your phone's camera app instead.",
+    },
+    cameraBusy: {
+      message: "Another app is using the camera.",
+      action: "Close the other app or tab that is using the camera, then try again.",
+    },
+    cameraFailed: {
+      message: "The camera did not start.",
+      action: "Try again. If it still does not start, scan the door code with your phone's camera app.",
+    },
+    notShowmark: {
+      message: "This QR code is not a Showmark door code.",
+      action: "Point the camera at the code on the door screen.",
+    },
+    attendeeCode: {
+      message: "This is an attendee code, which the door volunteer scans.",
+      action: "To check yourself in, scan the code on the door screen.",
+    },
+  },
+  pass: {
+    metaTitle: "Your passport",
+    title: "Your passport",
+    subtitle: "Every stamp from this phone's pass, recorded on the QIE network.",
+    passLabel: "Pass on this phone",
+    walletLabel: "Linked wallet",
+    notLinked: "Not linked yet",
+    guillocheLabel: "A pattern drawn from your pass address, so no other passport looks like this one",
+    stampsTitle: "Stamps",
+    emptyTitle: "No stamps yet",
+    emptyBody: "Scan the QR code at the door of a Showmark event and your first stamp lands here.",
+    scanCta: "Scan a door code",
+    localStampNote: "Recorded on QIE. It shows in the public index within a minute.",
+    streaksTitle: "Streaks",
+    streakLine: (current: number, best: number) => `${current} in a row, best ${best}`,
+    rewardsTitle: "Rewards you can withdraw",
+    noRewards: "Nothing to withdraw yet. Rewards show up here after a sponsor pays for an event you attended.",
+    withdrawCta: "Withdraw",
+    linkToWithdraw: "Link QIE Wallet to withdraw",
+    pendingTitle: "Payouts on the way",
+    pendingFor: (event: string) => `For ${event}`,
+    pendingNeedsQieId: (date: string | null) =>
+      date ? `Link a wallet that holds a QIE ID before ${date} to receive this.` : "Link a wallet that holds a QIE ID to receive this.",
+    pendingPriceStale: "Waiting for the QIE price feed to update. You do not need to do anything.",
+    pendingPending: "Being paid out. This usually takes a few seconds.",
+    codeTitle: "Your code for the door",
+    codeBody: "Some events ask a door volunteer to scan you instead. Pick the event and show this code.",
+    codeEventLabel: "Event",
+    codeRecent: "Opened on this phone",
+    codeUpcoming: "Upcoming",
+    codeNoEvents: "No upcoming events were found. Open a door code once and that event shows up here.",
+    codeQrLabel: (event: string) => `Your attendee code for ${event}. Show it to the door volunteer.`,
+    codeCaption: "Show this to the door volunteer",
+    codeStatus: "Turn your screen brightness up if the scan is slow.",
+    fullscreen: "Show full screen",
+    closeFullscreen: "Close",
+    loadFailed: {
+      message: "Your passport did not load.",
+      action: "Check your connection and try again. Your stamps are safe on the QIE network.",
+    },
+    outboxTitle: "A check-in is waiting to be sent",
+    outboxBody: (event: string) => `Your check-in for ${event} is saved on this phone and has not reached the network yet.`,
+    outboxSend: "Send it now",
+    noPassNote: "This phone has no pass yet. It makes one the first time you check in.",
+  },
+  link: {
+    metaTitle: "Link QIE Wallet",
+    title: "Link QIE Wallet",
+    connect: "Connect QIE Wallet",
+    connecting: "Waiting for QIE Wallet",
+    connectedAs: "Connected wallet",
+    signExplain: "QIE Wallet asks you to sign a message that links it to this pass. It does not move any funds or cost anything.",
+    moveStamps: (n: number) => (n === 1 ? "Move my stamp into this wallet" : `Move my ${n} stamps into this wallet`),
+    sign: "Link this wallet",
+    signing: "Sign in QIE Wallet",
+    submitting: "Recording the link on QIE",
+    linkedTitle: "QIE Wallet is linked",
+    linkedBody: "Your stamps live in this wallet now, and rewards go to it when you withdraw.",
+    alreadyLinked: "This pass is already linked to a wallet.",
+    switchNetwork: "Switch network",
+    getWallet: "Get QIE Wallet",
+    phoneHint: "On a phone, open this page in a browser where QIE Wallet is installed, so the wallet and this pass are on the same device.",
+    walletTaken: {
+      message: "This wallet is already linked to another pass.",
+      action: "Each wallet links to one pass. Connect a different wallet, or open Showmark on the phone that holds the other pass.",
+    },
+    noPass: {
+      message: "There is no pass on this phone yet.",
+      action: "Check in at an event first, then link your wallet.",
+    },
+    checkFailed: {
+      message: "Showmark could not check this wallet just now.",
+      action: "Check your connection and try again.",
+    },
+  },
+  withdraw: {
+    metaTitle: "Withdraw rewards",
+    title: "Withdraw rewards",
+    body: "Rewards go to the wallet you linked. Showmark pays the network fee.",
+    sendsTo: "Sends to",
+    submit: (symbol: string) => `Withdraw ${symbol}`,
+    sending: "Sending",
+    confirming: "Recording the withdrawal on QIE",
+    done: "Withdrawn to your wallet",
+    nothing: "Nothing to withdraw right now. Rewards show up after a sponsor pays for an event you attended.",
+    needsLink: {
+      message: "Link QIE Wallet before you withdraw.",
+      action: "Rewards can only go to a wallet you linked to this pass.",
+    },
+  },
+} as const;
+
+type Widen<T> = T extends string
+  ? string
+  : T extends (...args: infer A) => string
+    ? (...args: A) => string
+    : { readonly [K in keyof T]: Widen<T[K]> };
+
+export type Dictionary = Widen<typeof en>;
+
+const hi: Dictionary = {
+  lang: {
+    switchTo: "English",
+    switchLabel: "भाषा बदलकर अंग्रेज़ी करें",
+  },
+  nav: {
+    passport: "पासपोर्ट",
+    scan: "स्कैन",
+    home: "Showmark, होम",
+    attendee: "अटेंडी",
+  },
+  common: {
+    retry: "फिर से कोशिश करें",
+    retryNow: "अभी कोशिश करें",
+    backToPassport: "पासपोर्ट पर वापस जाएँ",
+    loading: "लोड हो रहा है",
+    explorer: "QIE एक्सप्लोरर पर देखें",
+    eventFallback: (id) => `इवेंट ${id}`,
+    stampCount: (n) => `${n} स्टैम्प`,
+  },
+  checkIn: {
+    metaTitle: "चेक इन",
+    eyebrow: "चेक इन हो रहा है",
+    eyebrowDone: "चेक इन हो गया",
+    signing: "आपका चेक इन हो रहा है",
+    sending: "आपका चेक इन हो रहा है",
+    sendingHint: "आपका साइन किया हुआ चेक इन Showmark को भेजा जा रहा है।",
+    confirming: "आपका स्टैम्प QIE पर दर्ज हो रहा है",
+    confirmingHint: "आमतौर पर इसमें लगभग 4 सेकंड लगते हैं।",
+    stamped: "आपका चेक इन हो गया",
+    stampedHint: "आपका स्टैम्प QIE नेटवर्क पर दर्ज हो गया है और आपके पासपोर्ट में है।",
+    already: "आपका चेक इन पहले ही हो चुका है",
+    alreadyHint: "हर इवेंट का एक ही स्टैम्प मिलता है, और यह आपके पासपोर्ट में पहले से है।",
+    waitingTitle: "आपका चेक इन इस फ़ोन पर सेव है",
+    checkInButton: "चेक इन करें",
+    checkedInAt: (time) => `${time} पर चेक इन हुआ`,
+    openPassport: "मेरा पासपोर्ट खोलें",
+    noWalletNeeded:
+      "न वॉलेट चाहिए, न साइन अप। यह फ़ोन एक निजी पास रखता है जो आपका चेक इन साइन करता है, और नेटवर्क फ़ीस Showmark देता है।",
+    pendingStampLabel: (event) => `${event} का आपका स्टैम्प, नेटवर्क का इंतज़ार है`,
+    rewardsTitle: "यहाँ आने का इनाम",
+    rewardLine: (sponsor) => `${sponsor} हर वेरिफ़ाइड मेहमान को देता है`,
+    rewardNeedsQieId: "QIE ID वाला QIE Wallet लिंक करने पर मिलेगा।",
+    rewardDoorScan: "सिर्फ़ तब मिलेगा जब दरवाज़े पर वॉलंटियर आपका कोड स्कैन करे।",
+    noRewards: "अभी इस इवेंट के लिए कोई स्पॉन्सर पैसे नहीं दे रहा। स्टैम्प फिर भी मिलेगा।",
+    eventLoadFailed: "इवेंट की जानकारी लोड नहीं हुई, पर आपका चेक इन चल रहा है।",
+    linkPromptTitle: "अपने स्टैम्प और इनाम QIE Wallet में रखें",
+    linkWhy:
+      "लिंक करने से आपके स्टैम्प QIE Wallet में आ जाते हैं, आप इनाम निकाल सकते हैं, और QIE ID वाले कैंपेन में हिस्सा ले सकते हैं।",
+    linkNow: "QIE Wallet लिंक करें",
+    notNow: "अभी नहीं",
+    opensAt: (time) => `इस इवेंट का चेक इन ${time} पर खुलेगा।`,
+    scanAgain: "दरवाज़े का कोड स्कैन करें",
+  },
+  errors: {
+    invalidCode: {
+      message: "यह लिंक Showmark का दरवाज़े वाला कोड नहीं है।",
+      action: "दरवाज़े की स्क्रीन पर दिख रहा QR कोड अपने कैमरे से फिर से स्कैन करें।",
+    },
+    storage: {
+      message: "यह ब्राउज़र Showmark को पास सेव नहीं करने देता।",
+      action: "यह पेज अपने नॉर्मल ब्राउज़र में खोलें, प्राइवेट विंडो में नहीं।",
+    },
+    offline: {
+      message: "आपका फ़ोन ऑफ़लाइन है।",
+      action: "आपका चेक इन इस फ़ोन पर सेव है और इंटरनेट आते ही अपने आप भेज दिया जाएगा। यह स्क्रीन खुली रखें।",
+    },
+    relay: {
+      message: "Showmark अभी नेटवर्क तक नहीं पहुँच पाया।",
+      action: "आपका चेक इन इस फ़ोन पर सेव है। Showmark अपने आप फिर कोशिश करेगा, या आप अभी कोशिश कर सकते हैं।",
+    },
+    retryIn: (seconds) => (seconds <= 1 ? "अभी फिर कोशिश हो रही है।" : `${seconds} सेकंड में फिर कोशिश होगी।`),
+    confirmTimeout: {
+      message: "नेटवर्क आपका चेक इन कन्फ़र्म करने में आम से ज़्यादा समय ले रहा है।",
+      action: "चेक इन भेज दिया गया है। एक मिनट बाद अपना पासपोर्ट देखें, या एक्सप्लोरर पर ट्रांज़ैक्शन खोलें।",
+    },
+    reverted: {
+      message: "नेटवर्क ने यह चेक इन दर्ज नहीं किया।",
+      action: "दरवाज़े का कोड फिर से स्कैन करें।",
+    },
+    unknown: {
+      message: "इस चेक इन में कुछ गड़बड़ हो गई।",
+      action: "दरवाज़े का कोड फिर से स्कैन करें। बार बार ऐसा हो तो ऑर्गनाइज़र को बताएँ।",
+    },
+  },
+  scan: {
+    metaTitle: "दरवाज़े का कोड स्कैन करें",
+    title: "दरवाज़े का कोड स्कैन करें",
+    instructions: "अपना कैमरा दरवाज़े की स्क्रीन पर दिख रहे QR कोड की तरफ़ रखें। कोड पढ़ते ही आपका चेक इन शुरू हो जाएगा।",
+    tip: "फ़ोन को स्क्रीन से लगभग एक हाथ की दूरी पर रखें और पूरा कोड फ़्रेम के अंदर रखें।",
+    startCamera: "कैमरा चालू करें",
+    starting: "कैमरा चालू हो रहा है",
+    torchOn: "लाइट चालू करें",
+    torchOff: "लाइट बंद करें",
+    viewfinderLabel: "कैमरा व्यू। इसे दरवाज़े वाले कोड की तरफ़ रखें।",
+    found: "दरवाज़े का कोड मिल गया। आपका चेक इन खुल रहा है।",
+    cameraDenied: {
+      message: "Showmark को आपका कैमरा इस्तेमाल करने की इजाज़त नहीं है।",
+      action: "ब्राउज़र की सेटिंग में इस साइट के लिए कैमरा की इजाज़त दें, फिर से कोशिश करें। आप फ़ोन के कैमरा ऐप से भी दरवाज़े का कोड स्कैन कर सकते हैं।",
+    },
+    noCamera: {
+      message: "इस डिवाइस में ऐसा कैमरा नहीं है जिसे Showmark इस्तेमाल कर सके।",
+      action: "इसकी जगह फ़ोन के कैमरा ऐप से दरवाज़े का कोड स्कैन करें।",
+    },
+    cameraBusy: {
+      message: "कैमरा कोई दूसरा ऐप इस्तेमाल कर रहा है।",
+      action: "कैमरा इस्तेमाल कर रहा दूसरा ऐप या टैब बंद करें, फिर से कोशिश करें।",
+    },
+    cameraFailed: {
+      message: "कैमरा चालू नहीं हुआ।",
+      action: "फिर से कोशिश करें। फिर भी चालू न हो तो फ़ोन के कैमरा ऐप से दरवाज़े का कोड स्कैन करें।",
+    },
+    notShowmark: {
+      message: "यह QR कोड Showmark का दरवाज़े वाला कोड नहीं है।",
+      action: "कैमरा दरवाज़े की स्क्रीन पर दिख रहे कोड की तरफ़ रखें।",
+    },
+    attendeeCode: {
+      message: "यह अटेंडी कोड है, इसे दरवाज़े पर वॉलंटियर स्कैन करता है।",
+      action: "खुद चेक इन करने के लिए दरवाज़े की स्क्रीन वाला कोड स्कैन करें।",
+    },
+  },
+  pass: {
+    metaTitle: "आपका पासपोर्ट",
+    title: "आपका पासपोर्ट",
+    subtitle: "इस फ़ोन के पास से मिला हर स्टैम्प, QIE नेटवर्क पर दर्ज।",
+    passLabel: "इस फ़ोन का पास",
+    walletLabel: "लिंक किया हुआ वॉलेट",
+    notLinked: "अभी लिंक नहीं है",
+    guillocheLabel: "आपके पास के एड्रेस से बना पैटर्न, ताकि कोई और पासपोर्ट ऐसा न दिखे",
+    stampsTitle: "स्टैम्प",
+    emptyTitle: "अभी कोई स्टैम्प नहीं",
+    emptyBody: "किसी Showmark इवेंट के दरवाज़े पर QR कोड स्कैन करें, आपका पहला स्टैम्प यहाँ आएगा।",
+    scanCta: "दरवाज़े का कोड स्कैन करें",
+    localStampNote: "QIE पर दर्ज हो गया। एक मिनट में पब्लिक इंडेक्स में दिखेगा।",
+    streaksTitle: "स्ट्रीक",
+    streakLine: (current, best) => `लगातार ${current}, सबसे अच्छा ${best}`,
+    rewardsTitle: "इनाम जो आप निकाल सकते हैं",
+    noRewards: "अभी निकालने को कुछ नहीं है। जब कोई स्पॉन्सर आपके इवेंट के पैसे देगा, इनाम यहाँ दिखेगा।",
+    withdrawCta: "निकालें",
+    linkToWithdraw: "निकालने के लिए QIE Wallet लिंक करें",
+    pendingTitle: "रास्ते में भुगतान",
+    pendingFor: (event) => `${event} के लिए`,
+    pendingNeedsQieId: (date) =>
+      date ? `इसे पाने के लिए ${date} से पहले QIE ID वाला वॉलेट लिंक करें।` : "इसे पाने के लिए QIE ID वाला वॉलेट लिंक करें।",
+    pendingPriceStale: "QIE के प्राइस फ़ीड के अपडेट होने का इंतज़ार है। आपको कुछ नहीं करना है।",
+    pendingPending: "भुगतान हो रहा है। आमतौर पर कुछ सेकंड लगते हैं।",
+    codeTitle: "दरवाज़े के लिए आपका कोड",
+    codeBody: "कुछ इवेंट में दरवाज़े पर वॉलंटियर आपको स्कैन करता है। इवेंट चुनें और यह कोड दिखाएँ।",
+    codeEventLabel: "इवेंट",
+    codeRecent: "इस फ़ोन पर खोले गए",
+    codeUpcoming: "आने वाले",
+    codeNoEvents: "कोई आने वाला इवेंट नहीं मिला। एक बार दरवाज़े का कोड खोलें, वह इवेंट यहाँ दिखने लगेगा।",
+    codeQrLabel: (event) => `${event} के लिए आपका अटेंडी कोड। इसे दरवाज़े पर वॉलंटियर को दिखाएँ।`,
+    codeCaption: "यह कोड दरवाज़े पर वॉलंटियर को दिखाएँ",
+    codeStatus: "स्कैन धीमा हो तो स्क्रीन की ब्राइटनेस बढ़ा दें।",
+    fullscreen: "पूरी स्क्रीन पर दिखाएँ",
+    closeFullscreen: "बंद करें",
+    loadFailed: {
+      message: "आपका पासपोर्ट लोड नहीं हुआ।",
+      action: "अपना इंटरनेट चेक करें और फिर से कोशिश करें। आपके स्टैम्प QIE नेटवर्क पर सुरक्षित हैं।",
+    },
+    outboxTitle: "एक चेक इन भेजा जाना बाकी है",
+    outboxBody: (event) => `${event} का आपका चेक इन इस फ़ोन पर सेव है और अभी नेटवर्क तक नहीं पहुँचा।`,
+    outboxSend: "अभी भेजें",
+    noPassNote: "इस फ़ोन पर अभी कोई पास नहीं है। पहली बार चेक इन करते ही बन जाएगा।",
+  },
+  link: {
+    metaTitle: "QIE Wallet लिंक करें",
+    title: "QIE Wallet लिंक करें",
+    connect: "QIE Wallet कनेक्ट करें",
+    connecting: "QIE Wallet का इंतज़ार है",
+    connectedAs: "कनेक्ट किया हुआ वॉलेट",
+    signExplain: "QIE Wallet आपसे एक मैसेज साइन करवाएगा जो उसे इस पास से जोड़ता है। इससे न कोई पैसा जाता है, न कोई ख़र्च होता है।",
+    moveStamps: (n) => (n === 1 ? "मेरा स्टैम्प इस वॉलेट में ले जाएँ" : `मेरे ${n} स्टैम्प इस वॉलेट में ले जाएँ`),
+    sign: "यह वॉलेट लिंक करें",
+    signing: "QIE Wallet में साइन करें",
+    submitting: "लिंक QIE पर दर्ज हो रहा है",
+    linkedTitle: "QIE Wallet लिंक हो गया",
+    linkedBody: "अब आपके स्टैम्प इस वॉलेट में हैं, और इनाम निकालने पर इसी में आएँगे।",
+    alreadyLinked: "यह पास पहले से एक वॉलेट से लिंक है।",
+    switchNetwork: "नेटवर्क बदलें",
+    getWallet: "QIE Wallet डाउनलोड करें",
+    phoneHint: "फ़ोन पर यह पेज उसी ब्राउज़र में खोलें जिसमें QIE Wallet है, ताकि वॉलेट और यह पास एक ही डिवाइस पर हों।",
+    walletTaken: {
+      message: "यह वॉलेट पहले से किसी दूसरे पास से लिंक है।",
+      action: "हर वॉलेट एक ही पास से लिंक होता है। कोई दूसरा वॉलेट कनेक्ट करें, या उस फ़ोन पर Showmark खोलें जिसमें दूसरा पास है।",
+    },
+    noPass: {
+      message: "इस फ़ोन पर अभी कोई पास नहीं है।",
+      action: "पहले किसी इवेंट में चेक इन करें, फिर अपना वॉलेट लिंक करें।",
+    },
+    checkFailed: {
+      message: "Showmark अभी इस वॉलेट को चेक नहीं कर पाया।",
+      action: "अपना इंटरनेट चेक करें और फिर से कोशिश करें।",
+    },
+  },
+  withdraw: {
+    metaTitle: "इनाम निकालें",
+    title: "इनाम निकालें",
+    body: "इनाम आपके लिंक किए हुए वॉलेट में जाएगा। नेटवर्क फ़ीस Showmark देता है।",
+    sendsTo: "यहाँ भेजा जाएगा",
+    submit: (symbol) => `${symbol} निकालें`,
+    sending: "भेजा जा रहा है",
+    confirming: "निकासी QIE पर दर्ज हो रही है",
+    done: "आपके वॉलेट में भेज दिया गया",
+    nothing: "अभी निकालने को कुछ नहीं है। जब कोई स्पॉन्सर आपके इवेंट के पैसे देगा, इनाम यहाँ दिखेगा।",
+    needsLink: {
+      message: "निकालने से पहले QIE Wallet लिंक करें।",
+      action: "इनाम सिर्फ़ उसी वॉलेट में जा सकता है जिसे आपने इस पास से लिंक किया है।",
+    },
+  },
+};
+
+export const dictionaries: Record<Locale, Dictionary> = { en, hi };
+
+/**
+ * Hindi copy for the API's error codes (src/server/errors.ts). In English the app shows the API's
+ * own message and action, which are already written to the copy rules; in Hindi it shows these,
+ * and falls back to the API's English for a code it does not know.
+ */
+export const hiApiErrors: Readonly<Record<string, { message: string; action: string }>> = {
+  already_present: {
+    message: "आपका चेक इन इस इवेंट में पहले ही हो चुका है।",
+    action: "स्टैम्प देखने के लिए अपना पासपोर्ट खोलें।",
+  },
+  unknown_event: {
+    message: "यह इवेंट Showmark पर मौजूद नहीं है।",
+    action: "देख लें कि आपने सही दरवाज़े का कोड स्कैन किया है, या ऑर्गनाइज़र से पूछें।",
+  },
+  bad_attendee_sig: {
+    message: "आपका पास यह चेक इन साइन नहीं कर पाया।",
+    action: "ऐप दोबारा खोलें और दरवाज़े का कोड फिर से स्कैन करें।",
+  },
+  bad_door_sig: {
+    message: "दरवाज़े का कोड ठीक से साइन नहीं हुआ था।",
+    action: "दरवाज़े का कोड फिर से स्कैन करें। बार बार ऐसा हो तो ऑर्गनाइज़र से दरवाज़े की स्क्रीन दोबारा चालू करने को कहें।",
+  },
+  door_key_not_authorized: {
+    message: "यह दरवाज़े की स्क्रीन इस इवेंट के लिए मंज़ूर नहीं है।",
+    action: "ऑर्गनाइज़र से दरवाज़े की स्क्रीन दोबारा मंज़ूर करने को कहें, फिर नया कोड स्कैन करें।",
+  },
+  stale: {
+    message: "दरवाज़े का कोड नेटवर्क तक पहुँचने से पहले ही पुराना हो गया।",
+    action: "दरवाज़े की स्क्रीन पर दिख रहा नया कोड फिर से स्कैन करें। यह हर 15 सेकंड में बदलता है।",
+  },
+  outside_event_window: {
+    message: "इस इवेंट का चेक इन अभी बंद है।",
+    action: "चेक इन इवेंट शुरू होने से एक घंटा पहले खुलता है और ख़त्म होने के एक घंटे बाद बंद होता है।",
+  },
+  at_capacity: {
+    message: "यह इवेंट भर चुका है।",
+    action: "ऑर्गनाइज़र से पूछें कि क्या और जगह खोली जा सकती है।",
+  },
+  bad_mode: {
+    message: "यह इवेंट इस तरह का चेक इन नहीं लेता।",
+    action: "दरवाज़े की स्क्रीन वाला कोड स्कैन करें, या वॉलंटियर से अपने ऐप का कोड स्कैन करवाएँ।",
+  },
+  paused: {
+    message: "Showmark ने सुरक्षा के लिए चेक इन रोक दिए हैं।",
+    action: "कुछ मिनट बाद फिर से कोशिश करें।",
+  },
+  check_in_rejected: {
+    message: "नेटवर्क ने यह चेक इन दर्ज नहीं किया।",
+    action: "दरवाज़े का कोड फिर से स्कैन करें।",
+  },
+  rate_limited: {
+    message: "पिछले एक मिनट में इस नेटवर्क से बहुत ज़्यादा रिक्वेस्ट आईं।",
+    action: "एक मिनट रुकें और फिर से कोशिश करें।",
+  },
+  rate_limited_pass: {
+    message: "इस पास ने पिछले एक मिनट में बहुत ज़्यादा चेक इन भेजे।",
+    action: "एक मिनट रुकें और फिर से कोशिश करें।",
+  },
+  invalid_request: {
+    message: "रिक्वेस्ट उस फ़ॉर्मैट में नहीं थी जो Showmark को चाहिए।",
+    action: "ऐप दोबारा खोलें और फिर से कोशिश करें।",
+  },
+  relay_timeout: {
+    message: "चेक इन को नेटवर्क तक पहुँचने में आम से ज़्यादा समय लग रहा है।",
+    action: "यह स्क्रीन खुली रखें। एक मिनट में स्टैम्प न दिखे तो दरवाज़े का कोड फिर से स्कैन करें।",
+  },
+  relay_send_failed: {
+    message: "नेटवर्क ने ट्रांज़ैक्शन नहीं लिया।",
+    action: "कुछ सेकंड बाद फिर से कोशिश करें।",
+  },
+  relayer_not_configured: {
+    message: "इस सर्वर पर बिना फ़ीस वाला चेक इन बंद है।",
+    action: "बाद में कोशिश करें, या ऑर्गनाइज़र से Showmark टीम को बताने को कहें।",
+  },
+  not_deployed: {
+    message: "Showmark के कॉन्ट्रैक्ट अभी इस नेटवर्क पर नहीं हैं।",
+    action: "कॉन्ट्रैक्ट लाइव होने के बाद फिर देखें।",
+  },
+  upstream_unavailable: {
+    message: "Showmark जिस सर्विस पर चलता है, उसने समय पर जवाब नहीं दिया।",
+    action: "कुछ सेकंड बाद फिर से कोशिश करें।",
+  },
+  internal_error: {
+    message: "हमारी तरफ़ कुछ गड़बड़ हो गई।",
+    action: "फिर से कोशिश करें। फिर से ऐसा हो तो Showmark टीम को बताएँ कि आप क्या कर रहे थे।",
+  },
+  database_not_configured: {
+    message: "Showmark अभी अपने डेटाबेस तक नहीं पहुँच पा रहा।",
+    action: "कुछ मिनट बाद फिर से कोशिश करें। बार बार ऐसा हो तो Showmark टीम को बताएँ।",
+  },
+  queue_not_configured: {
+    message: "Showmark अभी अपनी क्यू सर्विस तक नहीं पहुँच पा रहा।",
+    action: "कुछ मिनट बाद फिर से कोशिश करें। बार बार ऐसा हो तो Showmark टीम को बताएँ।",
+  },
+  link_rejected: {
+    message: "नेटवर्क ने यह वॉलेट लिंक नहीं लिया।",
+    action: "QIE Wallet में फिर से साइन करें। हर पास एक वॉलेट से लिंक होता है, और हर वॉलेट एक पास से।",
+  },
+  nothing_to_withdraw: {
+    message: "इस टोकन में इस अकाउंट के लिए निकालने को कुछ नहीं है।",
+    action: "चेक इन का भुगतान होने के बाद इनाम यहाँ दिखते हैं।",
+  },
+  withdraw_rejected: {
+    message: "नेटवर्क ने यह निकासी नहीं ली।",
+    action: "कुछ मिनट बाद फिर से कोशिश करें। बार बार ऐसा हो तो Showmark टीम को बताएँ।",
+  },
+  not_found: {
+    message: "Showmark के पास इसका कोई रिकॉर्ड नहीं है।",
+    action: "लिंक चेक करें और फिर से कोशिश करें।",
+  },
+};
+
+/** Hindi copy for the wallet store's error codes (src/lib/wallet/wallet-store.ts). */
+export const hiWalletErrors: Readonly<Record<string, { message: string; action: string }>> = {
+  "no-wallet": {
+    message: "इस ब्राउज़र में कोई वॉलेट नहीं मिला।",
+    action: "qiewallet.me से QIE Wallet इंस्टॉल करें, फिर यह पेज रीलोड करें।",
+  },
+  rejected: {
+    message: "आपके वॉलेट में रिक्वेस्ट मना कर दी गई।",
+    action: "फिर से कोशिश करें और QIE Wallet में मंज़ूर करें।",
+  },
+  "testnet-hidden": {
+    message: "QIE Wallet में अभी QIE टेस्टनेट नहीं दिख रहा।",
+    action: "QIE Wallet की सेटिंग खोलें, टेस्टनेट नेटवर्क चालू करें, फिर से कोशिश करें।",
+  },
+  "chain-switch-failed": {
+    message: "आपका वॉलेट किसी दूसरे नेटवर्क पर है।",
+    action: "QIE Wallet को QIE नेटवर्क पर स्विच करें और फिर से कोशिश करें।",
+  },
+  unknown: {
+    message: "आपके वॉलेट ने ऐसी गड़बड़ बताई जिसकी हमें उम्मीद नहीं थी।",
+    action: "पेज रीलोड करें और फिर से कोशिश करें। बार बार हो तो QIE Wallet दोबारा खोलें।",
+  },
+};
+
+export interface Copy {
+  message: string;
+  action: string;
+}
+
+/** Picks the copy to show for an API or wallet error in the current language. */
+export function localizedError(locale: Locale, code: string, english: Copy, table: Readonly<Record<string, Copy>> = hiApiErrors): Copy {
+  if (locale === "en") return english;
+  return table[code] ?? english;
+}
