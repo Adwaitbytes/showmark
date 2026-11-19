@@ -1,0 +1,260 @@
+{
+  "startedAt": "2026-11-19T12:23:32.557Z",
+  "baseUrl": "https://showmark.vercel.app",
+  "chainId": 1983,
+  "wallet": "0xb1440BC29DF52587cCB946cb433F4474cE92D2d1",
+  "journeys": {
+    "1-organizer-phone": {
+      "status": "passed",
+      "notes": [
+        "reusing event 6 created by an earlier run of this harness (LIVE_RESUME_PHONE)",
+        "j1-phone: door QR decoded to https://showmark.vercel.app/c/… with a fragment (issuedAt 1795091027)",
+        "door key authorized: 0x7a0b015ee2539fffe19ceac6d859131998ef018515e0554b067fa3834ff8c3e8"
+      ]
+    },
+    "2-attendee-phone": {
+      "status": "passed",
+      "notes": [
+        "checked in to event 6 in 15548 ms; door count incremented"
+      ]
+    },
+    "3-sponsor-phone": {
+      "status": "passed",
+      "notes": [
+        "reusing campaign 5, already funded and approved for event 6 by an earlier run (LIVE_RESUME_PHONE)",
+        "j3-phone: campaign 5 held 0 QIE, topped up 0.02 QIE from the page: 0x1ee6d1683244de1cc1cf0a761fdabed27e497cedb4f30f75bbb7e303304cd9da",
+        "second attendee checked in in 90535 ms (pass unknown)",
+        "settlement on campaign page: 0x69899767e5b4c58a4209b85ea86c422d8eae9c832e82295a561c9a3ef0ff0265",
+        "j3-phone: printable report /sponsor/5/report rendered with explorer links"
+      ]
+    },
+    "4-link-withdraw-phone": {
+      "status": "passed",
+      "notes": [
+        "test wallet is already linked to pass 0x743931b70DDBBCbe061c5AfD105Be463B1ea6B84; using a fresh gasless wallet 0x18b5c14CE02Ae13e08bf98F095F63580b112F741 for this link",
+        "wallet linked: 0x3fd3b1f07008e28acf0970e2635e5efdf4d66a3f941a1863dc07c6044a876195",
+        "withdrawal 0x2e372451b746c1bb95205ef8f8430139310d275db7139a6dbbdb9c603ee1bfb8: wallet 0 -> 0.005 QIE (+0.005)"
+      ]
+    },
+    "bugs": {
+      "status": "failed",
+      "notes": [
+        "j4-phone: /pass/withdraw said \"Link QIE Wallet before you withdraw.\" on 4 load(s) after the link was confirmed"
+      ]
+    },
+    "1-organizer-desktop": {
+      "status": "failed",
+      "notes": [
+        "event 7 created: 0x87c8ec5f246b5bfcbe12be03f984efc8f777b35464b8d878fde44280a5f5d583"
+      ]
+    }
+  },
+  "events": [
+    {
+      "viewport": "390x844",
+      "eventId": "6",
+      "name": "Harness night 11-19 12:11"
+    },
+    {
+      "viewport": "1440x900",
+      "eventId": "7",
+      "name": "Harness desk 11-19 12:26"
+    }
+  ],
+  "campaigns": [
+    {
+      "viewport": "390x844",
+      "campaignId": "5"
+    }
+  ],
+  "relayed": [
+    {
+      "label": "j2-phone: check-in (relayed checkInBatch)",
+      "hash": "0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce"
+    },
+    {
+      "label": "j3-phone: check-in (relayed checkInBatch)",
+      "hash": "0x19086da7c91140d798d131f9610af24e59e3125ecb1720f60b8551212e9b29d3"
+    },
+    {
+      "label": "j3-phone: settlement (settleBatch) shown on campaign 5",
+      "hash": "0x69899767e5b4c58a4209b85ea86c422d8eae9c832e82295a561c9a3ef0ff0265"
+    },
+    {
+      "label": "j4-phone: linkWallet (relayed)",
+      "hash": "0x3fd3b1f07008e28acf0970e2635e5efdf4d66a3f941a1863dc07c6044a876195"
+    },
+    {
+      "label": "j4-phone: attendee withdrawal (relayed)",
+      "hash": "0x2e372451b746c1bb95205ef8f8430139310d275db7139a6dbbdb9c603ee1bfb8"
+    }
+  ],
+  "timings": [
+    {
+      "label": "j1-phone door: authorize click to first QR",
+      "ms": 6365
+    },
+    {
+      "label": "j2-phone: door link opened to \"You are checked in\"",
+      "ms": 15548
+    },
+    {
+      "label": "j2-phone: stamp shown to door count +1",
+      "ms": 1007
+    },
+    {
+      "label": "j3-phone: door link opened to \"You are checked in\"",
+      "ms": 90535
+    },
+    {
+      "label": "j3-phone: stamp shown to door count +1",
+      "ms": 2015
+    },
+    {
+      "label": "j3-phone: campaign page showed the settlement (from first look)",
+      "ms": 3008
+    },
+    {
+      "label": "j4-phone: link click to \"QIE Wallet is linked\"",
+      "ms": 4855
+    },
+    {
+      "label": "j4-phone: link confirmed to withdraw page recognising the link (reloads)",
+      "ms": 14821
+    },
+    {
+      "label": "j4-phone: withdraw click to \"Withdrawn to your wallet\"",
+      "ms": 6366
+    }
+  ],
+  "balances": {
+    "walletStart": "0.154999999992271972",
+    "beforeAttendeeWithdraw": "0x18b5c14CE02Ae13e08bf98F095F63580b112F741 0",
+    "afterAttendeeWithdraw": "0x18b5c14CE02Ae13e08bf98F095F63580b112F741 0.005",
+    "walletEnd": "0.134999999990528055"
+  },
+  "problems": [],
+  "attendeeTraces": [
+    {
+      "tag": "j2-phone",
+      "trace": [
+        "+6788ms -> POST /api/relay/check-in",
+        "+10803ms -> GET /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce",
+        "+10804ms <- 200 /api/relay/check-in {\"txHash\":\"0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce\",\"status\":\"submitted\"}",
+        "+11357ms <- 200 /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce {\"status\":\"pending\"}",
+        "+12058ms -> GET /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce",
+        "+12619ms <- 200 /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce {\"status\":\"pending\"}",
+        "+13323ms -> GET /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce",
+        "+13872ms <- 200 /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce {\"status\":\"pending\"}",
+        "+14575ms -> GET /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce",
+        "+15118ms <- 200 /api/tx/0x8df4d811e7d1f7a1cc766516d1472a6e189cedad2992a6c382c214c294f235ce {\"status\":\"success\",\"blockNumber\":\"9861396\"}"
+      ]
+    },
+    {
+      "tag": "j3-phone",
+      "trace": [
+        "+83986ms -> POST /api/relay/check-in",
+        "+88562ms -> GET /api/tx/0x19086da7c91140d798d131f9610af24e59e3125ecb1720f60b8551212e9b29d3",
+        "+88563ms <- 200 /api/relay/check-in {\"txHash\":\"0x19086da7c91140d798d131f9610af24e59e3125ecb1720f60b8551212e9b29d3\",\"status\":\"submitted\"}",
+        "+89178ms <- 200 /api/tx/0x19086da7c91140d798d131f9610af24e59e3125ecb1720f60b8551212e9b29d3 {\"status\":\"pending\"}",
+        "+89879ms -> GET /api/tx/0x19086da7c91140d798d131f9610af24e59e3125ecb1720f60b8551212e9b29d3",
+        "+90453ms <- 200 /api/tx/0x19086da7c91140d798d131f9610af24e59e3125ecb1720f60b8551212e9b29d3 {\"status\":\"success\",\"blockNumber\":\"9861420\"}"
+      ]
+    }
+  ],
+  "screenshots": [
+    "j1-phone-01-organize-signin.jpg",
+    "j1-phone-02-organize-console.jpg",
+    "j1-phone-05-door-setup.jpg",
+    "j1-phone-06-door-qr.jpg",
+    "j2-phone-attendee-checked-in.jpg",
+    "j2-phone-door-count-5.jpg",
+    "j3-phone-01-sponsor-gate.jpg",
+    "j3-phone-02-sponsor-home.jpg",
+    "j3-phone-05-topped-up.jpg",
+    "j3-phone-attendee-checked-in.jpg",
+    "j3-phone-door-count-6.jpg",
+    "j3-phone-07-campaign-settlement.jpg",
+    "j3-phone-08-report.jpg",
+    "j4-phone-01-passport.jpg",
+    "j4-phone-02-link-ready.jpg",
+    "j4-phone-03-linked.jpg",
+    "j4-phone-04a-withdraw-says-link-first.jpg",
+    "j4-phone-04-withdraw-ready.jpg",
+    "j4-phone-05-withdrawn.jpg",
+    "j1-desktop-01-organize-signin.jpg",
+    "j1-desktop-02-organize-console.jpg",
+    "j1-desktop-03-new-event-form.jpg",
+    "j1-desktop-04-event-created.jpg",
+    "j1-desktop-05-door-setup.jpg"
+  ],
+  "walletLog": {
+    "txs": [
+      {
+        "hash": "0x7a0b015ee2539fffe19ceac6d859131998ef018515e0554b067fa3834ff8c3e8",
+        "functionName": "authorizeDoorKey",
+        "to": "0xb97517a6Ab3E097a894949793Cf478c7C2485032",
+        "value": "0",
+        "gasFromDapp": "63783",
+        "gasEstimated": null,
+        "sentAt": "2026-11-19T12:23:48.094Z",
+        "status": "success",
+        "blockNumber": "9861392",
+        "gasUsed": "51027"
+      },
+      {
+        "hash": "0x1ee6d1683244de1cc1cf0a761fdabed27e497cedb4f30f75bbb7e303304cd9da",
+        "functionName": "topUp",
+        "to": "0xb772A3786AD2b65eB648cE2eEf205Dc4F4Dc18b1",
+        "value": "20000000000000000",
+        "gasFromDapp": null,
+        "gasEstimated": "80512",
+        "sentAt": "2026-11-19T12:24:17.442Z",
+        "status": "success",
+        "blockNumber": "9861399",
+        "gasUsed": "62115"
+      },
+      {
+        "hash": "0x87c8ec5f246b5bfcbe12be03f984efc8f777b35464b8d878fde44280a5f5d583",
+        "functionName": "createEvent",
+        "to": "0xb97517a6Ab3E097a894949793Cf478c7C2485032",
+        "value": "0",
+        "gasFromDapp": "106202",
+        "gasEstimated": null,
+        "sentAt": "2026-11-19T12:26:52.225Z",
+        "status": "success",
+        "blockNumber": "9861434",
+        "gasUsed": "84962"
+      },
+      {
+        "hash": "0xe10e91261f627b40aa883dc9904b80d9007d40cd24e27f68ae2608152773bbac",
+        "functionName": "authorizeDoorKey",
+        "to": "0xb97517a6Ab3E097a894949793Cf478c7C2485032",
+        "value": "0",
+        "gasFromDapp": "63783",
+        "gasEstimated": null,
+        "sentAt": "2026-11-19T12:27:00.800Z",
+        "status": "success",
+        "blockNumber": "9861436",
+        "gasUsed": "51027"
+      }
+    ],
+    "signatures": [
+      {
+        "method": "personal_sign",
+        "at": "2026-11-19T12:23:42.932Z"
+      },
+      {
+        "method": "eth_signTypedData_v4",
+        "at": "2026-11-19T12:26:09.749Z",
+        "primaryType": "LinkWallet"
+      },
+      {
+        "method": "personal_sign",
+        "at": "2026-11-19T12:26:47.874Z"
+      }
+    ],
+    "refused": []
+  },
+  "estimateLog": []
+}

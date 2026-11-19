@@ -1,0 +1,248 @@
+{
+  "startedAt": "2026-11-19T12:45:38.472Z",
+  "baseUrl": "https://showmark.vercel.app",
+  "chainId": 1983,
+  "wallet": "0xb1440BC29DF52587cCB946cb433F4474cE92D2d1",
+  "journeys": {
+    "1-organizer-desktop": {
+      "status": "passed",
+      "notes": [
+        "reusing event 8 created by an earlier run of this harness (LIVE_RESUME_DESKTOP)",
+        "j1-desktop: door QR decoded to https://showmark.vercel.app/c/… with a fragment (issuedAt 1795092353)",
+        "door key authorized: 0x86741398d276268acf1e87f1811e25a66bb15a7c37519b2ea8f9f211b282f1b6"
+      ]
+    },
+    "3-sponsor-desktop": {
+      "status": "passed",
+      "notes": [
+        "reusing campaign 6 created by an earlier run (LIVE_RESUME_DESKTOP)",
+        "event 8 already approved for campaign 6",
+        "attendee checked in in 11421 ms",
+        "settlement on campaign page: 0x7526c9529f88d4f4117a4eddfb47e1269a8354db7682eb32fe0c8d37e34467ac",
+        "j3-desktop: printable report /sponsor/6/report rendered with explorer links"
+      ]
+    },
+    "bugs": {
+      "status": "failed",
+      "notes": [
+        "j5-desktop: /organize Withdraw (gasless relay) was rejected with 422 withdraw_rejected while 0.045 QIE is claimable"
+      ]
+    }
+  },
+  "events": [
+    {
+      "viewport": "1440x900",
+      "eventId": "8",
+      "name": "Harness desk 11-19 12:29"
+    }
+  ],
+  "campaigns": [
+    {
+      "viewport": "1440x900",
+      "campaignId": "6"
+    }
+  ],
+  "relayed": [
+    {
+      "label": "j3-desktop: check-in (relayed checkInBatch)",
+      "hash": "0xdfd9b05d6dfb3c7a1537c93e234cd0d29e7b773b7da732375bae3f192dbb226a"
+    },
+    {
+      "label": "j3-desktop: settlement (settleBatch) for attendee 0xf1e711F4a0535505A1cE7f4DD0768c2570B8Cb86 shown on campaign 6",
+      "hash": "0x7526c9529f88d4f4117a4eddfb47e1269a8354db7682eb32fe0c8d37e34467ac"
+    }
+  ],
+  "timings": [
+    {
+      "label": "j1-desktop door: authorize click to first QR",
+      "ms": 7349
+    },
+    {
+      "label": "j3-desktop: door link opened to \"You are checked in\"",
+      "ms": 11421
+    },
+    {
+      "label": "j3-desktop: stamp shown to door count +1",
+      "ms": 2012
+    },
+    {
+      "label": "j3-desktop: stamp shown to this attendee's settlement listed on the campaign page",
+      "ms": 15263
+    }
+  ],
+  "balances": {
+    "walletEnd": "0.084999999987195152"
+  },
+  "problems": [
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "3059ms GET https://showmark.vercel.app/_next/static/immutable/chunks/2ppbfzaq7-idh.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "3201ms GET https://showmark.vercel.app/_next/static/immutable/chunks/3k-pghvjm191x.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "3657ms GET https://showmark.vercel.app/_next/static/immutable/chunks/09hqhj-gzn_py.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "3672ms GET https://showmark.vercel.app/_next/static/immutable/chunks/3cn-71kq9vmaa.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "4104ms GET https://showmark.vercel.app/_next/static/immutable/chunks/2stjyavh9nw26.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "4429ms GET https://showmark.vercel.app/_next/static/immutable/chunks/00v-jb_amph31.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "4579ms GET https://showmark.vercel.app/_next/static/immutable/chunks/0q-0uk5jv0-2n.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "4646ms GET https://showmark.vercel.app/_next/static/immutable/chunks/281xcr52yzsdg.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "5376ms GET https://showmark.vercel.app/_next/static/immutable/chunks/0uau81kud_pqu.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "5416ms GET https://showmark.vercel.app/_next/static/immutable/chunks/1qrve93mmcz0i.js"
+    },
+    {
+      "context": "desktop operator",
+      "kind": "slow",
+      "text": "4825ms GET https://showmark.vercel.app/api/passport/0xb1440BC29DF52587cCB946cb433F4474cE92D2d1"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "3086ms GET https://showmark.vercel.app/_next/static/immutable/chunks/35dpz7efr1d5c.js"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "3820ms GET https://showmark.vercel.app/_next/static/immutable/media/a582cd8757547b1f-s.3_x5hg05dhjit.woff2"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "4542ms GET https://showmark.vercel.app/_next/static/immutable/chunks/turbopack-3xd-7z66s-4wg.js"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "4589ms GET https://showmark.vercel.app/_next/static/immutable/chunks/0on9japc3y47q.js"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "4657ms GET https://showmark.vercel.app/_next/static/immutable/chunks/281xcr52yzsdg.js"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "4164ms GET https://showmark.vercel.app/c/8.1795092360.WTVJocCxjnX-M70LOCnx7JiiFJP0EZ5TDMnXXj3KrohZS1BGSk91xa-bS97fEKFrvciY-ismkqQaQawyfudKTxw?_rsc=xhdorIanPcIpYSsE"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "4343ms POST https://showmark.vercel.app/api/relay/check-in"
+    },
+    {
+      "context": "j3-desktop attendee",
+      "kind": "slow",
+      "text": "3121ms GET https://showmark.vercel.app/api/passport/0xf1e711F4a0535505A1cE7f4DD0768c2570B8Cb86"
+    },
+    {
+      "context": "j5-desktop organizer",
+      "kind": "http",
+      "text": "422 POST https://showmark.vercel.app/api/relay/withdraw"
+    },
+    {
+      "context": "j5-desktop organizer",
+      "kind": "console",
+      "text": "https://showmark.vercel.app/organize :: Failed to load resource: the server responded with a status of 422 ()"
+    }
+  ],
+  "attendeeTraces": [
+    {
+      "tag": "j3-desktop",
+      "trace": [
+        "+1570ms domcontentloaded",
+        "+2918ms slow finished 2019ms script https://showmark.vercel.app/_next/static/immutable/chunks/0uau81kud_pqu.js",
+        "+3574ms slow finished 2675ms script https://showmark.vercel.app/_next/static/immutable/chunks/0xp8wv5sz-o90.js",
+        "+3575ms slow finished 2676ms script https://showmark.vercel.app/_next/static/immutable/chunks/2c6otgnr153ij.js",
+        "+3724ms slow finished 2825ms script https://showmark.vercel.app/_next/static/immutable/chunks/29lg1zedzf02f.js",
+        "+3735ms slow finished 2836ms script https://showmark.vercel.app/_next/static/immutable/chunks/3cn-71kq9vmaa.js",
+        "+3791ms slow finished 2892ms script https://showmark.vercel.app/_next/static/immutable/chunks/1qrve93mmcz0i.js",
+        "+3985ms slow finished 3086ms script https://showmark.vercel.app/_next/static/immutable/chunks/35dpz7efr1d5c.js",
+        "+5390ms slow finished 3820ms font https://showmark.vercel.app/_next/static/immutable/media/a582cd8757547b1f-s.3_x5hg05dhjit.woff2",
+        "+5441ms slow finished 4542ms script https://showmark.vercel.app/_next/static/immutable/chunks/turbopack-3xd-7z66s-4wg.js",
+        "+5488ms slow finished 4589ms script https://showmark.vercel.app/_next/static/immutable/chunks/0on9japc3y47q.js",
+        "+5556ms slow finished 4657ms script https://showmark.vercel.app/_next/static/immutable/chunks/281xcr52yzsdg.js",
+        "+5571ms load",
+        "+5716ms slow finished 4164ms fetch https://showmark.vercel.app/c/8.1795092360.WTVJocCxjnX-M70LOCnx7JiiFJP0EZ5TDMnXXj3KrohZS1BGSk91xa-bS97fEKFrvciY-ismkqQaQawyfudKTxw?_rsc=xhdo",
+        "+6189ms -> POST /api/relay/check-in",
+        "+10532ms slow finished 4343ms fetch https://showmark.vercel.app/api/relay/check-in",
+        "+10533ms -> GET /api/tx/0xdfd9b05d6dfb3c7a1537c93e234cd0d29e7b773b7da732375bae3f192dbb226a",
+        "+10533ms <- 200 /api/relay/check-in {\"txHash\":\"0xdfd9b05d6dfb3c7a1537c93e234cd0d29e7b773b7da732375bae3f192dbb226a\",\"status\":\"submitted\"}",
+        "+11327ms <- 200 /api/tx/0xdfd9b05d6dfb3c7a1537c93e234cd0d29e7b773b7da732375bae3f192dbb226a {\"status\":\"success\",\"blockNumber\":\"9861702\"}",
+        "+14678ms slow finished 3121ms fetch https://showmark.vercel.app/api/passport/0xf1e711F4a0535505A1cE7f4DD0768c2570B8Cb86"
+      ]
+    }
+  ],
+  "screenshots": [
+    "j1-desktop-01-organize-signin.jpg",
+    "j1-desktop-02-organize-console.jpg",
+    "j1-desktop-05-door-setup.jpg",
+    "j1-desktop-06-door-qr.jpg",
+    "j3-desktop-01-sponsor-gate.jpg",
+    "j3-desktop-02-sponsor-home.jpg",
+    "j3-desktop-attendee-checked-in.jpg",
+    "j3-desktop-door-count-3.jpg",
+    "j3-desktop-07-campaign-settlement.jpg",
+    "j3-desktop-08-report.jpg",
+    "j5-desktop-01-payouts.jpg",
+    "j5-desktop-02-withdraw-rejected.jpg"
+  ],
+  "walletLog": {
+    "txs": [
+      {
+        "hash": "0x86741398d276268acf1e87f1811e25a66bb15a7c37519b2ea8f9f211b282f1b6",
+        "functionName": "authorizeDoorKey",
+        "to": "0xb97517a6Ab3E097a894949793Cf478c7C2485032",
+        "value": "0",
+        "gasFromDapp": "63783",
+        "gasEstimated": null,
+        "sentAt": "2026-11-19T12:45:54.506Z",
+        "status": "success",
+        "blockNumber": "9861697",
+        "gasUsed": "51027"
+      }
+    ],
+    "signatures": [
+      {
+        "method": "personal_sign",
+        "at": "2026-11-19T12:45:47.484Z"
+      }
+    ],
+    "refused": []
+  },
+  "estimateLog": []
+}
