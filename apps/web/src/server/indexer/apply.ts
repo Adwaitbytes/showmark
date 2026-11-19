@@ -242,6 +242,9 @@ export function buildStatements(db: Db, logs: ShowmarkLog[], blockTimes: Readonl
       case "OwnershipTransferred":
       case "Paused":
       case "Unpaused":
+      case "OpenCampaignJoined":
+      case "OpenCampaignLeft":
+      case "ExposureReleased":
         // Counted as Showmark transactions; nothing else is stored.
         break;
       default: {
