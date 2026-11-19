@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+minimumReleaseAgeExclude:
+  - viem@2.58.1
+  - "@vitest/mocker@5.1.1"
+  - "@vitest/spy@5.1.1"
