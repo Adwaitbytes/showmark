@@ -393,3 +393,168 @@ campaign remotely during a live event, and the app's default campaign is mode 1 
 The escrow mechanics themselves (accounting, reentrancy, refunds, pause, fees) are sound. Fix C-01 (or ship with
 mode 1 campaigns disabled or forced to QIE ID plus per-event caps), M-01 and M-02 before launch; L-01 to L-06 are
 cheap and should go in the same release, since the contracts are immutable.
+
+---
+
+# Re-review
+
+## Scope
+
+- Fix commits `b7971f9` (contracts), `66e136b` (deploy script), `bef690a` (ABIs, docs); reviewed at HEAD
+  `9b7e186`. Diff reviewed: `git diff 51e0305 HEAD -- packages/contracts/src packages/contracts/script`.
+- New code attacked specifically: mode 1 ticket keys (`DoorPass(eventId,issuedAt,ticket)`,
+  `Ticket(eventId,attendee)`, `_ticketValid`), the mode-bound `CheckIn(eventId,attendee,mode)`, the low-level
+  oracle read `_readOracle`, `bondedExposure` and `paidForOrganizer`, the new challenge preconditions,
+  `Ownable2StepNoRenounce`, mode 2 `Presence.at = attestedAt`, and the deploy guards.
+- The original PoCs in `test/audit/AuditPoC.t.sol` were rewritten by the fix workstream into regression tests. New
+  re-review tests are in `test/audit/ReReviewPoC.t.sol`: `N-*` pass while a new issue exists, `S-*` pin down
+  attacks on the new code that were tried and fail.
+
+## Status of the original findings
+
+| ID | Status | Evidence |
+|---|---|---|
+| C-01 | **Fixed** for the remote attack. The door signature now commits to a per-rotation ticket address whose private key exists only in the QR; each attendee needs `Ticket(eventId, attendee)` from that key. Calldata reveals only signatures. Residual, accepted and documented: anyone who sees the QR (in the room, or through a photo or stream of it) can still sign tickets for any number of passes until `issuedAt + maxPassAge`. | `test_C01_harvestedDoorPassNoLongerAdmitsRemoteSybils`, `test_C01_harvestedDoorPassCannotFillCapacity` (reuses the honest ticket signature and forges one with an attacker key; both get status 11), `test_S01_attackerTicketKeyBreaksDoorPass`, `test_S02_ticketSigBoundToEvent`, `test_S03_malleatedTicketSigRejected` |
+| M-01 | **Fixed.** `CheckIn` binds the mode; the mode 2 code's signature is useless in mode 1 and vice versa. | `test_M01_modeDowngradeIsRejected`, `test_S05_attendeeSigBoundToMode` |
+| M-02 | **Fixed** as stated (one bond backs at most its own value across all open campaigns), but the chosen mechanism introduces N-01. | `test_M02_oneBondBacksAtMostItsOwnValueAcrossOpenCampaigns` |
+| L-01 | Accepted, documented in the README. The test now also proves revocation stops the key. | `test_L01_documented_doorKeyValidityBoundsAttestationTime` |
+| L-02 | **Fixed.** Gas-capped `staticcall`, return size checked (`>= 0xa0`), round ids range-checked. A feed with no code, short data, a revert or an infinite loop all defer with status 9. | `test_L02_malformedOracleAnswerDefersInsteadOfRevertingTheBatch`, `test_S06_oracleWithoutCodeOrGasBombDefers` |
+| L-03 | **Partially fixed.** Duplicate challenges per (campaign, organizer) are refused and an unrelated zero-deposit campaign can no longer challenge, but the "campaign paid this organizer" precondition costs 1 wei; see N-02. | `test_L03_challengeSpamIsRefused`, `test_N02_challengeSpamStillPossibleForOneWeiPerChallenge` |
+| L-04 | Accepted, documented (the Safe must unpause before any live campaign's `endsAt + SETTLE_GRACE`). | `test_L04_documented_pauseThroughGraceVoidsUnsettledPayouts` |
+| L-05 | **Fixed.** Mode 2 presence is dated by `attestedAt`, which is already bounded to the event window and to `now + 30 s`. | `test_L05_offlineQueuedAttestationIsPaidByAttendanceTime` |
+| L-06 | **Fixed.** `renounceOwnership` reverts on the registry, stamp, vault and bond (and the testnet aggregator). | `test_L06_renounceOwnershipIsDisabledEverywhere` |
+| I-01 | Open (documentation). The README still calls the feed QIE/USD; it reports `QIE / USDT`. | on-chain read |
+| I-02 | Open (documentation). QUSDC issuer burn power is still not listed in the trust assumptions. | verified source |
+| I-03 | **Fixed.** On chain 1990 the script refuses to run without `SAFE_ADDRESS` or an explicit `FEE_RECIPIENT` (checked in both `configFromEnv` and `deploy`) and asserts oracle decimals 8 and QUSDC decimals 6. Covered by `test/Deploy.t.sol` (`test_mainnet_refusesWithoutSafe`, `test_mainnet_refusesUnexpectedDecimals`, `test_configFromEnv_mainnetRequiresSafeAndExplicitFeeRecipient`). | review, `Deploy.t.sol` |
+| I-04 | Documented in the README trust section (discretionary slash to any recipient). | review |
+| I-05 | Resolved by M-01 (mode now bound); still no expiry, which is harmless. | review |
+| I-06, I-07 | Unchanged, informational. | review |
+
+The regression tests are not vacuous: each asserts the specific status or error at the point the old attack
+succeeded (status 11 `BadTicketSig`, `BadAttendeeSig`, status 5 once the bond is used, status 9 instead of a revert,
+`OrganizerNotPaid` and `DuplicateChallenge`, `RenounceDisabled`), and also asserts the positive path still works
+(honest attendee admitted, mode 2 settlement pays, token-priced item settles, unbond completes after resolve).
+
+## New findings
+
+| ID | Severity | Title | PoC |
+|---|---|---|---|
+| N-01 | Medium | Anyone with one past presence at an organizer's events can use up that organizer's entire bonded exposure for gas; exposure also never releases | `test_N01_bondedExposureGriefedAtGasCost`, `test_N01_exposureNeverReleases` |
+| N-02 | Low | L-03 bypass: the "paid this organizer" precondition costs 1 wei, so challenge spam still freezes any organizer's unbond | `test_N02_challengeSpamStillPossibleForOneWeiPerChallenge` |
+| N-03 | Informational | The mode 1 ticket private key travels in the URL path, so it reaches the web server and hosting logs | review |
+
+### N-01 Medium: bonded exposure can be burned by anyone, and never releases
+
+**Location:** `src/CampaignVault.sol:317-337` (`bondedExposure` check and increment).
+
+**Description.** `bondedExposure[organizer]` is global and only ever grows. Any sponsor can create an open
+campaign, and any recorded presence at the organizer's events can be settled against it. The campaign's
+parameters (amount, attendee share) are chosen by whoever creates it, without the organizer's consent. So a griefer
+who was present once at any of the organizer's events creates an open campaign with
+`amountPerPresence = bondOf(organizer) - bondedExposure(organizer)`, `attendeeShareBps = 10000` and `minBond = 1`,
+settles their own presence, and withdraws the whole amount back. Their cost is gas plus the protocol fee
+(0 by default, at most 5 percent). From then on, every honest open campaign gets `EventNotEligible` for that
+organizer. Topping up the bond doesn't help, because the griefer can repeat with a new campaign against the same
+presence (the settled key includes the campaign id). Separately, because exposure never decreases, an honest
+organizer's lifetime revenue from open campaigns is capped at its current bond even with no attacker.
+
+**Exploit scenario.** A competitor attends one of a popular organizer's meetups. Before a big sponsor's open
+campaign settles, the competitor burns the organizer's 10 QIE exposure in three transactions and gets the 10 QIE
+back. The organizer's attendees go unpaid by every open campaign, and the sponsor refunds after the grace period.
+
+**PoC:** `test_N01_bondedExposureGriefedAtGasCost`, `test_N01_exposureNeverReleases`.
+
+**Recommended fix.** Exposure should only be consumed by campaigns the organizer accepted, and it should be
+released once the risk has passed:
+
+1. Organizer opt-in: `acceptOpenCampaign(campaignId)` on the vault (or the registry event), checked in `_settle`
+   for bonded eligibility. A griefer's campaign then cannot touch the organizer's exposure.
+2. Release: record exposure per campaign (`exposureOf[campaignId][organizer]`). Let the organizer (or anyone)
+   release it after `endsAt + SETTLE_GRACE + CHALLENGE_WINDOW` if no challenge is open for that pair, and have
+   `requestUnbond` and slashing work against `bond - lockedExposure`.
+
+### N-02 Low: challenge spam still costs about 1 wei per challenge
+
+**Location:** `src/OrganizerBond.sol:102-106`.
+
+**Description.** `paidForOrganizer(campaignId, organizer) > 0` is satisfied by any campaign that settled any
+presence at the organizer's events. Approving an event is up to the sponsor alone, settlement is permissionless,
+and the presence can be any stranger's. So a griefer creates a campaign with `amountPerPresence = 1` wei and a
+1 wei deposit, approves one of the organizer's events, settles an existing presence, and challenges. One
+challenge per (campaign, organizer) only means one per new campaign. Each open challenge still blocks the whole
+`completeUnbond`.
+
+**PoC:** `test_N02_challengeSpamStillPossibleForOneWeiPerChallenge` (10 challenges for 10 wei and gas).
+
+**Recommended fix.** Make the lock proportional to the grievance. A challenge locks at most
+`paidForOrganizer(campaignId, organizer)` of the organizer's stake; `completeUnbond` pays out everything above
+the sum of locked amounts; `resolve` can slash at most the challenge's locked amount (or keep the discretionary
+slash, but only of what is locked). Spam then locks a few wei. Optionally also require a challenge deposit that
+is forfeited when the Safe dismisses the challenge.
+
+### N-03 Informational: ticket key in the URL path
+
+`apps/web/src/lib/qr/payload.ts` puts the ticket private key in `{origin}/c/{eventId}.{issuedAt}.{doorSig}.{ticketKey}`.
+The phone requests that path from the server, so it reaches request logs, the hosting provider's log stream and
+any proxy, and stays in browser history. Anyone with real-time log access could admit sybils remotely until
+`issuedAt + maxPassAge`. Move the token into the fragment (`/c#...`), which browsers never send, and read it on
+the client.
+
+## Attacks on the new code that failed (sound)
+
+- **Ticket reuse.** Across attendees (ticket signature binds the attendee), across events (binds `eventId`; S-02),
+  across modes (mode 2 requires `ticket == 0` and an empty `ticketSig`; S-04), across rotations (the door signature
+  commits to one ticket address, and the app generates a fresh key per rotation). Substituting an attacker's ticket
+  key changes the recovered door signer, which gives `DoorKeyNotAuthorized` (S-01). A zero ticket in mode 1 is
+  refused even with a door signature over `ticket = 0` (S-04). High-s ticket signatures are refused by
+  `ECDSA.tryRecover` (S-03). Type hashes are distinct, so a `Ticket` signature cannot pass as a `CheckIn` (same
+  field list as the old `CheckIn`, different type string).
+- **Mode binding.** Attendee signatures for mode 1 and mode 2 are not interchangeable (S-05).
+- **Oracle read.** The assembly writes five words of scratch past the free memory pointer without allocating, which
+  is memory-safe. Return data under 160 bytes, a revert, an out-of-gas (100,000 cap), no code (S-06) or round ids
+  above `uint80` all read as "no price". A caller who sends too little gas only defers its own batch items; nothing
+  is recorded, so the item can be retried.
+- **`bondedExposure` arithmetic.** `bondRoom` is computed without underflow (`bonded > exposure ? ... : 0`). The
+  `type(uint256).max` sentinel cannot be reached by a real bond. Exposure is added only on the bonded path and in
+  the same step as `_credit`. It cannot be bypassed: only an explicit sponsor approval skips it, and that is the
+  intended exemption. Open campaigns are native-only, so exposure and bond are in the same unit (wei, including
+  UsdInNative). The only problems are the ones in N-01.
+- **Challenge bookkeeping.** `_openFor` is set and cleared symmetrically; `openChallenges` cannot underflow because
+  `resolve` requires an open, unresolved challenge.
+- **`Ownable2StepNoRenounce`.** `pure` override of `renounceOwnership` that always reverts; transfer and accept are
+  unchanged.
+- **Mode 2 `at = attestedAt`.** Bounded to `[startsAt - 1 h, endsAt + 1 h]` and `<= now + 30 s`, and chosen only
+  by an authorized door key, which the organizer already controls. Window checks in the vault stay consistent, and
+  refund and settlement remain mutually exclusive.
+- **Deploy guards.** `_envAddress` treats unset or empty as zero; the mainnet guards run before broadcast; constants
+  match the expected QUSDC, oracle and name-registry addresses.
+
+## Tool results (re-review)
+
+- `forge test`: 207 passed, 0 failed, 1 skipped (the fork test), 13 suites, including all 19 tests in `test/audit`.
+- `forge coverage --report summary --no-match-coverage "(test|script)/" --no-match-path "test/invariant/*"`: 100%
+  lines (595/595), statements (749/749), branches (162/162) and functions (114/114) over `src/`, including
+  `Ownable2StepNoRenounce`.
+- `slither .`: 28 results across the same 7 benign detector classes as before (assembly now includes
+  `_readOracle`, uninitialized locals defaulting to zero, ignored tuple members, calls in loops to trusted
+  contracts, event-after-call in `checkInBatch` to the registry's own stamp, timestamps, unindexed event
+  addresses). None is a vulnerability.
+
+## Verdict (re-review)
+
+**No remaining finding lets anyone steal or lock sponsor escrow or claimable balances.** C-01, M-01, L-02, L-05,
+L-06 and I-03 are fixed and their regression tests are meaningful. M-02 is fixed as stated, and L-03 only in part.
+
+**Mainnet readiness: ready with one condition.** N-01 lets anyone shut an organizer out of open-to-bonded campaigns
+for the cost of gas, and with no attacker at all it caps an organizer's lifetime revenue from open campaigns at its
+current bond. N-02 still lets anyone freeze an organizer's unbond for about 1 wei per challenge. Neither moves
+funds: sponsors keep their refund and approved-event campaigns are unaffected. But the contracts are immutable, so
+pick one before deploying:
+
+1. Fix N-01 (organizer opt-in plus exposure release) and N-02 (lock only the challenged amount) first.
+   Recommended if bonds are part of the launch.
+2. Deploy as is, hide `openToBonded` campaigns and bonding in the app at launch, and document N-01 and N-02 as
+   known limitations of the v1 bond.
+
+Before either, still correct the README trust section for I-01 (the feed is QIE/USDT) and I-02 (QUSDC issuer
+burn), and move the ticket key into the URL fragment (N-03).
