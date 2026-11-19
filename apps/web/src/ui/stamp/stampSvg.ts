@@ -291,3 +291,60 @@ export function stampDataUri(params: StampParams): string {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return `data:image/svg+xml;base64,${btoa(binary)}`;
 }
+
+export interface MarkParams {
+  /** One or two short lines, printed in capitals: ["Awaiting", "first check-in"]. */
+  lines: readonly [string] | readonly [string, string];
+  ink?: StampInk;
+  /** Seeds the tilt and the ink texture so the same mark always prints the same way. */
+  seed: string;
+  color?: "css" | "print";
+  rotate?: boolean;
+  idPrefix?: string;
+}
+
+/**
+ * A rubber office mark (a framed word or two, like RECEIVED or VOID) in the same inks and ink
+ * bleed as the event stamps. Used for states: "Awaiting first check-in", "Not admitted".
+ */
+export function markSpec(params: Pick<MarkParams, "seed" | "lines">): { rotation: number; width: number; height: number; label: string } {
+  const tilt = createRng(`mark:${params.seed}`);
+  const rotation = r1((tilt.next() < 0.5 ? -1 : 1) * tilt.range(4, 9));
+  return { rotation, width: 300, height: params.lines.length === 2 ? 132 : 96, label: params.lines.map(clean).join(" ") };
+}
+
+export function markSvg(params: MarkParams): string {
+  const spec = markSpec(params);
+  const ink = params.ink ?? "vermilion";
+  const seed = hashSeed(`mark:${params.seed}`);
+  const id = `${params.idPrefix ?? "mk"}-${seed.toString(36)}`;
+  const css = (params.color ?? "css") === "css";
+  const rootPaint = css
+    ? `style="color:var(--${ink});font-family:var(--font-geist),Arial,sans-serif"`
+    : `color="${PRINT_INK[ink]}" font-family="Geist, 'Helvetica Neue', Arial, sans-serif"`;
+  const { width, height } = spec;
+  const lines = params.lines.map((line, index) => {
+    const fitted = fitText(line, 236, index === 0 ? 30 : 22, 12, 0.06);
+    return { ...fitted, y: params.lines.length === 1 ? 61 : index === 0 ? 62 : 98 };
+  });
+  const tilt = params.rotate === false ? "" : ` transform="rotate(${spec.rotation} ${width / 2} ${height / 2})"`;
+  const body = [
+    `<g fill="none" stroke="currentColor">`,
+    `<rect x="14" y="12" width="${width - 28}" height="${height - 24}" rx="6" stroke-width="3.6"/>`,
+    `<rect x="21" y="19" width="${width - 42}" height="${height - 38}" rx="3" stroke-width="1.2"/>`,
+    `</g>`,
+    `<g fill="currentColor" font-weight="800" text-anchor="middle">`,
+    ...lines.map(
+      (line) =>
+        `<text x="${width / 2}" y="${line.y}" font-size="${line.size}" letter-spacing="${r1(line.size * 0.06)}">${escapeXml(line.text)}</text>`,
+    ),
+    `</g>`,
+  ].join("");
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" ${rootPaint} role="img" aria-label="${escapeXml(spec.label)}">`,
+    `<title>${escapeXml(spec.label)}</title>`,
+    `<defs>${inkBleedFilter(id, seed, width, height)}</defs>`,
+    `<g filter="url(#${id}-ink)" opacity="0.88"><g${tilt}>${body}</g></g>`,
+    `</svg>`,
+  ].join("");
+}

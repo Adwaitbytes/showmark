@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stampDataUri, stampSpec, stampSvg, type StampParams } from "./stampSvg";
+import { markSpec, markSvg, stampDataUri, stampSpec, stampSvg, type StampParams } from "./stampSvg";
 
 const base: StampParams = {
   eventId: "12",
@@ -71,5 +71,15 @@ describe("stampDataUri", () => {
     expect(uri.startsWith("data:image/svg+xml;base64,")).toBe(true);
     const decoded = Buffer.from(uri.split(",")[1] ?? "", "base64").toString("utf8");
     expect(decoded).toBe(stampSvg({ ...base, color: "print" }));
+  });
+});
+
+describe("markSvg", () => {
+  it("prints escaped capitals in a double frame with a stable tilt", () => {
+    const svg = markSvg({ lines: ["Awaiting", "first <check-in>"], seed: "traction" });
+    expect(svg).toContain("AWAITING");
+    expect(svg).toContain("FIRST &lt;CHECK-IN&gt;");
+    expect((svg.match(/<rect /g) ?? []).length).toBe(2);
+    expect(markSpec({ seed: "traction", lines: ["A"] }).rotation).toBe(markSpec({ seed: "traction", lines: ["B"] }).rotation);
   });
 });
