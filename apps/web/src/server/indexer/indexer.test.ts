@@ -1,67 +1,13 @@
-import { parseAbi, zeroAddress, type Address, type Log } from "viem";
+import { parseAbi, zeroAddress } from "viem";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { registryAbi, vaultAbi } from "@/lib/chain/abi";
 import * as t from "../db/schema";
+import { blockTimes, doorKey, fixtureLogs, indexFixture, organizer, pass, pass2, registry, sponsor, startsAt, vault, wallet } from "../testing/fixtures";
 import { createTestDatabase } from "../testing/pglite";
 import { encodeLog } from "../testing/logs";
-import { buildStatements, syncStateStatement } from "./apply";
+import { buildStatements } from "./apply";
 import { decodeShowmarkLogs } from "./decode";
 import { parseCampaignMetadata, parseEventMetadata, parseSeriesName } from "./metadata";
-
-const registry: Address = "0x1000000000000000000000000000000000000001";
-const vault: Address = "0x2000000000000000000000000000000000000002";
-const organizer: Address = "0xA0Cf798816D4b9b9866b5330EEa46a18382f251e";
-const sponsor: Address = "0x90F79bf6EB2c4f870365E785982E1f101E93b906";
-const pass: Address = "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65";
-const pass2: Address = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc";
-const wallet: Address = "0x976EA74026E726554dB657fA54763abd0C3a0aa9";
-const doorKey: Address = "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955";
-
-const startsAt = 1_795_000_000n;
-const endsAt = startsAt + 7_200n;
-const eventMeta = JSON.stringify({ v: 1, name: "Delhi builders night", venue: "Hall B", city: "Delhi", description: "Talks and demos", url: "https://example.org/e" });
-const campaignMeta = JSON.stringify({ v: 1, name: "Show up and earn", sponsor: "Acme", description: "Pays every verified guest" });
-
-function fixtureLogs(): Log[] {
-  return [
-    encodeLog(registryAbi, "SeriesCreated", { seriesId: 1n, organizer, metadata: JSON.stringify({ name: "Builders nights" }) }, { address: registry, block: 100n, logIndex: 0 }),
-    encodeLog(
-      registryAbi,
-      "EventCreated",
-      { eventId: 1n, organizer, startsAt, endsAt, capacity: 100, maxPassAge: 60, seriesId: 1n, seriesIndex: 1, metadata: eventMeta },
-      { address: registry, block: 100n, logIndex: 1 },
-    ),
-    encodeLog(vaultAbi, "CampaignCreated", {
-      campaignId: 1n,
-      sponsor,
-      token: zeroAddress,
-      pricing: 0,
-      amountPerPresence: 10n ** 18n,
-      attendeeShareBps: 7_000,
-      minProofMode: 1,
-      requireQieId: false,
-      startsAt,
-      endsAt,
-      feeBps: 100,
-      metadata: campaignMeta,
-    }, { address: vault, block: 101n, logIndex: 0 }),
-    encodeLog(vaultAbi, "CampaignFunded", { campaignId: 1n, from: sponsor, amount: 50n * 10n ** 18n }, { address: vault, block: 101n, logIndex: 1 }),
-    encodeLog(vaultAbi, "EventsApproved", { campaignId: 1n, eventIds: [1n] }, { address: vault, block: 102n, logIndex: 0 }),
-    encodeLog(registryAbi, "CheckedIn", { eventId: 1n, attendee: pass, mode: 1, doorKey, doorTime: startsAt + 10n, streak: 1 }, { address: registry, block: 103n, logIndex: 0 }),
-    encodeLog(registryAbi, "CheckedIn", { eventId: 1n, attendee: pass2, mode: 2, doorKey, doorTime: startsAt + 20n, streak: 1 }, { address: registry, block: 103n, logIndex: 1 }),
-    encodeLog(
-      vaultAbi,
-      "Settled",
-      { campaignId: 1n, eventId: 1n, attendee: pass, organizer, gross: 10n ** 18n, toAttendee: 693n * 10n ** 15n, toOrganizer: 297n * 10n ** 15n, fee: 10n ** 16n, price: 0n },
-      { address: vault, block: 103n, logIndex: 2 },
-    ),
-    encodeLog(vaultAbi, "SettlementSkipped", { campaignId: 1n, eventId: 1n, attendee: pass2, status: 8 }, { address: vault, block: 103n, logIndex: 3 }),
-    encodeLog(registryAbi, "WalletLinked", { pass, wallet }, { address: registry, block: 104n, logIndex: 0 }),
-    encodeLog(registryAbi, "EventMetadataUpdated", { eventId: 1n, metadata: JSON.stringify({ v: 1, name: "Delhi builders night 2", venue: "Hall C", city: "Delhi", description: "" }) }, { address: registry, block: 105n, logIndex: 0 }),
-  ];
-}
-
-const blockTimes = new Map([100n, 101n, 102n, 103n, 104n, 105n].map((b) => [b, new Date(Number(startsAt + (b - 100n) * 4n) * 1000)] as const));
 
 describe("decodeShowmarkLogs", () => {
   it("decodes registry and vault logs with their own ABIs, in chain order", () => {
@@ -126,12 +72,7 @@ describe("buildStatements on Postgres", () => {
     await database.close();
   });
 
-  async function applyFixture() {
-    const decoded = decodeShowmarkLogs(fixtureLogs(), { registry, vault });
-    const statements = buildStatements(database.db, decoded, blockTimes, { teamAddresses: new Set([sponsor]) });
-    statements.push(syncStateStatement(database.db, 1983, [registry, vault], 105n));
-    await database.batch(statements);
-  }
+  const applyFixture = () => indexFixture(database);
 
   it("writes every table and is idempotent when the same range is applied twice", async () => {
     await applyFixture();
