@@ -26,6 +26,6 @@ contract BuilderPerks {
         if (claimed[key]) revert AlreadyClaimed();
         claimed[key] = true;
         emit Claimed(key, msg.sender);
-        // Mint, transfer or unlock whatever the perk is here.
+        // Mint, transfer or grant the perk here.
     }
 }
