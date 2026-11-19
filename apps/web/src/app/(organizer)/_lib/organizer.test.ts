@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { api } from "./api";
 import { byteLength, DEFAULT_PASS_AGE, encodeMetadata, parseLocalDateTime, toLocalDateTimeValue, validateEventForm, type EventFormValues } from "./event-form";
 import { attendeesCsv } from "./csv";
 import { formatQie } from "./tx";
@@ -111,5 +112,34 @@ describe("attendee csv", () => {
     const [header, row] = csv.trim().split("\r\n");
     expect(header).toBe("attendee,qie_name,proof_mode,door_time_utc,streak,transaction,explorer_link");
     expect(row).toBe(`0xabc,"'=cmd,x",door scans you,2026-11-27T13:00:00.000Z,3,0x01,https://mainnet.qie.digital/tx/0x01`);
+  });
+});
+
+describe("session read", () => {
+  const session = { address: "0xA8C849C243BA940102d2deB99971e4c713411926", qieName: null, expiresAt: "2026-11-20T10:15:00.000Z" };
+  const respond = (status: number, body: unknown) =>
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })));
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("treats 200 null, a wrapped null and the older 401 as signed out", async () => {
+    respond(200, null);
+    expect(await api.session()).toBeNull();
+    respond(200, { session: null });
+    expect(await api.session()).toBeNull();
+    respond(401, { error: { code: "unauthorized", message: "Not signed in.", action: "Sign in." } });
+    expect(await api.session()).toBeNull();
+  });
+
+  it("returns the session when signed in, bare or wrapped", async () => {
+    respond(200, session);
+    expect(await api.session()).toEqual(session);
+    respond(200, { session });
+    expect(await api.session()).toEqual(session);
+  });
+
+  it("still reports a server failure", async () => {
+    respond(503, { error: { code: "upstream_unavailable", message: "Down.", action: "Wait." } });
+    await expect(api.session()).rejects.toThrow("Down.");
   });
 });

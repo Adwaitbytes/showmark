@@ -86,6 +86,13 @@ const sessionSchema = z.object({
   expiresAt: iso,
 }) satisfies z.ZodType<Session>;
 
+// Signed out is a normal answer, not an error: 200 with null, or the same wrapped in { session }.
+const currentSessionSchema = z.union([
+  sessionSchema,
+  z.null(),
+  z.object({ session: sessionSchema.nullable() }).transform((v) => v.session),
+]);
+
 const passportNameSchema = z.object({ qieName: z.string().nullable() }).passthrough();
 
 const apiErrorSchema = z.object({ error: z.object({ code: z.string(), message: z.string(), action: z.string() }) });
@@ -157,7 +164,15 @@ export const api = {
   /** Just the token of a campaign, to label payouts read from the chain. */
   campaignToken: (id: string) =>
     requestJson(`/api/campaigns/${encodeURIComponent(id)}`, z.object({ tokenSymbol: z.enum(["QIE", "QUSDC"]), name: z.string() }).passthrough()),
-  session: () => requestJson("/api/auth/session", sessionSchema),
+  /** The current session, or null when signed out. Accepts 200 with null (or `{ session: null }`) and the older 401. */
+  async session(): Promise<Session | null> {
+    try {
+      return await requestJson("/api/auth/session", currentSessionSchema);
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 401) return null;
+      throw error;
+    }
+  },
   /** The server writes the exact sign-in message, bound to this address and a single-use nonce. */
   challenge: (address: Address) =>
     requestJson(`/api/auth/nonce?address=${address}`, z.object({ nonce: z.string().min(8), message: z.string().min(1) }), { method: "GET" }),

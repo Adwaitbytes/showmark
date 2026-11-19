@@ -154,7 +154,7 @@ function Form({ account }: { account: Address }) {
       <Container width="prose" className="py-14">
         <Sheet edge="stub-bottom">
           <SheetSection className="flex flex-col gap-5">
-            <p className="text-sm font-medium tracking-[0.12em] text-ledger-green uppercase">Recorded on QIE</p>
+            <p className="text-sm font-medium text-ink-soft">Recorded on QIE</p>
             <h1 className="font-display text-4xl text-ink">{values.name.trim()} is event {created.eventId.toString()}</h1>
             <p className="text-md text-ink-soft">
               Next, open the door screen on the device you will use at the entrance. It makes its own door key and asks your wallet to approve it once.
@@ -180,7 +180,7 @@ function Form({ account }: { account: Address }) {
   return (
     <Container className="py-10 sm:py-14">
       <div className="mb-10 flex max-w-2xl flex-col gap-3">
-        <p className="text-sm font-medium tracking-[0.12em] text-ink-soft uppercase">New event</p>
+        <p className="text-sm font-medium text-ink-soft">New event</p>
         <h1 className="font-display text-4xl text-ink sm:text-5xl">Create an event</h1>
         <p className="text-md text-ink-soft">
           Everything here is written to QIE from your wallet. The name and details can be edited later; the times cannot, so check them twice.

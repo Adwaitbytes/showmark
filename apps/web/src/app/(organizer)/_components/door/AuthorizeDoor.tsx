@@ -18,6 +18,8 @@ interface Props {
   eventName: string | null;
   doorKey: Address;
   revoked: boolean;
+  /** What this device will do once authorized: show the rotating code, or scan attendee codes. */
+  purpose: "show" | "scan";
   onAuthorized(): void;
 }
 
@@ -25,7 +27,7 @@ interface Props {
  * First run on a door device: the organizer's wallet signs authorizeDoorKey once, and from then on this browser signs
  * door codes by itself. The key never leaves this device.
  */
-export function AuthorizeDoor({ eventId, event, eventName, doorKey, revoked, onAuthorized }: Props) {
+export function AuthorizeDoor({ eventId, event, eventName, doorKey, revoked, purpose, onAuthorized }: Props) {
   const wallet = useWallet();
   const account = wallet.status === "connected" ? wallet.account : null;
   const isOrganizer = account !== null && isAddressEqual(account, event.organizer);
@@ -45,14 +47,18 @@ export function AuthorizeDoor({ eventId, event, eventName, doorKey, revoked, onA
   return (
     <div className="flex w-full max-w-xl flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <p className="text-sm font-medium tracking-[0.12em] text-ink-soft uppercase">Door screen setup</p>
+        <p className="text-sm font-medium text-ink-soft">Door screen setup</p>
         <h1 className="font-display text-3xl text-balance text-ink sm:text-4xl">
-          {revoked ? "This door key was revoked" : "Make this device the door"}
+          {revoked ? "This door key was revoked" : purpose === "scan" ? "Make this device the door scanner" : "Make this device the door"}
         </h1>
         <p className="text-md text-ink-soft">
           {revoked
             ? "The organizer revoked the key this device was using, so its codes no longer check anyone in. Authorize it again to keep using this device at the door."
-            : `This browser just made a door key for ${eventName ?? `event ${eventId}`}. Approve it once with the organizer’s QIE Wallet and this device will show a fresh signed code every 15 seconds, with no more wallet popups.`}
+            : `This browser just made a door key for ${eventName ?? `event ${eventId}`}. Approve it once with the organizer’s QIE Wallet and ${
+                purpose === "scan"
+                  ? "this device will scan each attendee’s code and sign their check-in, even without internet"
+                  : "this device will show a fresh signed code every 15 seconds"
+              }, with no more wallet popups.`}
         </p>
       </div>
 

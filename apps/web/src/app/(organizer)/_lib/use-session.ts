@@ -37,14 +37,13 @@ export function useOrganizerSession(): SessionState {
       .then((s) => {
         if (cancelled) return;
         setSession(s);
-        setStatus("signed-in");
+        setStatus(s ? "signed-in" : "signed-out");
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         setSession(null);
         setStatus("signed-out");
-        // A 401 is the normal signed-out answer; anything else is worth saying.
-        if (!(e instanceof ApiRequestError && e.status === 401)) setError(errorCopy(e));
+        setError(errorCopy(e));
       });
     return () => {
       cancelled = true;

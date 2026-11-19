@@ -307,7 +307,7 @@ async function handleApi(state: MockState, route: Route) {
     }
     return state.signedIn
       ? json(route, 200, { address: ORGANIZER, qieName: "campusweb3.qie", expiresAt: iso(nowSeconds() + 900) })
-      : json(route, 401, { error: { code: "unauthorized", message: "You are not signed in.", action: "Sign in with QIE Wallet." } });
+      : json(route, 200, null);
   }
   if (path === "/api/auth/nonce") return json(route, 200, { nonce: "n0nce1234567" });
   if (path === "/api/auth/verify") {

@@ -132,7 +132,7 @@ export function JudgesDesk() {
       ) : null}
       <div className="mx-auto grid w-full max-w-[110rem] flex-1 content-center grid-cols-1 gap-x-[5vmin] gap-y-[3vmin] px-[4vmin] py-[3vmin] landscape:grid-cols-[minmax(0,auto)_minmax(0,1fr)] landscape:grid-rows-[auto_auto]">
         <div className="flex min-w-0 flex-col gap-[1vmin] landscape:col-start-2 landscape:row-start-1 landscape:self-end">
-          <p className="text-[clamp(0.875rem,1.9vmin,1.375rem)] font-medium tracking-[0.12em] text-ink-soft uppercase">Admit one judge</p>
+          <p className="text-[clamp(0.875rem,1.9vmin,1.375rem)] font-medium text-ink-soft">Admit one judge</p>
           <h1 className="font-display text-[clamp(1.75rem,6vmin,5rem)] leading-[1.02] text-balance text-ink" data-testid="desk-name">
             {name}
           </h1>

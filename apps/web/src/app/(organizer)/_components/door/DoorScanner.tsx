@@ -59,7 +59,7 @@ function ResultBand({ result, onDismiss }: { result: Result; onDismiss(): void }
         {result.tone === "failure" ? <CloseIcon className="size-8" /> : result.tone === "queued" ? <RetryIcon className="size-8" /> : <CheckIcon className="size-8" />}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-sm font-medium tracking-[0.1em] uppercase opacity-85">{style.label}</p>
+        <p className="text-sm font-medium opacity-85">{style.label}</p>
         <p className="font-display text-2xl leading-tight sm:text-3xl">{result.title}</p>
         <p className="text-base opacity-90">{result.body}</p>
         {result.tone === "success" && result.tx ? (
@@ -239,7 +239,7 @@ export function DoorScanner() {
   if (!ready || setup.phase.kind !== "ready" || !setup.event) {
     return (
       <DoorFrame bar={bar}>
-        <DoorSetupView setup={setup} />
+        <DoorSetupView setup={setup} purpose="scan" />
       </DoorFrame>
     );
   }

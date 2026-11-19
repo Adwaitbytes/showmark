@@ -167,7 +167,7 @@ function Console({ account, name, onSignOut }: { account: Address; name: string 
     <Container className="flex flex-col gap-10 py-10 sm:py-14">
       <header className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-3">
-          <p className="text-sm font-medium tracking-[0.12em] text-ink-soft uppercase">Organizer console</p>
+          <p className="text-sm font-medium text-ink-soft">Organizer console</p>
           <h1 className="font-display text-4xl text-ink sm:text-5xl">Your events</h1>
           <p className="flex flex-wrap items-center gap-2 text-sm text-ink-soft">
             Signed in as <AddressChip address={account} name={name} />

@@ -113,7 +113,7 @@ function Centered({ children }: { children: ReactNode }) {
  * Everything the door shows before it is ready to sign: loading, missing contracts, unknown event, a browser that
  * cannot store a key, a key that needs authorizing, and the reset state. Returns null once the door is ready.
  */
-export function DoorSetupView({ setup }: { setup: DoorSetup }) {
+export function DoorSetupView({ setup, purpose = "show" }: { setup: DoorSetup; purpose?: "show" | "scan" }) {
   const { phase } = setup;
   const eventLabel = setup.eventId === null ? "" : setup.eventId.toString();
   switch (phase.kind) {
@@ -209,6 +209,7 @@ export function DoorSetupView({ setup }: { setup: DoorSetup }) {
             eventName={setup.details?.metadata.name ?? null}
             doorKey={setup.doorKey.address}
             revoked={phase.revoked}
+            purpose={purpose}
             onAuthorized={setup.markAuthorized}
           />
         </Centered>

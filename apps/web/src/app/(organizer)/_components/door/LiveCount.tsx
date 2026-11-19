@@ -49,7 +49,7 @@ export function LiveCount({ value, capacity, stale, className }: Props) {
 
   return (
     <div className={cn("flex flex-col", className)}>
-      <p className="text-[clamp(0.875rem,1.9vmin,1.375rem)] font-medium tracking-[0.12em] text-ink-soft uppercase">Checked in</p>
+      <p className="text-[clamp(0.875rem,1.9vmin,1.375rem)] font-medium text-ink-soft">Checked in</p>
       <p
         data-testid="door-count"
         className="relative font-display leading-[0.82] tracking-[-0.03em] text-ink tabular-nums"

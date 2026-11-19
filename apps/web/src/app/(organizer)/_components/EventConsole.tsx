@@ -487,7 +487,7 @@ function ConsoleBody({ eventId, account }: { eventId: string; account: Address }
         <aside className="flex flex-col gap-6">
           <Sheet edge="stub-bottom">
             <SheetSection className="flex flex-col gap-3">
-              <p className="text-sm font-medium tracking-[0.12em] text-ink-soft uppercase">Checked in</p>
+              <p className="text-sm font-medium text-ink-soft">Checked in</p>
               <p className="font-display text-5xl leading-none text-ink" data-testid="console-count">
                 {formatCount(event.checkedIn)}
               </p>
