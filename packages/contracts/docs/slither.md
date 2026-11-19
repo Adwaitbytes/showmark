@@ -3,7 +3,7 @@
 Run from `packages/contracts` with `slither .` (Slither 0.11.6, 102 detectors). `slither.config.json` limits the
 report to `src/` by filtering `lib/`, `test/` and `script/`.
 
-Result on 19 Nov 2026, after the audit fixes: 28 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
+Result on 19 Nov 2026, after the audit and re-review fixes: 30 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
 below with the reason it is accepted. Two lint-level items found earlier by `forge lint` were fixed in code: the
 `CheckedIn` event is emitted before the stamp mint, and the `uint64(block.timestamp)` cast is annotated.
 
@@ -41,12 +41,14 @@ below with the reason it is accepted. Two lint-level items found earlier by `for
 |---|---|
 | `ShowmarkRegistry.checkInBatch` emits `CheckInRejected` after an earlier item's `stamp.mint` | The only external call is to the registry's own stamp, which never calls out (mint skips the ERC-1155 receiver hook), so no reentrant path exists to reorder logs. Within `_record` the `CheckedIn` event is emitted before the mint. |
 
-## timestamp (8)
+## timestamp (10)
 
 | Location | Justification |
 |---|---|
 | `CampaignVault.topUp`, `closeCampaign`, `refund`, `_settle`, `_quote` | Campaign windows, the 3 day grace period and the 48 hour oracle age are hours to days long; validator drift of a few seconds cannot change an outcome that matters. |
 | `OrganizerBond.completeUnbond` | 7 day unbond delay; seconds of drift are irrelevant. |
+| `CampaignVault.releaseExposure` | Releases a campaign's bonded exposure only after `endsAt + SETTLE_GRACE` (3 days); seconds of drift cannot let a still-payable campaign release early in any way that matters, because settlement uses the same bound. |
+| `OrganizerBond.challenge` | False positive: the flagged comparison is `cam.token == address(0) && paid < free`, which uses no timestamp; Slither taints it because the campaign struct read from the vault contains `startsAt` and `endsAt`. |
 | `ShowmarkRegistry.linkWallet` | Signature deadline chosen by the signer, minutes long. |
 | `ShowmarkRegistry._validate` | Check-in freshness and windows are the product's core rule and are defined against block time by the spec; a 30 second clock-skew allowance is built in, and the residual risk (a relayed rotating QR) is documented in the threat model. |
 

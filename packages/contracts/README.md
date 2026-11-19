@@ -14,12 +14,12 @@ Development was AI-assisted; every line was written for this project.
 |---|---|---|
 | `ShowmarkRegistry` | Events, series, door keys, check-ins (single and batched), streaks and pass-to-wallet links. Verifies the attendee's `CheckIn` (which binds the proof mode), the door's `DoorPass` or `DoorAttest`, and for mode 1 the rotation ticket's `Ticket` EIP-712 signatures (domain `Showmark`, version `1`). Never calls the vault. Deploys the stamp in its constructor. | 15,387 B |
 | `PresenceStamp` | Soulbound ERC-1155, token id = event id. Only the registry mints and relocates; transfers and approvals revert with `Soulbound()`. `uri(id)` is `{baseURI}{id}`. | 6,323 B |
-| `CampaignVault` | Sponsor escrow. Pays per verified presence in a token amount or in USD converted to QIE at the oracle price, splits fee, attendee and organizer shares into claimable balances, and refunds the rest after the grace period. | 17,244 B |
-| `OrganizerBond` | Organizers stake QIE so sponsors can open a campaign to any bonded organizer. Sponsors challenge, the protocol Safe arbitrates and may slash. Arbitration is centralized in v1. | 6,618 B |
+| `CampaignVault` | Sponsor escrow. Pays per verified presence in a token amount or in USD converted to QIE at the oracle price, splits fee, attendee and organizer shares into claimable balances, and refunds the rest after the grace period. | 18,446 B |
+| `OrganizerBond` | Organizers stake QIE so sponsors can open a campaign to any bonded organizer. Sponsors challenge, the protocol Safe arbitrates and may slash. Arbitration is centralized in v1. | 7,032 B |
 | `PresenceLens` | `IPresence` over the registry for other contracts and the SDK. Resolves a linked wallet to its pass. | 1,856 B |
 | `QieIdCheck` | Says whether a wallet holds a QIE ID by reading QIE's name registry (`userDomain(wallet)` non-empty). Never reverts. | 550 B |
 | `examples/PresenceGatedMint` | Reference integration: one souvenir NFT per person per attended event. | 5,848 B |
-| `testnet/Testnet*` | Testnet stand-ins for QUSDC (public mint, 10,000 per call), QIE's name registry (public `claim(label)`) and the QIE/USD feed (owner posts prices). Never deployed on mainnet. | |
+| `testnet/Testnet*` | Testnet stand-ins for QUSDC (public mint, 10,000 per call), QIE's name registry (public `claim(label)`) and the QIE/USDT feed (owner posts prices). Never deployed on mainnet. | |
 
 Interfaces live in `src/interfaces`. ABIs for the app, SDK and indexer are in `abi/` (regenerate with
 `script/export-abi.sh`).
@@ -78,19 +78,32 @@ links on the registry. It never stops `refund` or `withdraw`.
   within those campaigns' normal per-presence amounts and caps). It cannot do more: `QieIdCheck` calls it with a
   100,000 gas cap, copies at most 64 bytes back and treats any revert or malformed answer as "no QIE ID", so the
   registry can never revert or stall settlement, and ungated campaigns never consult it.
-- **Price.** The QIE/USD feed (`0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17`) is trusted for UsdInNative campaigns.
+- **Price.** The QIE/USDT feed (`0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17`) is trusted for UsdInNative campaigns.
   The default `maxOracleAge` is 48 hours because the measured p99 gap between rounds is 29.5 hours and the longest
   50 hours; a stale feed delays USD payouts and never misprices them.
 - **Open-to-bonded campaigns.** A bond in QIE backs open campaigns paid in native QIE only (token or USD pricing);
   an ERC-20 campaign cannot be open to bonded organizers, because a QIE stake cannot bound a payout in a token the
-  vault cannot price. The vault keeps `bondedExposure[organizer]`, the gross ever paid at that organizer's events
-  through bonded eligibility across every campaign, and refuses a payout (status 5) that would take it above the
-  organizer's current bond, so one stake backs at most its own value however many open campaigns exist
-  (audit M-02). Payouts for explicitly approved events are not counted.
-- **Arbitration.** The OrganizerBond owner (the protocol Safe) resolves challenges and may slash any bonded or
-  pending stake to any recipient, at its discretion. Only a sponsor whose campaign has actually paid for presences at
-  the organizer's events may challenge it, with at most one open challenge per (campaign, organizer) (audit L-03).
-  An open challenge blocks the organizer's `completeUnbond` until the Safe resolves it.
+  vault cannot price. The rules (audit M-02, re-review N-01):
+  - An organizer must accept each open campaign with `optInOpenCampaign(campaignId)` before it can pay the
+    organizer's events through the bond, and can stop further payouts with `optOutOpenCampaign`. A campaign the
+    organizer never accepted cannot touch its bond, so a stranger cannot burn the organizer's capacity with a
+    self-paying campaign.
+  - The vault keeps `exposureOf[campaignId][organizer]` and the total `bondedExposure[organizer]`: gross paid
+    through bonded eligibility. A payout that would take the total above the organizer's current bond returns
+    status 5 `EventNotEligible`, so one stake backs at most its own value across all accepted campaigns at once.
+    Payouts for explicitly approved events are not counted.
+  - Once a campaign can no longer pay (now > `endsAt + SETTLE_GRACE`) and its sponsor has no open challenge against
+    the organizer, anyone may call `releaseExposure(campaignId, organizer)` to give that campaign's share back.
+- **Arbitration.** The OrganizerBond owner (the protocol Safe) resolves challenges. Rules (audit L-03, re-review
+  N-02):
+  - Only a sponsor whose campaign has paid for presences at the organizer's events may challenge, with at most one
+    open challenge per (campaign, organizer), and must post `challengeDeposit` in QIE (1 QIE on mainnet, set at
+    deploy). The deposit returns to the challenger if the Safe slashes, and goes to the organizer if the Safe
+    dismisses the challenge; both claim it with `claimDeposit()`.
+  - A challenge locks `min(paidForOrganizer(campaignId, organizer), unlocked stake)`. For an ERC-20 campaign the
+    paid amount is not comparable with a QIE stake, so it locks the whole unlocked stake and the deposit is what
+    deters abuse. `completeUnbond` pays out everything above the open locks, and `resolve` can slash at most the
+    challenge's lock, to any recipient the Safe chooses.
 - **Door key validity (audit L-01, accepted).** `validUntil` bounds the signed door time, not the submission time,
   so the mode 2 offline queue keeps working after a shift. A key whose `validUntil` has passed can still sign
   attestations dated inside its validity until `endsAt + 3 days`. To stop a key (a shift ended, a phone was lost),
@@ -98,11 +111,13 @@ links on the registry. It never stops `refund` or `withdraw`.
 - **Pause and the grace period (audit L-04, accepted).** Settlement deadlines keep running while the vault is paused.
   If a pause lasts past a campaign's `endsAt + SETTLE_GRACE`, its recorded but unsettled presences can no longer be
   paid and the sponsor refunds that money. The Safe must unpause before the grace period of any live campaign ends.
-- **Feed denomination (audit I-01).** The mainnet feed reports `QIE / USDT`, so UsdInNative campaigns are priced in
-  USDT and a USDT depeg misprices them.
-- **QUSDC issuer (audit I-02).** QUSDC's `VAULT_ROLE` can `burn(from, amount)` from any address without an allowance,
-  including the vault. A holder of that role could make the vault insolvent in QUSDC; this is an issuer trust
-  assumption of every QUSDC campaign.
+- **Feed denomination (audit I-01).** The mainnet feed at `0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17` reports
+  `description() = "QIE / USDT"`, so "USD" amounts in UsdInNative campaigns are really USDT amounts and a USDT
+  depeg misprices them.
+- **QUSDC issuer (audit I-02).** QUSDC (`0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5`) gives its `VAULT_ROLE` a
+  `burn(from, amount)` with no allowance check, so the issuer can burn QUSDC held by the vault. That would leave the
+  vault short in QUSDC and the last withdrawals and refunds would fail; every QUSDC campaign trusts the issuer not
+  to do it.
 - **Proof modes.** Mode 1 (rotating door QR) checks freshness against block time but can be relayed by someone
   streaming the screen. Mode 2 (door scans you) binds the door's attestation to one attendee. Sponsors choose the
   weakest mode they pay for with `minProofMode`.
@@ -131,10 +146,11 @@ disagreement with the contracts. Unit tests pin the same properties down case by
 | 9 | No upgradeability; pause never blocks refund or withdraw | `invariant_9_immutableAndExitsNeverPaused` (code hashes constant; every claim withdrawn while paused) | `test_refund_worksWhilePausedAndForErc20`, `test_withdraw_worksWhilePausedAndForErc20` |
 | 10 | Stale or non-positive price defers (status 9), never misprices | `invariant_10_oracleNeverMisprices` | `test_oracle_*`, `testFuzz_usdPricing` |
 
-A full run checks every invariant against real traffic. Totals for one run of the suite after the audit fixes
-(256 runs, 32,768 calls, no handler reverts even with fail-on-revert; from the `ACC` log line at `-vv`): 1,591
-check-ins recorded and 3,045 rejected, 143 presences settled, 82 settlements deferred for price, 114 withdrawals,
-194 refunds, and 97 withdrawals or refunds made while the vault was paused. Disabling the ticket check makes
+A full run checks every invariant against real traffic. Totals for one run of the suite after the re-review
+fixes (256 runs, 32,768 calls, no handler reverts even with fail-on-revert; from the `ACC` log line at `-vv`): 1,531
+check-ins recorded and 2,961 rejected, 160 presences settled, 75 settlements deferred for price, 130 withdrawals,
+196 refunds, and 88 withdrawals or refunds made while the vault was paused. Organizers opt in and out of open
+campaigns throughout the run. Disabling the ticket check makes
 invariant 6 fail, so the new replay cases are not vacuous.
 
 ## Differences from docs/INTERFACES.md
@@ -164,7 +180,10 @@ Each is the safest correct variant of a gap or flaw found while building, and is
 - **Audit fixes beyond the interface text.** The bonded exposure cap (M-02) adds the `bondedExposure` view, the
   challenge rule (L-03) adds `paidForOrganizer`, `hasOpenChallenge` and the `OrganizerNotPaid` and
   `DuplicateChallenge` errors, and the oracle is read with a gas-capped staticcall (`ORACLE_QUERY_GAS`, 100,000)
-  that copies five words, so a malformed answer defers with status 9 instead of reverting a batch (L-02).
+  that copies five words, so a malformed answer defers with status 9 instead of reverting a batch (L-02). The
+  re-review fixes add the vault's `optInOpenCampaign`, `optOutOpenCampaign`, `releaseExposure`, `optedIn` and
+  `exposureOf` (N-01), and the bond's `challengeDeposit` constructor parameter, payable `challenge`,
+  `lockedOf`, `depositOwed`, `claimDeposit` and the `locked` and `deposit` fields of `Challenge` (N-02).
 - **A USD quote that rounds to zero defers** with `PriceStale` instead of spending the presence's single settlement
   on a zero payout.
 - **`topUp` after `endsAt` reverts** (`CampaignEnded`) and **`approveEvents` rejects ids that do not exist yet**
@@ -199,15 +218,15 @@ including the testnet stand-ins:
 
 | Lines | Statements | Branches | Functions |
 |---|---|---|---|
-| 100% (595/595) | 100% (749/749) | 100% (162/162) | 100% (114/114) |
+| 100% (640/640) | 100% (806/806) | 100% (174/174) | 100% (118/118) |
 
 Constructor revert tests deploy through an external self-call (`this.deployVault(...)`). In this forge version
 `new X(...)` in a test compiles to a `deployCode` cheatcode, and a constructor that reverts as expected would end
 the test at that line, silently skipping every later check.
 
-Gas on the anvil run (`docs/anvil-e2e.txt`): mode 1 check-in with ticket 115,476, settle 217,253 (first payout,
-cold storage), withdraw about 46,000, wallet link with one relocation 120,788, create event 82,021, create campaign
-160,351.
+Gas on the anvil run (`docs/anvil-e2e.txt`): mode 1 check-in with ticket 115,488, settle 217,276 (first payout,
+cold storage), withdraw about 46,000, wallet link with one relocation 120,824, create event 82,021, create campaign
+160,329.
 
 ## Deploy
 
@@ -220,6 +239,7 @@ Requires Foundry and `jq`. Set the environment, then run the script against the 
 | `ORACLE_MAX_AGE` | `172800` | Seconds before a price round counts as stale |
 | `FEE_BPS` | `0` | Protocol fee for new campaigns, at most 500 |
 | `FEE_RECIPIENT` | deployer on testnet, **required on mainnet** | Fee recipient |
+| `CHALLENGE_DEPOSIT` | 1 QIE on mainnet, 0.01 QIE otherwise | Deposit posted with each bond challenge |
 | `STAMP_BASE_URI` | empty | Stamp metadata base, for example `https://<app>/api/stamp/`; changeable later |
 
 ```bash
@@ -228,7 +248,7 @@ forge script script/Deploy.s.sol:Deploy --rpc-url qie --broadcast           # ch
 ```
 
 On 1990 the script uses QUSDC `0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5`, QIE's name registry
-`0x1D69d75AD7b77b91C3760F84faC52E651710f62e` and the QIE/USD feed `0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17`.
+`0x1D69d75AD7b77b91C3760F84faC52E651710f62e` and the QIE/USDT feed `0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17`.
 On 1990 it also checks that the feed reports 8 decimals and QUSDC 6 before deploying anything.
 Any other chain id is refused. The script writes `deployments/{chainId}.json` with every address, the deploy block
 (a safe lower bound for the indexer) and the constructor inputs.

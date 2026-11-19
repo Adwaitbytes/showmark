@@ -6,6 +6,11 @@
         "name": "owner_",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "challengeDeposit_",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "nonpayable"
@@ -109,7 +114,20 @@
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "nonpayable"
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "challengeDeposit",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -146,6 +164,16 @@
             "name": "resolved",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "locked",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "deposit",
+            "type": "uint256",
+            "internalType": "uint256"
           }
         ]
       }
@@ -154,10 +182,36 @@
   },
   {
     "type": "function",
+    "name": "claimDeposit",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "completeUnbond",
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "depositOwed",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -179,6 +233,25 @@
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lockedOf",
+    "inputs": [
+      {
+        "name": "organizer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -411,6 +484,50 @@
   },
   {
     "type": "event",
+    "name": "DepositAwarded",
+    "inputs": [
+      {
+        "name": "challengeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DepositClaimed",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnershipTransferStarted",
     "inputs": [
       {
@@ -480,6 +597,37 @@
   },
   {
     "type": "event",
+    "name": "StakeLocked",
+    "inputs": [
+      {
+        "name": "challengeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "organizer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "locked",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "deposit",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "UnbondRequested",
     "inputs": [
       {
@@ -537,6 +685,11 @@
   },
   {
     "type": "error",
+    "name": "BadChallengeDeposit",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ChallengeNotOpen",
     "inputs": []
   },
@@ -588,6 +741,11 @@
   },
   {
     "type": "error",
+    "name": "NothingToClaim",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OrganizerNotPaid",
     "inputs": []
   },
@@ -630,7 +788,7 @@
   },
   {
     "type": "error",
-    "name": "SlashExceedsBond",
+    "name": "SlashExceedsLock",
     "inputs": []
   },
   {
