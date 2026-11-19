@@ -1,0 +1,10 @@
+# Uses the default gitleaks rules, with a narrow allowlist for values that are public by design.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public on-chain token addresses and test-only fixtures"
+regexes = [
+  '''(?i)0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5''',
+  '''test-secret-that-is-at-least-32-characters-long''',
+]
