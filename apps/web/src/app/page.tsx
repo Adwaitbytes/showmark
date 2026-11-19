@@ -242,7 +242,7 @@ function JudgesDesk() {
               </ol>
               <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center">
                 {live ? (
-                  <Button href={`/e/${eventId}`} variant="primary" size="lg" trailing={<ArrowRightIcon className="size-5" />}>
+                  <Button href="/judges" variant="primary" size="lg" trailing={<ArrowRightIcon className="size-5" />}>
                     Open the judges&apos; desk
                   </Button>
                 ) : (
