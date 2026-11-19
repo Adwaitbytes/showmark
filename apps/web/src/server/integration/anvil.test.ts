@@ -284,7 +284,7 @@ describe.skipIf(missing.length > 0)("relayer, indexer and queries against anvil 
     expect(passport?.stamps).toHaveLength(1);
     expect(passport?.streaks).toEqual([{ seriesId: "1", seriesName: "Anvil nights", current: 1, best: 1 }]);
     expect(passport?.claimable.find((c) => c.symbol === "QIE")?.amount).toBe(parseEther("0.7").toString());
-    expect(passport?.pending).toEqual([{ campaignId: "2", eventId: eventId.toString(), reason: "NeedsQieId" }]);
+    expect(passport?.pending).toEqual([{ campaignId: "2", eventId: eventId.toString(), reason: "NeedsQieId", deadline: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) }]);
 
     const campaign = await getCampaign(openCampaign);
     expect(campaign).toMatchObject({ settledCount: 5, funded: parseEther("10").toString(), balance: parseEther("5").toString(), teamFunded: true, status: "live" });

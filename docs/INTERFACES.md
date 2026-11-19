@@ -119,7 +119,7 @@ function nextEventId() external view returns (uint256);              // ids star
 function stamp() external view returns (address);                    // the PresenceStamp, deployed by the registry constructor
 ```
 
-Batch status codes (`uint8`): `0 Recorded, 1 AlreadyPresent, 2 UnknownEvent, 3 BadAttendeeSig, 4 BadDoorSig, 5 DoorKeyNotAuthorized, 6 Stale, 7 OutsideEventWindow, 8 AtCapacity, 9 BadMode, 10 Paused`.
+Batch status codes (`uint8`): `0 Recorded, 1 AlreadyPresent, 2 UnknownEvent, 3 BadAttendeeSig, 4 BadDoorSig, 5 DoorKeyNotAuthorized, 6 Stale, 7 OutsideEventWindow, 8 AtCapacity, 9 BadMode, 10 Paused, 11 BadTicketSig`.
 
 Rules:
 - Check-in is accepted only inside `[startsAt - 1 hours, endsAt + 1 hours]` by block time for mode 1, and by `attestedAt` for mode 2.
@@ -168,7 +168,7 @@ struct CampaignParams {
   uint64 endsAt;
   uint32 maxPerEvent;       // 0 = unlimited
   uint32 maxTotal;          // 0 = unlimited
-  bool openToBonded;        // any organizer with bond >= minBond may be paid without per-event approval
+  bool openToBonded;        // any organizer with bond >= minBond may be paid without per-event approval; native QIE campaigns only; cumulative open payouts per organizer capped by its bond (audit M-02)
   uint128 minBond;
   string metadata;          // JSON {"v":1,"name":string,"sponsor":string,"description":string,"url"?:string}, max 2048 bytes
 }

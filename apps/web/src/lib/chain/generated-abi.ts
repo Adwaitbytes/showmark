@@ -136,6 +136,19 @@ export const registryAbi = [
   },
   {
     "type": "function",
+    "name": "TICKET_TYPEHASH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "WINDOW_SLACK",
     "inputs": [],
     "outputs": [
@@ -207,12 +220,22 @@ export const registryAbi = [
             "internalType": "uint64"
           },
           {
+            "name": "ticket",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
             "name": "attendeeSig",
             "type": "bytes",
             "internalType": "bytes"
           },
           {
             "name": "doorSig",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "ticketSig",
             "type": "bytes",
             "internalType": "bytes"
           }
@@ -258,12 +281,22 @@ export const registryAbi = [
             "internalType": "uint64"
           },
           {
+            "name": "ticket",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
             "name": "attendeeSig",
             "type": "bytes",
             "internalType": "bytes"
           },
           {
             "name": "doorSig",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "ticketSig",
             "type": "bytes",
             "internalType": "bytes"
           }
@@ -695,7 +728,7 @@ export const registryAbi = [
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -1213,6 +1246,11 @@ export const registryAbi = [
   },
   {
     "type": "error",
+    "name": "BadTicketSig",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadWalletSig",
     "inputs": []
   },
@@ -1312,6 +1350,11 @@ export const registryAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "RenounceDisabled",
+    "inputs": []
   },
   {
     "type": "error",
@@ -1421,6 +1464,19 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "ORACLE_QUERY_GAS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "SETTLE_GRACE",
     "inputs": [],
     "outputs": [
@@ -1466,6 +1522,25 @@ export const vaultAbi = [
         "name": "",
         "type": "address",
         "internalType": "contract IOrganizerBond"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "bondedExposure",
+    "inputs": [
+      {
+        "name": "organizer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1832,6 +1907,30 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "paidForOrganizer",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "organizer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "pause",
     "inputs": [],
     "outputs": [],
@@ -1931,7 +2030,7 @@ export const vaultAbi = [
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -2670,6 +2769,11 @@ export const vaultAbi = [
   },
   {
     "type": "error",
+    "name": "RenounceDisabled",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeERC20FailedOperation",
     "inputs": [
       {
@@ -2885,6 +2989,30 @@ export const bondAbi = [
   },
   {
     "type": "function",
+    "name": "hasOpenChallenge",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "organizer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "nextChallengeId",
     "inputs": [],
     "outputs": [
@@ -2970,7 +3098,7 @@ export const bondAbi = [
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -3247,6 +3375,11 @@ export const bondAbi = [
   },
   {
     "type": "error",
+    "name": "DuplicateChallenge",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "FailedCall",
     "inputs": []
   },
@@ -3283,6 +3416,11 @@ export const bondAbi = [
   },
   {
     "type": "error",
+    "name": "OrganizerNotPaid",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OwnableInvalidOwner",
     "inputs": [
       {
@@ -3311,6 +3449,11 @@ export const bondAbi = [
   {
     "type": "error",
     "name": "ReentrancyGuardReentrantCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RenounceDisabled",
     "inputs": []
   },
   {
@@ -3680,7 +3823,7 @@ export const stampAbi = [
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -4140,6 +4283,11 @@ export const stampAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "RenounceDisabled",
+    "inputs": []
   },
   {
     "type": "error",

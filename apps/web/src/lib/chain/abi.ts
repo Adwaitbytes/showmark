@@ -28,6 +28,7 @@ export const CHECK_IN_STATUS = [
   "AtCapacity",
   "BadMode",
   "Paused",
+  "BadTicketSig",
 ] as const;
 
 export const SETTLE_STATUS = [
