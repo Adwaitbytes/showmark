@@ -122,7 +122,11 @@ function Receipt({
           <span className="font-mono text-xs text-ink-faint">chain {activeChainId}</span>
         </div>
         <div className="flex flex-col gap-1" aria-live="polite">
-          <p className="font-mono text-4xl leading-none text-ink">{preview.covered !== null ? formatCount(Number(preview.covered)) : "?"}</p>
+          {preview.covered !== null ? (
+            <p className="font-mono text-4xl leading-none text-ink">{formatCount(Number(preview.covered))}</p>
+          ) : (
+            <p aria-hidden="true" className="h-9 w-24 rounded-doc border-b-2 border-dashed border-rule" />
+          )}
           <p className="text-sm text-ink-soft">
             {preview.covered !== null && deposit !== null && preview.gross !== null
               ? `verified people: ${t(deposit)} divided by ${t(preview.gross)} each${usd ? " at today's price" : ""}`

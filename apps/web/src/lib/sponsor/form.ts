@@ -150,7 +150,8 @@ export function validateCampaignForm(values: CampaignFormValues, now: number, qu
 
   const amount = perPresenceUnits(values);
   const amountDecimals = values.pricing === "usd" ? USD_DECIMALS : TOKEN_DECIMALS[values.token];
-  if (amount === null) errors.amount = `Enter an amount like 2.50, with at most ${amountDecimals} decimal places.`;
+  if (values.amount.trim() === "") errors.amount = "Enter what one verified person is worth to you, for example 2.50.";
+  else if (amount === null) errors.amount = `Enter an amount like 2.50, with at most ${amountDecimals} decimal places.`;
   else if (amount === 0n) errors.amount = "The amount per person must be more than zero.";
   else if (amount > MAX_UINT128) errors.amount = "That amount is too large for the vault.";
 
@@ -184,7 +185,9 @@ export function validateCampaignForm(values: CampaignFormValues, now: number, qu
 
   const depositToken: TokenChoice = values.pricing === "usd" ? "QIE" : values.token;
   const deposit = parseAmount(values.deposit, TOKEN_DECIMALS[depositToken]);
-  if (deposit === null) {
+  if (values.deposit.trim() === "") {
+    errors.deposit = `Enter how much ${depositToken} to lock in escrow.`;
+  } else if (deposit === null) {
     errors.deposit = `Enter the deposit in ${depositToken}, with at most ${TOKEN_DECIMALS[depositToken]} decimal places.`;
   } else if (deposit === 0n) {
     errors.deposit = "Deposit something so the campaign can pay its first person.";

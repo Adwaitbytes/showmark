@@ -134,7 +134,7 @@ test.describe("create a campaign", () => {
     await page.getByRole("button", { name: "Review and fund" }).click();
     await expect(page.getByText(/things need fixing before you fund/)).toBeVisible();
     await expect(page.getByText("Give the campaign a name people will recognise.")).toBeVisible();
-    await expect(page.getByText(/Enter an amount like 2.50/)).toBeVisible();
+    await expect(page.getByText("Enter what one verified person is worth to you, for example 2.50.")).toBeVisible();
     await expect(page.getByLabel("Campaign name")).toBeFocused();
     await expect(page.getByRole("heading", { name: "Fund it" })).toHaveCount(0);
     expect(state.sent).toHaveLength(0);
