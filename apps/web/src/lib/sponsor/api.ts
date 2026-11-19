@@ -89,6 +89,9 @@ export const campaignDetailSchema = campaignSummarySchema.extend({
 });
 export type SponsorCampaignDetail = Omit<CampaignDetail, "settlements"> & { settlements: SponsorSettlement[] };
 
+/** `/api/campaigns/[id]/report?format=json`: the campaign with every settlement, not just the latest 200. */
+export const reportSchema = z.object({ generatedAt: iso, campaign: campaignDetailSchema });
+
 export const sessionSchema = z.object({
   address,
   qieName: z.string().nullable(),
