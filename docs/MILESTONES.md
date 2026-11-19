@@ -19,7 +19,7 @@ Targets come from the real calendar, not from ambition. For each milestone, take
 - What we count: QIE Wallets that link to a Showmark pass, and of those, wallets whose first activity on QIE came through Showmark.
 - On-chain proof: `WalletLinked(pass, wallet)` events on `ShowmarkRegistry`. A wallet counts as new to QIE when it had no transaction before its link transaction, which the indexer records as `first_seen_via_showmark` on the profile.
 - Where `/traction` shows it: "New wallets first seen through Showmark" and "Passes linked to QIE Wallet", with the guest-to-wallet conversion rate.
-- Baseline on 10 Dec: `[[FILL]]`. Target by 10 Mar: `[[FILL]]`.
+- Baseline on 10 Dec: `[[FILL: baseline from /traction on 10 Dec]]`. Target by 10 Mar: `[[FILL: target set from the calendar]]`.
 - What drives it: large one-off rooms where most people are new to QIE, so campus sessions, sponsored city events and partner communities' first events. Campaigns that pay the attendee a share give people a reason to connect a wallet and withdraw.
 
 ### 2. Transaction volume (committed)
@@ -27,7 +27,7 @@ Targets come from the real calendar, not from ambition. For each milestone, take
 - What we count: mainnet transactions sent to the Showmark contracts, and the value settled through them.
 - On-chain proof: transactions to `ShowmarkRegistry`, `CampaignVault` and `OrganizerBond`, counted by the indexer from receipts, and the sum of `gross` in `Settled` events per token. Because check-ins are batched, we also report the number of `CheckedIn` events, which is higher than the transaction count.
 - Where `/traction` shows it: "Showmark transactions", "Share of the chain's daily transactions" (from the explorer's `/api/v2/stats`), and "Value settled" per token and in USD.
-- Baseline on 10 Dec: `[[FILL]]`. Target by 10 Mar: `[[FILL]]`.
+- Baseline on 10 Dec: `[[FILL: baseline from /traction on 10 Dec]]`. Target by 10 Mar: `[[FILL: target set from the calendar]]`.
 - What drives it: every event, but most of all big rooms with a funded campaign, since each presence produces a check-in and a settlement, and every withdrawal is one more transaction.
 
 ### 3. Recurring users (committed)
@@ -35,7 +35,7 @@ Targets come from the real calendar, not from ambition. For each milestone, take
 - What we count: people who checked in at two or more distinct events, and people with a streak of two or more inside a series.
 - On-chain proof: distinct attendees appearing in `CheckedIn` for at least two different event ids, and the `streak` field of `CheckedIn` (also readable through `streakOf` on `PresenceLens`).
 - Where `/traction` shows it: "People with two or more events". `[[FILL: confirm /traction also shows the longest current streak; if not, ask the owner of /traction to add it]]`
-- Baseline on 10 Dec: `[[FILL]]`. Target by 10 Mar: `[[FILL]]`.
+- Baseline on 10 Dec: `[[FILL: baseline from /traction on 10 Dec]]`. Target by 10 Mar: `[[FILL: target set from the calendar]]`.
 - What drives it: series. Weekly or fortnightly meetups created as a series on-chain, so each session has a series index and regulars build visible streaks on their passports.
 
 ### 4. Active monthly usage (committed)
@@ -43,7 +43,7 @@ Targets come from the real calendar, not from ambition. For each milestone, take
 - What we count: distinct people who checked in at least once in the trailing 30 days, and distinct organizers who ran at least one event in that window.
 - On-chain proof: distinct `attendee` values in `CheckedIn` events whose block time falls inside the last 30 days, and distinct `organizer` values in `EventCreated` for events with at least one check-in in that window.
 - Where `/traction` shows it: `[[FILL: confirm a 30-day active attendees and active organizers tile exists; the data is already in the presences table, so if the tile is missing, ask the owner of /traction to add it before 10 Dec]]`
-- Baseline on 10 Dec: `[[FILL]]`. Target for the 30 days ending 10 Mar: `[[FILL]]`.
+- Baseline on 10 Dec: `[[FILL: baseline from /traction on 10 Dec]]`. Target for the 30 days ending 10 Mar: `[[FILL: target set from the calendar]]`.
 - What drives it: a steady calendar rather than one big spike. Series plus partner organizers keep every 30-day window busy.
 
 ### 5. Merchants (stretch)
@@ -51,7 +51,7 @@ Targets come from the real calendar, not from ambition. For each milestone, take
 - What we count: outside businesses that pay through Showmark, meaning external sponsors who fund a campaign that settles at least one presence, and venues that run a paid store-visit pilot.
 - On-chain proof: distinct sponsor addresses in `CampaignCreated`, not in our published team address list, that have at least one `Settled` event. Store-visit venues appear as organizers of events whose metadata marks them as a store `[[FILL: agree the metadata field with the lead]]`.
 - Where `/traction` shows it: "Sponsors", split into team-funded and external.
-- Baseline on 10 Dec: `[[FILL]]`. Target by 10 Mar: `[[FILL]]`.
+- Baseline on 10 Dec: `[[FILL: baseline from /traction on 10 Dec]]`. Target by 10 Mar: `[[FILL: target set from the calendar]]`.
 - What drives it: sponsored city events and the store-visit pilot in the last 30 days. Only count a merchant once money has settled, not when they say yes.
 
 ### 6. Revenue (stretch)
@@ -59,7 +59,7 @@ Targets come from the real calendar, not from ambition. For each milestone, take
 - What we count: protocol fees earned on settled presences from external sponsors. Fees on our own team-funded pools are reported but not counted as revenue, because that would be paying ourselves.
 - On-chain proof: the sum of the `fee` field in `Settled` events, per token, for campaigns whose sponsor is external, paid to the fee recipient `[[FILL: fee recipient address]]` and valued at the oracle price on the day.
 - Where `/traction` shows it: `[[FILL: confirm a "Protocol revenue (external)" line exists under value settled; if not, ask the owner of /traction to add it]]`
-- Baseline on 10 Dec: `[[FILL]]`. Target by 10 Mar: `[[FILL]]`.
+- Baseline on 10 Dec: `[[FILL: baseline from /traction on 10 Dec]]`. Target by 10 Mar: `[[FILL: target set from the calendar]]`.
 - What drives it: external sponsors only. The fee is set per campaign at `[[FILL: launch fee in basis points]]` and capped at 5 percent in the contract.
 
 ## Event types and what each one moves
@@ -85,8 +85,8 @@ Goal: turn the hackathon-week attendees into regulars and start at least two ser
 
 | Date | Event | Type | City | Expected people | Organizer | Sponsor or pool | Milestones |
 |---|---|---|---|---|---|---|---|
-| `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` |
-| `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` |
+| `[[FILL: date]]` | `[[FILL: event]]` | `[[FILL: type]]` | `[[FILL: city]]` | `[[FILL: expected people]]` | `[[FILL: organizer]]` | `[[FILL: sponsor or pool]]` | `[[FILL: milestones]]` |
+| `[[FILL: date]]` | `[[FILL: event]]` | `[[FILL: type]]` | `[[FILL: city]]` | `[[FILL: expected people]]` | `[[FILL: organizer]]` | `[[FILL: sponsor or pool]]` | `[[FILL: milestones]]` |
 
 Note: `[[FILL: check campus calendars for exams and winter breaks in December and January, and move campus sessions accordingly]]`
 
@@ -96,8 +96,8 @@ Goal: first partner organizers, first external-sponsor campaigns at the launch f
 
 | Date | Event | Type | City | Expected people | Organizer | Sponsor or pool | Milestones |
 |---|---|---|---|---|---|---|---|
-| `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` |
-| `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` |
+| `[[FILL: date]]` | `[[FILL: event]]` | `[[FILL: type]]` | `[[FILL: city]]` | `[[FILL: expected people]]` | `[[FILL: organizer]]` | `[[FILL: sponsor or pool]]` | `[[FILL: milestones]]` |
+| `[[FILL: date]]` | `[[FILL: event]]` | `[[FILL: type]]` | `[[FILL: city]]` | `[[FILL: expected people]]` | `[[FILL: organizer]]` | `[[FILL: sponsor or pool]]` | `[[FILL: milestones]]` |
 
 ### Days 61 to 90 (8 Feb to 10 Mar)
 
@@ -105,8 +105,8 @@ Goal: the first store-visit pilot, series still running every week, and a clean 
 
 | Date | Event | Type | City | Expected people | Organizer | Sponsor or pool | Milestones |
 |---|---|---|---|---|---|---|---|
-| `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` |
-| `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` |
+| `[[FILL: date]]` | `[[FILL: event]]` | `[[FILL: type]]` | `[[FILL: city]]` | `[[FILL: expected people]]` | `[[FILL: organizer]]` | `[[FILL: sponsor or pool]]` | `[[FILL: milestones]]` |
+| `[[FILL: date]]` | `[[FILL: event]]` | `[[FILL: type]]` | `[[FILL: city]]` | `[[FILL: expected people]]` | `[[FILL: organizer]]` | `[[FILL: sponsor or pool]]` | `[[FILL: milestones]]` |
 
 ## Reporting rhythm
 
@@ -116,7 +116,7 @@ Goal: the first store-visit pilot, series still running every week, and a clean 
 
 | Week of | Verified attendees | New wallets through Showmark | People at 2+ events | 30-day active | Showmark transactions | External sponsors | External fee revenue |
 |---|---|---|---|---|---|---|---|
-| 7 Dec (baseline) | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` | `[[FILL]]` |
+| 7 Dec (baseline) | `[[FILL: verified attendees]]` | `[[FILL: new wallets through Showmark]]` | `[[FILL: people at 2+ events]]` | `[[FILL: 30-day active]]` | `[[FILL: Showmark transactions]]` | `[[FILL: external sponsors]]` | `[[FILL: external fee revenue]]` |
 
 ## Rules that do not change after the hackathon
 
