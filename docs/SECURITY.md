@@ -29,7 +29,7 @@ Each one has a Foundry test, listed in `packages/contracts/README.md`.
 
 ## Proof of presence, honestly
 
-- **Rotating door QR (mode 1).** Freshness is enforced on-chain against block time, so a screenshot from yesterday is useless. It does not stop someone at the venue from streaming the screen to a friend outside within the pass window. That is why sponsors can require mode 2.
+- **Rotating door QR (mode 1).** Every 15 second rotation the door authorizes a throwaway ticket key whose private key exists only inside the QR (in the URL fragment, so it never reaches a server). A check-in needs that key's signature over the attendee's own address, and freshness is enforced on chain against block time. Reading the chain therefore never lets anyone admit themselves (this was audit finding C-01 before the fix). What mode 1 cannot stop is someone who can see the code, in the room or through a photo or live stream of the screen, sharing it within the pass window. That is why sponsors can require mode 2.
 - **Door scans you (mode 2).** The door key signs an attestation bound to one attendee's address after staff scan that attendee's code. Someone outside the room cannot obtain one without the door staff scanning them.
 - **Soft signals**, such as device limits, rate limits per IP and per pass, and anomaly flags in the sponsor report, are labelled as soft everywhere. They help, but they are not proof.
 - **Sybil resistance.** Free QIE IDs make holding a name a weak filter on its own. The main defense is presence itself (each pass needs a door signature at a real place and time, and capacity is capped per event), backed by the organizer's bond and the sponsor's choice of which events and organizers to fund. Wallet links are one-to-one so one QIE ID cannot farm gated campaigns through many passes.
@@ -54,8 +54,25 @@ Each one has a Foundry test, listed in `packages/contracts/README.md`.
 
 ## Independent review
 
-The contracts are audited by a separate agent that did not write them, against the invariants and threat model above. Findings and their resolutions are listed here before mainnet deployment.
+The contracts were reviewed by a separate agent that did not write them, in four rounds, against the invariants and threat model above. The full report, with an exploit test for every finding, is `packages/contracts/docs/AUDIT.md`; every exploit is kept as a regression test that now asserts the attack fails.
 
 | ID | Severity | Finding | Resolution |
 |---|---|---|---|
-| | | Review pending | |
+| C-01 | Critical | A mode 1 door signature in public calldata could admit unlimited remote passes | Fixed with per-rotation ticket keys |
+| M-01 | Medium | The attendee signature did not bind the proof mode, so a shown mode 2 code could be downgraded | Fixed: `CheckIn` binds `mode` |
+| M-02 | Medium | One bond qualified for many open campaigns at once | Fixed: cumulative bonded exposure capped by the bond, open campaigns in QIE only |
+| N-01 | Medium | Anyone could burn an organizer's bond room with their own open campaign | Fixed: organizers opt in to each open campaign; exposure released after a clean grace period |
+| N2-01 | Medium | A sock-puppet challenge could shield stake from an honest one | Fixed: challenges are claims sized by the campaign's bonded exposure |
+| L-01 | Low | An expired door key could backdate mode 2 attestations | Documented: revoke a door key to stop it |
+| L-02 | Low | A malformed oracle answer reverted a whole settlement batch | Fixed: gas-capped staticcall with size checks, defers instead |
+| L-03, N-02, N2-02 | Low | Challenge spam could block an organizer's unbond | Fixed: deposit per challenge, claims only from bond-backed campaigns |
+| L-04 | Low | A pause that outlasts the grace period voids unsettled payouts | Documented: the Safe must unpause before grace ends |
+| L-05 | Low | Offline mode 2 attendance was dated by submission | Fixed: dated by the attestation |
+| L-06 | Low | `renounceOwnership` could strand challenged bonds | Fixed: disabled on every contract |
+| N3-01, N3-02 | Low | Claim snapshot timing and the release race at grace end | Being fixed: live claim refresh and a 7 day review period |
+| N-03 | Info | Ticket key in the URL path reached server logs | Fixed: moved to the URL fragment |
+| I-01 | Info | The mainnet price feed is QIE/USDT, not QIE/USD | Documented; "USD" amounts are USDT |
+| I-02 | Info | QUSDC's issuer role can burn QUSDC held by any address, including the vault | Documented trust assumption for QUSDC campaigns |
+| I-03 | Info | Mainnet deploy could proceed without a Safe | Fixed: the deploy script refuses |
+
+Third re-review verdict: go for mainnet; no open finding lets anyone steal or lock escrow, claimable balances or bonded stake.
