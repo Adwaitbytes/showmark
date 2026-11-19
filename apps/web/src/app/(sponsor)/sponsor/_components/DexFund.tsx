@@ -62,7 +62,7 @@ export function DexFund({ shortfall, signer, onSwapped }: { shortfall: bigint; s
   const shortText = `${formatTokenAmount(shortfall.toString(), "QUSDC")} QUSDC`;
 
   return (
-    <div className="flex flex-col gap-4 rounded-doc bg-paper-deep px-4 py-4">
+    <div className="flex flex-col gap-4 rounded-doc px-4 py-4 shadow-[inset_0_0_0_1px_var(--rule-soft)]">
       <div className="flex flex-col gap-1">
         <h4 className="text-base font-medium text-ink">Buy the missing {shortText} with QIE on QIEDEX</h4>
         <p className="text-sm text-ink-soft">One swap through the official QIEDEX router, paid from this wallet, before the deposit.</p>

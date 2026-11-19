@@ -20,9 +20,14 @@ import { createSiweMessage } from "viem/siwe";
 import { aggregatorAbi, erc20Abi, vaultAbi } from "../../src/lib/chain/abi";
 import { vaultSponsorAbi } from "../../src/lib/sponsor/abi";
 
-export const PORT = 3207;
+/** E2E_CHAIN=1990 runs against a mainnet build (QIEDEX funding); the default is testnet. */
+export const MAINNET = process.env.E2E_CHAIN === "1990";
+export const CHAIN_ID = MAINNET ? 1990 : 1983;
+const CHAIN_HEX = MAINNET ? "0x7c6" : "0x7bf";
+export const PORT = MAINNET ? 3208 : 3207;
 export const BASE_URL = `http://localhost:${PORT}`;
-export const RPC_URL = "https://rpc1testnet.qie.digital";
+export const RPC_URL = MAINNET ? "https://rpc1mainnet.qie.digital" : "https://rpc1testnet.qie.digital";
+const RPC_PATTERN = MAINNET ? /^https:\/\/rpc[1-5]mainnet\.qie\.digital/ : /^https:\/\/rpc1testnet\.qie\.digital/;
 
 // Placeholder contract addresses the dev server is started with (see playwright.config.ts).
 export const ADDR = {
@@ -39,7 +44,7 @@ export const ORACLE_ANSWER = 15_947_567n; // $0.15947567, 8 decimals
 export const NEW_CAMPAIGN_ID = 8n;
 
 export const ENV = {
-  NEXT_PUBLIC_CHAIN_ID: "1983",
+  NEXT_PUBLIC_CHAIN_ID: String(CHAIN_ID),
   NEXT_PUBLIC_REGISTRY_ADDRESS: ADDR.registry,
   NEXT_PUBLIC_STAMP_ADDRESS: getAddress("0x1000000000000000000000000000000000000006"),
   NEXT_PUBLIC_VAULT_ADDRESS: ADDR.vault,
@@ -66,6 +71,8 @@ export interface ChainState {
   oracleUpdatedAt: number;
   campaign: CampaignStruct | null;
   sent: SentTx[];
+  /** Lets a test model side effects of a sent transaction, such as a swap delivering QUSDC. */
+  onSend?: (tx: SentTx, state: ChainState) => void;
 }
 
 export interface CampaignStruct {
@@ -104,7 +111,7 @@ export function chainState(overrides: Partial<ChainState> = {}): ChainState {
 // ------------------------------------------------------------------------------------------ fake wallet
 
 /** Runs in the page. Announces a QIE Wallet that forwards everything to the mocked RPC endpoint. */
-function walletScript({ account, rpc }: { account: string; rpc: string }) {
+function walletScript({ account, rpc, chainHex }: { account: string; rpc: string; chainHex: string }) {
   let id = 0;
   const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
   async function forward(method: string, params: unknown) {
@@ -125,7 +132,7 @@ function walletScript({ account, rpc }: { account: string; rpc: string }) {
         case "eth_accounts":
           return [account];
         case "eth_chainId":
-          return "0x7bf";
+          return chainHex;
         case "wallet_switchEthereumChain":
         case "wallet_addEthereumChain":
           return null;
@@ -151,7 +158,7 @@ function walletScript({ account, rpc }: { account: string; rpc: string }) {
 }
 
 export async function installWallet(page: Page, account: Address = SPONSOR): Promise<void> {
-  await page.addInitScript(walletScript, { account, rpc: RPC_URL });
+  await page.addInitScript(walletScript, { account, rpc: RPC_URL, chainHex: CHAIN_HEX });
 }
 
 // -------------------------------------------------------------------------------------------- JSON-RPC
@@ -197,6 +204,8 @@ function callResult(state: ChainState, to: string, data: Hex): Hex {
     if (call.functionName === "allowance") return encodeFunctionResult({ abi: erc20Abi, functionName: "allowance", result: state.allowance });
     return encodeFunctionResult({ abi: erc20Abi, functionName: "approve", result: true });
   }
+  // The QIEDEX router: a simulated swap succeeds.
+  if (target === getAddress("0x08cd2e72e156D8563B4351eb4065C262A9f553Ef")) return "0x";
   throw new Error(`No mock for call to ${to}`);
 }
 
@@ -256,7 +265,7 @@ function handleRpc(state: ChainState, req: RpcRequest): unknown {
   const params = req.params ?? [];
   switch (req.method) {
     case "eth_chainId":
-      return "0x7bf";
+      return CHAIN_HEX;
     case "eth_blockNumber":
       return "0x10";
     case "eth_getBalance":
@@ -289,6 +298,7 @@ function handleRpc(state: ChainState, req: RpcRequest): unknown {
         const call = decodeFunctionData({ abi: erc20Abi, data: sent.data });
         if (call.functionName === "approve") state.allowance = call.args[1];
       }
+      state.onSend?.(sent, state);
       return sent.hash;
     }
     case "eth_getTransactionReceipt":
@@ -301,8 +311,7 @@ function handleRpc(state: ChainState, req: RpcRequest): unknown {
 }
 
 export async function mockChain(page: Page, state: ChainState): Promise<void> {
-  await page.route(`${RPC_URL}/**`, (route) => answerRpc(route, state));
-  await page.route(RPC_URL, (route) => answerRpc(route, state));
+  await page.route(RPC_PATTERN, (route) => answerRpc(route, state));
 }
 
 async function answerRpc(route: Route, state: ChainState): Promise<void> {
@@ -327,6 +336,8 @@ export interface ApiMocks {
   failWith?: number;
   /** Start already signed in. */
   signedIn?: boolean;
+  /** Body for /api/dex/quote. */
+  dexQuote?: unknown;
 }
 
 export async function mockApi(page: Page, mocks: ApiMocks = {}): Promise<{ signedIn: () => boolean }> {
@@ -344,7 +355,7 @@ export async function mockApi(page: Page, mocks: ApiMocks = {}): Promise<{ signe
       const nonce = "testnonce12345";
       const message = createSiweMessage({
         address: getAddress(url.searchParams.get("address") ?? SPONSOR),
-        chainId: 1983,
+        chainId: CHAIN_ID,
         domain: url.host,
         uri: url.origin,
         nonce,
@@ -367,6 +378,7 @@ export async function mockApi(page: Page, mocks: ApiMocks = {}): Promise<{ signe
     }
     if (/^\/api\/campaigns\/\d+$/.test(path)) return mocks.campaign ? json(route, 200, mocks.campaign) : error(route, 404);
     if (path === "/api/events") return json(route, 200, mocks.events ?? []);
+    if (path === "/api/dex/quote") return mocks.dexQuote ? json(route, 200, mocks.dexQuote) : error(route, 503);
     return error(route, 404);
   });
   return { signedIn: () => signedIn };
