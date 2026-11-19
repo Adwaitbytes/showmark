@@ -8,8 +8,8 @@ export const SITE = {
   pitch: "Sponsors pay only for people who actually show up.",
   description:
     "Showmark holds a sponsor's budget in escrow on QIE and pays out per verified person at the door. Attendees check in with their phone and get a stamp in their passport.",
-  repoUrl: "https://github.com/23f2000979/showmark",
-  sdkReadmeUrl: "https://github.com/23f2000979/showmark/tree/main/packages/sdk#readme",
+  repoUrl: "https://github.com/Adwaitbytes/showmark",
+  sdkReadmeUrl: "https://github.com/Adwaitbytes/showmark/tree/main/packages/sdk#readme",
   hackathon: "QIE Hackathon 3.0",
 } as const;
 

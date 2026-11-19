@@ -108,7 +108,7 @@ Showmark is presence-conditional sponsorship on QIE Mainnet: sponsors lock QIE o
 **GitHub Repository** (required)
 
 ```
-[[FILL: repo URL. Today it is https://github.com/23f2000979/showmark (docs/DECISIONS.md D-012); use the team org URL if it moves]]
+[[FILL: repo URL. Today it is https://github.com/Adwaitbytes/showmark (docs/DECISIONS.md D-012); use the team org URL if it moves]]
 ```
 
 **Product Video URL** (required, YouTube link expected)

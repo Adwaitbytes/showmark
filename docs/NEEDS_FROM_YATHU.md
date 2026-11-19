@@ -4,9 +4,9 @@ Everything else is being built without waiting. Secrets go only into `.env.local
 
 ## Blocking right now
 
-1. **GitHub workflow scope.** The public repo is https://github.com/23f2000979/showmark, but pushes are rejected because the CLI token lacks the `workflow` scope that the CI file needs. Run `! gh auth refresh -h github.com -s workflow` and approve in the browser.
+1. **GitHub.** Done 19 Nov: the repo lives at https://github.com/Adwaitbytes/showmark and pushes use the Adwaitbytes account.
 2. **Redis on the free tier.** Postgres is done (Neon URL received 19 Nov, migrations applied, stored in `.env.local` and Vercel). Still needed: Upstash Redis for the relayer's nonce lock and rate limits. Either run `! vercel integration add upstash/upstash-kv --yes --no-claim --name showmark-kv`, or paste `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` from a free database at console.upstash.com.
-3. **Testnet QIE.** The faucet at https://www.qie.digital/faucet needs a connected browser wallet, and I will not import a key into a web page. From your QIE Wallet on testnet, request coins and send 1.5 QIE each to the deployer `0xA8C849C243BA940102d2deB99971e4c713411926` and the relayer `0xAaca310b66413Ebbf240b59dFE75Fb873d903660`. Repeat daily if you can.
+3. **Testnet QIE.** Done 19 Nov (2 QIE received, split 1 and 1). Earlier note: The faucet at https://www.qie.digital/faucet needs a connected browser wallet, and I will not import a key into a web page. From your QIE Wallet on testnet, request coins and send 1.5 QIE each to the deployer `0xA8C849C243BA940102d2deB99971e4c713411926` and the relayer `0xAaca310b66413Ebbf240b59dFE75Fb873d903660`. Repeat daily if you can.
 
 ## Blocking mainnet (needed by Mon 23 Nov)
 

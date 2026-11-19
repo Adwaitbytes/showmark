@@ -33,7 +33,7 @@ Gate 0 in progress (target: Fri 20 Nov morning).
 
 ## Links
 
-- Repo: https://github.com/23f2000979/showmark (push pending)
+- Repo: https://github.com/Adwaitbytes/showmark (push pending)
 - Vercel project: showmark (team adwaitbytes-projects), root `apps/web`
 
 ## Next gate
