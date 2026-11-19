@@ -170,7 +170,7 @@ function selectEvents(db: Db) {
   return db.select(eventColumns).from(t.events).leftJoin(t.profiles, eq(t.profiles.address, t.events.organizer));
 }
 
-export async function listEvents(filter: EventFilter = {}): Promise<EventSummary[]> {
+async function listEventsImpl(filter: EventFilter = {}): Promise<EventSummary[]> {
   const r = await ready();
   if (!r) return [];
   const conditions: SQL[] = [];
@@ -208,7 +208,7 @@ function campaignTotals(db: Db) {
   return { funded, settled, refunded };
 }
 
-export async function getEvent(id: string | bigint): Promise<EventDetail | null> {
+async function getEventImpl(id: string | bigint): Promise<EventDetail | null> {
   const eventId = parseId(id);
   const r = await ready();
   if (!r) return null;
@@ -305,7 +305,7 @@ async function quoteGross(ctx: ChainContext, campaignId: bigint): Promise<bigint
 
 // -------------------------------------------------------------------------------------------- passport
 
-export async function getPassport(addressOrName: string): Promise<Passport | null> {
+async function getPassportImpl(addressOrName: string): Promise<Passport | null> {
   let address: Address;
   if (looksLikeName(addressOrName)) {
     const owner = await ownerOfName(addressOrName);
@@ -548,7 +548,7 @@ async function selectCampaigns(r: Ready, where: SQL | undefined, limit: number, 
   return out;
 }
 
-export async function listCampaigns(filter: CampaignFilter = {}): Promise<CampaignSummary[]> {
+async function listCampaignsImpl(filter: CampaignFilter = {}): Promise<CampaignSummary[]> {
   const r = await ready();
   if (!r) return [];
   const where = filter.sponsor ? eq(t.campaigns.sponsor, filter.sponsor.toLowerCase()) : undefined;
@@ -561,7 +561,7 @@ export interface CampaignDetailOptions {
 }
 
 /** Returns null when no campaign with this id exists. */
-export async function getCampaign(id: string | bigint, options: CampaignDetailOptions = {}): Promise<CampaignDetail | null> {
+async function getCampaignImpl(id: string | bigint, options: CampaignDetailOptions = {}): Promise<CampaignDetail | null> {
   const campaignId = parseId(id);
   const r = await ready();
   if (!r) return null;
@@ -646,7 +646,7 @@ async function chainDay(chainId: number): Promise<ChainDay | null> {
   }
 }
 
-export async function getTraction(): Promise<Traction> {
+async function getTractionImpl(): Promise<Traction> {
   const r = await ready();
   if (!r) return emptyTraction();
   const { db, ctx } = r;
@@ -797,3 +797,42 @@ function emptyTraction(): Traction {
     daily: [],
   };
 }
+
+// ------------------------------------------------------------------------------------------ deadlines
+
+const DATABASE_SLOW = {
+  code: "database_slow",
+  message: "Showmark's records are taking longer than usual to load.",
+  action: "Try again in a few seconds.",
+} as const;
+
+function isDeadline(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth++) {
+    if (e.name === "TimeoutError" || e.name === "AbortError") return true;
+  }
+  return false;
+}
+
+/** A query that hit the database or Redis deadline answers with typed copy instead of an unexplained failure. */
+async function guarded<T>(route: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!(error instanceof AppError) && isDeadline(error)) {
+      log.warn("queries.deadline", { route, error });
+      throw new AppError(503, DATABASE_SLOW, { cause: error });
+    }
+    throw error;
+  }
+}
+
+export const listEvents = (filter: EventFilter = {}): Promise<EventSummary[]> => guarded("listEvents", () => listEventsImpl(filter));
+/** Returns null when no event with this id exists. */
+export const getEvent = (id: string | bigint): Promise<EventDetail | null> => guarded("getEvent", () => getEventImpl(id));
+/** Accepts an address or a QIE ID name such as `alice.qie`. Null when the name does not resolve. */
+export const getPassport = (addressOrName: string): Promise<Passport | null> => guarded("getPassport", () => getPassportImpl(addressOrName));
+export const listCampaigns = (filter: CampaignFilter = {}): Promise<CampaignSummary[]> => guarded("listCampaigns", () => listCampaignsImpl(filter));
+/** Returns null when no campaign with this id exists. */
+export const getCampaign = (id: string | bigint, options: CampaignDetailOptions = {}): Promise<CampaignDetail | null> =>
+  guarded("getCampaign", () => getCampaignImpl(id, options));
+export const getTraction = (): Promise<Traction> => guarded("getTraction", () => getTractionImpl());

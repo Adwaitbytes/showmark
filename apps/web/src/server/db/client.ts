@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 import type { BatchItem } from "drizzle-orm/batch";
 import type { SQLWrapper } from "drizzle-orm/sql";
 import { drizzle } from "drizzle-orm/neon-http";
@@ -17,6 +17,13 @@ export interface Database {
 }
 
 let instance: Database | null = null;
+
+/** No database round trip may hold a page or the relayer longer than this, including a Neon cold start. */
+export const DB_TIMEOUT_MS = 5_000;
+
+// Every HTTP query to Neon carries a deadline. A suspended compute usually wakes in well under a second; when it
+// does not, the query fails fast with a TimeoutError that callers turn into a typed "database_slow" answer.
+neonConfig.fetchFunction = (input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, signal: AbortSignal.timeout(DB_TIMEOUT_MS) });
 
 function connectNeon(url: string): Database {
   const db = drizzle({ client: neon(url), schema });

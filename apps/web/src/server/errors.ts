@@ -228,6 +228,11 @@ export const RELAY_ERRORS = {
     message: "There is nothing to withdraw for this account in this token.",
     action: "Rewards appear here after a check-in is paid out.",
   },
+  withdrawNeedsLink: {
+    code: "withdraw_needs_link",
+    message: "Gasless withdrawal only pays out to a pass that is linked to a QIE Wallet.",
+    action: "Link QIE Wallet to your pass first. An organizer or sponsor wallet withdraws by sending the withdrawal itself.",
+  },
   withdrawRejected: {
     code: "withdraw_rejected",
     message: "The network rejected this withdrawal.",

@@ -5,7 +5,7 @@ import type { KeyValueStore } from "../kv";
 import { sleep, tryLock, type Lock } from "../lock";
 import { log } from "../log";
 import type { CheckInData } from "../schemas";
-import { LockLostError, sendSequential, type RelayerChain, type SentTx } from "./sender";
+import { LockLostError, prepareSend, sendSequential, type PreparedSend, type RelayerChain, type SentTx } from "./sender";
 import { refreshClaimRequest } from "./claims";
 import { settleItemsFor, settleRequests, type SettleItem } from "./settle";
 
@@ -35,6 +35,8 @@ export interface RelayerDeps {
   challengesAfter?(items: SettleItem[]): Promise<bigint[]>;
   /** Called after a batch with check-ins in it is sent. Used to stamp the door queue. */
   onSent?(items: CheckInData[], txHash: Hex): Promise<void>;
+  /** Runs work after the response (Next.js after()). Without it the work is awaited inline. */
+  background?(task: () => Promise<void>): void;
   options: RelayOptions;
   now(): number;
 }
@@ -111,12 +113,34 @@ async function warnIfLowBalance(chain: RelayerChain, now: number): Promise<void>
   }
 }
 
-/** Drains one batch from the queue and sends it. The caller holds the relayer lock. Returns items processed. */
-export async function flushOnce(deps: RelayerDeps, lock: Lock): Promise<number> {
+export interface FlushResult {
+  /** Queue items taken (0 means the queue was empty or the items were put back). */
+  processed: number;
+  /**
+   * Work that follows the check-in broadcast: settlement, claim refreshes, door queue stamps, balance check. It
+   * must run while the relayer lock is still held (it continues the nonce sequence); callers release afterwards.
+   */
+  tail: (() => Promise<void>) | null;
+}
+
+/** Fallback gas when estimation fails: measured checkInBatch(1) used about 140k on anvil. */
+const CHECK_IN_GAS_BASE = 80_000n;
+const CHECK_IN_GAS_PER_ITEM = 150_000n;
+
+/**
+ * Drains one batch from the queue and broadcasts it. The caller holds the relayer lock. Results are written as
+ * soon as the check-in transaction is broadcast, never after mining and never after the settlement, so the
+ * attendee's request answers in about one RPC round trip after simulation.
+ */
+export async function flushOnce(deps: RelayerDeps, lock: Lock): Promise<FlushResult> {
   const { chain, kv } = deps;
   const started = deps.now();
+  const timings: Record<string, number> = {};
+  const mark = (name: string, since: number) => (timings[name] = deps.now() - since);
+
   const raw = await kv.lpop(queueKey(chain), deps.options.batchMax);
-  if (raw.length === 0) return 0;
+  mark("dequeueMs", started);
+  if (raw.length === 0) return { processed: 0, tail: null };
   const queued = raw.map((r) => JSON.parse(r) as Queued);
 
   // One (event, attendee) per batch: later duplicates share the first one's result.
@@ -129,89 +153,95 @@ export async function flushOnce(deps: RelayerDeps, lock: Lock): Promise<number> 
     else byKey.set(key, { item, ids: [q.id] });
   }
   const groups = [...byKey.values()];
+  const all = groups.map((g) => g.item);
 
+  // Simulation, gas estimate, nonce and gas price are independent reads: one round trip of latency together.
+  const t1 = deps.now();
   let statuses: number[];
+  let estimate: bigint | null;
+  let prepared: PreparedSend;
   try {
-    statuses = await simulateCheckIns(chain, groups.map((g) => g.item));
+    [statuses, estimate, prepared] = await Promise.all([
+      simulateCheckIns(chain, all),
+      chain.client
+        .estimateGas({ account: chain.account.address, to: chain.registry, data: encodeFunctionData({ abi: registryAbi, functionName: "checkInBatch", args: [all] }) })
+        .catch((error: unknown) => {
+          log.warn("relayer.batch_estimate_failed", { items: all.length, error });
+          return null;
+        }),
+      prepareSend(chain, kv, deps.now()),
+    ]);
     if (statuses.length !== groups.length) throw new Error(`checkInBatch returned ${statuses.length} statuses for ${groups.length} items`);
   } catch (error) {
     log.error("relayer.batch_simulation_failed", { items: groups.length, error });
     await writeResults(deps, queued.map((q) => q.id), { ok: false, error: "send_failed" });
-    return queued.length;
+    return { processed: queued.length, tail: null };
   }
+  mark("prepareMs", t1);
 
   const accepted = groups.filter((_, i) => statuses[i] === 0);
   await Promise.all(groups.map((g, i) => (statuses[i] === 0 ? null : writeResults(deps, g.ids, { ok: false, status: statuses[i] }))));
-  if (accepted.length === 0) return queued.length;
+  if (accepted.length === 0) return { processed: queued.length, tail: null };
 
   const items = accepted.map((g) => g.item);
   const data = encodeFunctionData({ abi: registryAbi, functionName: "checkInBatch", args: [items] });
-  let gas: bigint;
-  try {
-    const estimate = await chain.client.estimateGas({ account: chain.account.address, to: chain.registry, data });
-    gas = (estimate * 125n) / 100n + 20_000n;
-  } catch (error) {
-    log.error("relayer.batch_estimate_failed", { items: items.length, error });
-    await writeResults(deps, accepted.flatMap((g) => g.ids), { ok: false, error: "send_failed" });
-    return queued.length;
-  }
+  // The estimate covered every item, including rejected ones, so it is an upper bound for the accepted subset.
+  const gas = estimate !== null ? (estimate * 125n) / 100n + 20_000n : CHECK_IN_GAS_BASE + CHECK_IN_GAS_PER_ITEM * BigInt(items.length);
 
-  const settleItems: SettleItem[] = [];
-  const attendeesByEvent = new Map<bigint, Address[]>();
-  for (const item of items) attendeesByEvent.set(item.eventId, [...(attendeesByEvent.get(item.eventId) ?? []), item.attendee]);
-  for (const [eventId, attendees] of attendeesByEvent) {
-    try {
-      settleItems.push(...settleItemsFor(eventId, attendees, await deps.campaignsFor(eventId)));
-    } catch (error) {
-      // Presence is recorded regardless; the cron retries settlement for anything left unpaid.
-      log.warn("relayer.campaign_lookup_failed", { eventId, error });
-    }
-  }
-
-  const refreshes = await followUpRefreshes(deps, settleItems);
-  const { sent, error } = await sendSequential(
-    chain,
-    kv,
-    lock,
-    [{ to: chain.registry, data, gas, label: `checkInBatch(${items.length})` }, ...settleRequests(chain, settleItems), ...refreshes],
-    deps.now,
-  );
+  const t2 = deps.now();
+  const { sent, error } = await sendSequential(chain, kv, lock, [{ to: chain.registry, data, gas, label: `checkInBatch(${items.length})` }], deps.now, prepared);
+  mark("sendMs", t2);
   const checkInTx: SentTx | undefined = sent[0];
   if (!checkInTx) {
     if (error instanceof LockLostError) {
       // Nothing was sent; give the items back so the next lock holder sends them.
       await kv.rpush(queueKey(chain), raw);
       log.warn("relayer.lock_lost_requeued", { items: raw.length });
-      return 0;
+      return { processed: 0, tail: null };
     }
     await writeResults(deps, accepted.flatMap((g) => g.ids), { ok: false, error: "send_failed" });
-    return queued.length;
+    return { processed: queued.length, tail: null };
   }
-
   await writeResults(deps, accepted.flatMap((g) => g.ids), { ok: true, txHash: checkInTx.hash });
-  if (error) log.warn("relayer.settlement_not_sent", { checkInTx: checkInTx.hash, settleItems: settleItems.length, error });
-  log.info("relayer.batch", {
-    queued: queued.length,
-    accepted: items.length,
-    rejected: groups.length - accepted.length,
-    settleItems: settleItems.length,
-    txs: sent.map((s) => s.hash),
-    ms: deps.now() - started,
-  });
+  mark("totalMs", started);
+  log.info("relayer.batch", { queued: queued.length, accepted: items.length, rejected: groups.length - accepted.length, tx: checkInTx.hash, ...timings });
 
-  if (deps.onSent) {
-    try {
-      await deps.onSent(items, checkInTx.hash);
-    } catch (hookError) {
-      log.warn("relayer.on_sent_failed", { error: hookError });
+  const tail = async () => {
+    const t3 = deps.now();
+    if (!(await lock.extend(deps.options.lockTtlMs))) {
+      log.warn("relayer.settlement_not_sent", { checkInTx: checkInTx.hash, reason: "lock_lost" });
+      return;
     }
-  }
-  try {
-    await warnIfLowBalance(chain, deps.now());
-  } catch (balanceError) {
-    log.warn("relayer.balance_check_failed", { error: balanceError });
-  }
-  return queued.length;
+    const settleItems: SettleItem[] = [];
+    const attendeesByEvent = new Map<bigint, Address[]>();
+    for (const item of items) attendeesByEvent.set(item.eventId, [...(attendeesByEvent.get(item.eventId) ?? []), item.attendee]);
+    for (const [eventId, attendees] of attendeesByEvent) {
+      try {
+        settleItems.push(...settleItemsFor(eventId, attendees, await deps.campaignsFor(eventId)));
+      } catch (lookupError) {
+        // Presence is recorded regardless; the cron retries settlement for anything left unpaid.
+        log.warn("relayer.campaign_lookup_failed", { eventId, error: lookupError });
+      }
+    }
+    const followUps = [...settleRequests(chain, settleItems), ...(await followUpRefreshes(deps, settleItems))];
+    const after = await sendSequential(chain, kv, lock, followUps, deps.now);
+    if (after.error) log.warn("relayer.settlement_not_sent", { checkInTx: checkInTx.hash, settleItems: settleItems.length, error: after.error });
+    log.info("relayer.settlement", { checkInTx: checkInTx.hash, settleItems: settleItems.length, txs: after.sent.map((s) => s.hash), ms: deps.now() - t3 });
+
+    if (deps.onSent) {
+      try {
+        await deps.onSent(items, checkInTx.hash);
+      } catch (hookError) {
+        log.warn("relayer.on_sent_failed", { error: hookError });
+      }
+    }
+    try {
+      await warnIfLowBalance(chain, deps.now());
+    } catch (balanceError) {
+      log.warn("relayer.balance_check_failed", { error: balanceError });
+    }
+  };
+  return { processed: queued.length, tail };
 }
 
 /**
@@ -228,15 +258,34 @@ export async function followUpRefreshes(deps: RelayerDeps, settleItems: SettleIt
   }
 }
 
-/** Takes the lock if it is free and flushes one batch. Returns false when someone else holds the lock. */
+/**
+ * Takes the lock if it is free and flushes one batch. Returns false when someone else holds the lock. The batch's
+ * results are written before this returns; its settlement tail keeps the lock and runs in `deps.background` (the
+ * route's after()) so the request that flushed answers right away, or inline when no background runner is set.
+ */
 export async function flushIfFree(deps: RelayerDeps): Promise<boolean> {
   const lock = await tryLock(deps.kv, relayLockKey(deps.chain), deps.options.lockTtlMs);
   if (!lock) return false;
+  let tail: FlushResult["tail"] = null;
   try {
     if (deps.options.batchWindowMs > 0) await sleep(deps.options.batchWindowMs);
-    await flushOnce(deps, lock);
+    ({ tail } = await flushOnce(deps, lock));
   } finally {
-    await lock.release();
+    if (!tail) await lock.release();
+  }
+  if (tail) {
+    const run = tail;
+    const finish = async () => {
+      try {
+        await run();
+      } catch (error) {
+        log.error("relayer.tail_failed", { error });
+      } finally {
+        await lock.release();
+      }
+    };
+    if (deps.background) deps.background(finish);
+    else await finish();
   }
   return true;
 }

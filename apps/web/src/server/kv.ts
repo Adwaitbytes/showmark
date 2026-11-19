@@ -214,6 +214,10 @@ export class MemoryRateLimiter implements RateLimiter {
   }
 }
 
+/** Each Upstash request gets a fresh 3 s deadline, so a stalled Redis call cannot hold a page or the relayer. */
+const REDIS_TIMEOUT_MS = 3_000;
+const redisDeadline = () => AbortSignal.timeout(REDIS_TIMEOUT_MS);
+
 let store: KeyValueStore | null = null;
 let rawRedis: Redis | null = null;
 let warnedMemory = false;
@@ -222,7 +226,7 @@ function upstashClient(): Redis | null {
   if (rawRedis) return rawRedis;
   const config = redisConfig();
   if (!config) return null;
-  rawRedis = new Redis({ url: config.url, token: config.token, enableTelemetry: false });
+  rawRedis = new Redis({ url: config.url, token: config.token, enableTelemetry: false, signal: redisDeadline });
   return rawRedis;
 }
 
@@ -234,7 +238,7 @@ export function getStore(): KeyValueStore {
   if (store) return store;
   const config = redisConfig();
   if (config) {
-    store = new UpstashStore(new Redis({ url: config.url, token: config.token, automaticDeserialization: false, enableTelemetry: false }));
+    store = new UpstashStore(new Redis({ url: config.url, token: config.token, automaticDeserialization: false, enableTelemetry: false, signal: redisDeadline }));
     return store;
   }
   if (isProduction()) throw new AppError(503, COMMON_ERRORS.redisNotConfigured);

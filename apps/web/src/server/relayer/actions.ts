@@ -1,4 +1,4 @@
-import { BaseError, ContractFunctionRevertedError, encodeFunctionData, getAddress, type Hex } from "viem";
+import { BaseError, ContractFunctionRevertedError, encodeFunctionData, getAddress, zeroAddress, type Hex } from "viem";
 import { bondAbi, registryAbi, vaultAbi } from "@/lib/chain/abi";
 import { AppError, COMMON_ERRORS, RELAY_ERRORS } from "../errors";
 import { waitForLock } from "../lock";
@@ -67,8 +67,14 @@ export async function relayWithdraw(deps: RelayerDeps, token: Hex, account: Hex)
   const args = [getAddress(token), getAddress(account)] as const;
   let gas: bigint;
   try {
-    const owed = await chain.client.readContract({ address: chain.vault, abi: vaultAbi, functionName: "claimable", args });
+    const [owed, wallet] = await Promise.all([
+      chain.client.readContract({ address: chain.vault, abi: vaultAbi, functionName: "claimable", args }),
+      chain.client.readContract({ address: chain.registry, abi: registryAbi, functionName: "walletOf", args: [args[1]] }),
+    ]);
     if (owed === 0n) throw new AppError(422, RELAY_ERRORS.nothingToWithdraw);
+    // The vault lets a third party (the relayer) trigger a withdrawal only for a pass linked to a wallet; a plain
+    // wallet such as an organizer's must call withdraw itself (WithdrawNotAllowed otherwise).
+    if (wallet === zeroAddress) throw new AppError(422, RELAY_ERRORS.withdrawNeedsLink);
     await chain.client.simulateContract({ address: chain.vault, abi: vaultAbi, functionName: "withdraw", args, account: chain.account.address });
     gas = await chain.client.estimateContractGas({ address: chain.vault, abi: vaultAbi, functionName: "withdraw", args, account: chain.account.address });
   } catch (error) {

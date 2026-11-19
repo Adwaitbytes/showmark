@@ -150,6 +150,19 @@ describe("check-in micro-batching", () => {
     expect([...hashes][0]).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
+  it("answers as soon as the check-in is broadcast and settles afterwards with the next nonce", async () => {
+    const later: (() => Promise<void>)[] = [];
+    const [result] = await relayCheckIns({ ...deps, background: (task) => void later.push(task) }, [checkIn(attendees[0])]);
+    expect(result.ok).toBe(true);
+    expect(state.sent).toHaveLength(1);
+    // The lock is still held for the settlement, so nobody else can take the next nonce meanwhile.
+    expect(await tryLock(kv, relayLockKey(deps.chain), 5_000)).toBeNull();
+    await later[0]();
+    expect(state.sent).toHaveLength(2);
+    expect(decodeSent(state.sent[1]).tx.nonce).toBe((decodeSent(state.sent[0]).tx.nonce ?? 0) + 1);
+    expect(await tryLock(kv, relayLockKey(deps.chain), 5_000)).not.toBeNull();
+  });
+
   it("returns the registry status for items the batch would reject and sends the rest", async () => {
     state.reject.set(attendees[1].toLowerCase(), 1);
     const results = await relayCheckIns(deps, attendees.slice(0, 3).map((a) => checkIn(a)));
@@ -200,7 +213,7 @@ describe("check-in micro-batching", () => {
     const lock = await tryLock(kv, relayLockKey(deps.chain), 5_000);
     if (!lock) throw new Error("lock");
     await kv.del(relayLockKey(deps.chain));
-    expect(await flushOnce(deps, lock)).toBe(0);
+    expect((await flushOnce(deps, lock)).processed).toBe(0);
     expect(state.sent).toHaveLength(0);
     expect(await kv.llen(`relay:q:${qieTestnet.id}`)).toBe(1);
   });
@@ -210,7 +223,7 @@ describe("nonce management", () => {
   async function sendOne(): Promise<number> {
     const lock = await tryLock(kv, relayLockKey(deps.chain), 5_000);
     if (!lock) throw new Error("lock");
-    const { sent, error } = await sendSequential(deps.chain, kv, lock, [{ to: registry, data: "0x", gas: 21_000n, label: "t" }]);
+    const { sent, error } = await sendSequential(deps.chain, kv, lock, [{ to: registry, data: "0x", gas: 50_000n, label: "t" }]);
     await lock.release();
     if (error) throw error;
     return sent[0].nonce;

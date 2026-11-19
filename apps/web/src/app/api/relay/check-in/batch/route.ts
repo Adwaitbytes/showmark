@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 import type { Hex } from "@/lib/api/types";
 import { getDatabase } from "@/server/db/client";
 import { relayLimits } from "@/server/env";
@@ -29,12 +29,15 @@ export async function POST(request: NextRequest): Promise<Response> {
     await enforceLimit(rateLimiter("checkin-batch-ip", relayLimits().perIpPerMinute, "1 m"), clientIp(request), RELAY_ERRORS.rateLimitedIp);
     const { items } = await readJson(request, checkInBatchSchema);
 
-    try {
-      await recordDoorQueue(getDatabase().db, items, new Date());
-    } catch (error) {
-      // The audit row is a convenience; the attestation itself is what matters, so relaying continues.
-      log.warn("relay.door_queue_record_failed", { items: items.length, error });
-    }
+    // The audit row is a convenience written after the response, so a sleeping database never delays relaying.
+    const receivedAt = new Date();
+    after(async () => {
+      try {
+        await recordDoorQueue(getDatabase().db, items, receivedAt);
+      } catch (error) {
+        log.warn("relay.door_queue_record_failed", { items: items.length, error });
+      }
+    });
 
     const deps = relayerDeps();
     const statuses = await simulateCheckIns(deps.chain, items);

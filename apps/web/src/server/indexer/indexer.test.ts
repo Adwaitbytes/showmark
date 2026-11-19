@@ -1,7 +1,9 @@
 import { parseAbi, zeroAddress } from "viem";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { bondAbi, registryAbi, vaultAbi } from "@/lib/chain/abi";
+import { MemoryStore } from "../kv";
 import { payingCampaignIds } from "../payouts";
+import { publishRelayDirectory, readRelayDirectory } from "../relayer/directory";
 import * as t from "../db/schema";
 import { blockTimes, doorKey, fixtureLogs, indexFixture, organizer, pass, pass2, registry, sponsor, startsAt, vault, wallet } from "../testing/fixtures";
 import { createTestDatabase } from "../testing/pglite";
@@ -135,6 +137,16 @@ describe("buildStatements on Postgres", () => {
     await database.batch(buildStatements(database.db, decodeShowmarkLogs([resolved, left], { registry, vault, bond }), new Map([[107n, new Date()]]), { teamAddresses: new Set() }));
     expect(await database.db.select().from(t.challenges)).toMatchObject([{ resolved: true, slashed: 4n }]);
     expect(await payingCampaignIds(database.db, 1n)).toEqual([1n]);
+  });
+
+  it("publishes a relay directory so the check-in path needs only Redis", async () => {
+    await applyFixture();
+    const kv = new MemoryStore();
+    await publishRelayDirectory(kv, 1983, database.db);
+    const dir = await readRelayDirectory(kv, 1983);
+    expect(dir?.events["1"]).toEqual({ organizer: organizer.toLowerCase(), campaigns: ["1"] });
+    expect(dir?.open).toEqual([]);
+    expect(dir?.challenges).toEqual([]);
   });
 
   it("applies approvals and revocations in log order", async () => {

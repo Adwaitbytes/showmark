@@ -31,7 +31,7 @@ import { checkInStatusCopy } from "../errors";
 import { syncOnce } from "../indexer/sync";
 import { MemoryStore, setStore } from "../kv";
 import { attendeeShare, openCampaignIds, payingCampaignIds, pendingFor } from "../payouts";
-import { challengesAfterSettlement, liveOptedInCampaigns, staleChallenges } from "../relayer/claims";
+import { challengesAfterSettlement, dbLookup, liveOptedInCampaigns, staleChallenges } from "../relayer/claims";
 import { getCampaign, getEvent, getPassport, getTraction } from "../queries";
 import { relayLinkWallet, relayWithdraw } from "../relayer/actions";
 import { relayCheckIns, simulateCheckIns, DEFAULT_RELAY_OPTIONS, type RelayerDeps } from "../relayer/queue";
@@ -160,9 +160,9 @@ describe.skipIf(missing.length > 0)("relayer, indexer and queries against anvil 
       // The same composition relayerDeps() uses in production.
       async campaignsFor(id) {
         const [indexed, open] = await Promise.all([payingCampaignIds(database.db, id), openCampaignIds(database.db)]);
-        return [...indexed, ...(await liveOptedInCampaigns(deps.chain, database.db, id, open.filter((c) => !indexed.includes(c))))];
+        return [...indexed, ...(await liveOptedInCampaigns(deps.chain, dbLookup(deps.chain, database.db), id, open.filter((c) => !indexed.includes(c))))];
       },
-      challengesAfter: async (items) => challengesAfterSettlement(deps.chain, database.db, items, new Set(await openCampaignIds(database.db))),
+      challengesAfter: async (items) => challengesAfterSettlement(deps.chain, dbLookup(deps.chain, database.db), items, new Set(await openCampaignIds(database.db))),
       options: { ...DEFAULT_RELAY_OPTIONS, pollMs: 20 },
       now: Date.now,
     };

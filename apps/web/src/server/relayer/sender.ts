@@ -79,10 +79,30 @@ async function startingNonce(chain: RelayerChain, kv: KeyValueStore, now: number
   return Math.max(fromChain, stored.nonce);
 }
 
-/** Gas price as the chain reports it, plus 10 percent so a small base fee move does not strand the batch. */
-export async function relayGasPrice(chain: RelayerChain): Promise<bigint> {
-  const price = await chain.client.getGasPrice();
-  return (price * 110n + 99n) / 100n;
+const GAS_PRICE_CACHE_MS = 30_000;
+const gasPriceCache = new Map<number, { at: number; price: bigint }>();
+
+/**
+ * Gas price as the chain reports it, plus 10 percent so a small base fee move does not strand the batch. Cached
+ * per instance for 30 s: QIE's base fee is flat, and the read is one RPC round trip off every check-in.
+ */
+export async function relayGasPrice(chain: RelayerChain, now: number = Date.now()): Promise<bigint> {
+  const cached = gasPriceCache.get(chain.chainId);
+  if (cached && now - cached.at < GAS_PRICE_CACHE_MS) return cached.price;
+  const price = ((await chain.client.getGasPrice()) * 110n + 99n) / 100n;
+  gasPriceCache.set(chain.chainId, { at: now, price });
+  return price;
+}
+
+export interface PreparedSend {
+  nonce: number;
+  gasPrice: bigint;
+}
+
+/** Nonce and gas price for the next send, read together so they cost one round trip of latency. */
+export async function prepareSend(chain: RelayerChain, kv: KeyValueStore, now: number = Date.now()): Promise<PreparedSend> {
+  const [nonce, gasPrice] = await Promise.all([startingNonce(chain, kv, now), relayGasPrice(chain, now)]);
+  return { nonce, gasPrice };
 }
 
 // eth_sendRawTransaction errors are not mapped to typed viem errors, so the node's message is matched too.
@@ -116,13 +136,19 @@ export async function sendSequential(
   lock: Lock,
   requests: TxRequest[],
   now: () => number = Date.now,
+  prepared?: PreparedSend,
 ): Promise<{ sent: SentTx[]; error: unknown }> {
-  for (const r of requests) assertRelayTarget(chain, r.to, r.data);
+  for (const r of requests) {
+    assertRelayTarget(chain, r.to, r.data);
+    // Never let a node fill in gas: QIE testnet answers eth_fillTransaction with intrinsic gas only.
+    if (r.gas <= 21_000n) throw new Error(`Refusing to send ${r.label} without an explicit gas limit`);
+  }
   const sent: SentTx[] = [];
   if (requests.length === 0) return { sent, error: null };
 
-  let nonce = await startingNonce(chain, kv, now());
-  const gasPrice = await relayGasPrice(chain);
+  const ready = prepared ?? (await prepareSend(chain, kv, now()));
+  let nonce = ready.nonce;
+  const gasPrice = ready.gasPrice;
 
   for (const request of requests) {
     if (!(await lock.extend(LOCK_TTL_MS))) return { sent, error: new LockLostError() };

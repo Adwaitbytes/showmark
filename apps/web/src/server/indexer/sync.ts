@@ -7,12 +7,13 @@ import * as t from "../db/schema";
 import { teamAddresses } from "../env";
 import { AppError } from "../errors";
 import { getStore, type KeyValueStore } from "../kv";
-import { tryLock } from "../lock";
+import { tryLock, type Lock } from "../lock";
 import { log } from "../log";
 import { isTimeout, withTimeout } from "../timeout";
 import { vaultAbi } from "@/lib/chain/abi";
 import { buildStatements, syncStateStatement, type CampaignTerms } from "./apply";
 import { decodeShowmarkLogs } from "./decode";
+import { publishRelayDirectory } from "../relayer/directory";
 import { refreshProfiles } from "./profiles";
 
 /**
@@ -151,17 +152,26 @@ export async function ensureFresh(options: { kv?: KeyValueStore; deps?: SyncDeps
     throw error;
   }
   const freshKey = `idx:fresh:${deps.ctx.chainId}`;
-  if (await kv.get(freshKey)) return;
-  const lock = await tryLock(kv, `idx:lock:${deps.ctx.chainId}`, LOCK_MS);
+  let lock: Lock | null;
+  try {
+    if (await kv.get(freshKey)) return;
+    lock = await tryLock(kv, `idx:lock:${deps.ctx.chainId}`, LOCK_MS);
+  } catch (error) {
+    // Redis is slow or down: catch-up is best effort, the page reads what is indexed.
+    log.warn("indexer.catch_up_skipped", { reason: "redis", error });
+    return;
+  }
   if (!lock) return;
+  const held = lock;
   // The sync keeps running (and keeps the lock) if it overruns; this request stops waiting and serves what is
   // already indexed, so a slow RPC never holds a page past the read budget.
   const sync = (async () => {
     try {
       const result = await syncOnce({ maxChunks: 3, budgetMs: 4_000 }, deps);
       if (result.caughtUp) await kv.set(freshKey, "1", { px: FRESH_MS });
+      if (result.logs > 0) await publishRelayDirectory(kv, deps.ctx.chainId, deps.database.db);
     } finally {
-      await lock.release();
+      await held.release();
     }
   })();
   try {
@@ -210,7 +220,10 @@ export async function syncForCron(budgetMs: number, options: { kv?: KeyValueStor
   const lock = await tryLock(kv, `idx:lock:${deps.ctx.chainId}`, budgetMs + 10_000);
   if (!lock) return { skipped: "locked" };
   try {
-    return await syncOnce({ maxChunks: Number.MAX_SAFE_INTEGER, budgetMs }, deps);
+    const result = await syncOnce({ maxChunks: Number.MAX_SAFE_INTEGER, budgetMs }, deps);
+    // Always republished here, so the relay directory exists and drops ended events even on quiet days.
+    await publishRelayDirectory(kv, deps.ctx.chainId, deps.database.db);
+    return result;
   } finally {
     await lock.release();
   }
