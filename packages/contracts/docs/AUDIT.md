@@ -558,3 +558,129 @@ pick one before deploying:
 
 Before either, still correct the README trust section for I-01 (the feed is QIE/USDT) and I-02 (QUSDC issuer
 burn), and move the ticket key into the URL fragment (N-03).
+
+---
+
+# Second re-review
+
+## Scope
+
+- Fix commits `a172a89` (contracts) and `c82778a` (ABIs, docs), reviewed at HEAD `c82778a`. Diff reviewed:
+  `git diff b6800d1 HEAD -- packages/contracts/src`.
+- New code attacked: organizer opt-in and opt-out for open campaigns, `exposureOf` / `bondedExposure` /
+  `releaseExposure` accounting and timing, per-challenge locks in `OrganizerBond` (`lockedOf`, interplay of
+  `requestUnbond`, `completeUnbond` and `resolve`), the immutable `challengeDeposit` with `depositOwed` /
+  `claimDeposit`, and the deviation where a token campaign's challenge locks the whole unlocked stake.
+- The fix workstream rewrote my N-01 and N-02 PoCs in `test/audit/ReReviewPoC.t.sol` into regression tests
+  (`test_N01_strangerOpenCampaignCannotBurnExposure`, `test_N01_exposureReleasesAfterTheCampaignEnds`,
+  `test_N02_oneWeiChallengesLockDustAndPayTheOrganizer`). New tests are in
+  `test/audit/SecondReReviewPoC.t.sol`: `N2-*` pass while an issue exists, `T-*` pin down attacks that fail.
+
+## Status
+
+| ID | Status | Evidence |
+|---|---|---|
+| N-01 | **Fixed.** Bonded eligibility needs `optedIn[campaign][organizer]`, so a stranger's campaign cannot burn exposure. Exposure is tracked per campaign and can be released after `endsAt + SETTLE_GRACE` when no challenge is open for that pair. | `test_N01_*`, `test_T01_noExposureWithoutOptIn`, `test_T02_releaseTimingAndChallengeBlock`, `test_T03_optOutStopsNewPayouts` |
+| N-02 | **Fixed for native campaigns.** A challenge needs the exact deposit, which is forfeited to the organizer on dismissal, and locks only `min(paid, free)`. Spam now locks dust and pays the organizer. **Not fixed for token campaigns** (N2-02). | `test_N02_*`, `test_T04_proportionalLockAndAccounting`, `test_N2_02_oneUnitTokenCampaignFreezesWholeStake` |
+| N-03 | Fixed in the app (`cfe66a2`, `0ba69e3`): the ticket key now travels in the URL fragment. Not re-audited in depth (outside `src/`). | commit review |
+| I-01 | Fixed in code comments and README (QIE/USDT, USDT treated as USD). | review |
+
+## New findings
+
+| ID | Severity | Title | PoC |
+|---|---|---|---|
+| N2-01 | Medium | Locks are first come and never recomputed, so a sock-puppet (or simply earlier, invalid) challenge can leave a valid challenge with nothing to slash | `test_N2_01_sockChallengeShieldsStakeFromHonestChallenge` |
+| N2-02 | Low | A token campaign that paid 1 unit locks the organizer's whole unlocked stake for one deposit | `test_N2_02_oneUnitTokenCampaignFreezesWholeStake` |
+
+### N2-01 Medium: first-come locks let a dismissed challenge free stake owed to a valid one
+
+**Location:** `src/OrganizerBond.sol` `challenge` (`lock = min(paid, stake - lockedOf)`), `resolve`
+(`lockedOf -= c.locked`, `slashAmount <= c.locked`).
+
+**Description.** Each challenge's lock is fixed when the challenge is opened, from whatever stake is still
+unlocked. Later challenges get the remainder, possibly 0, and nothing tops them up when an earlier challenge is
+resolved. The slash limit is the challenge's own lock. So the protection a valid challenge gets depends on the
+order in which challenges were opened and are resolved.
+
+**Exploit scenario.** A rogue organizer with a 10 QIE bond opts into an honest open campaign, drains 10 QIE with
+self-made mode 2 passes and requests unbond. Its sock-puppet sponsor creates an approved-event campaign that pays
+10 QIE to the rogue's own pass (the money returns to the rogue) and opens the first challenge, which locks all 10
+QIE. The honest sponsor's challenge locks 0. The Safe dismisses the sock challenge as frivolous, the deposit goes
+to the rogue as organizer, `lockedOf` drops to 0, and the rogue's `completeUnbond` pays out the whole 10 QIE. The
+honest challenge is still open but `resolve(..., 1, sponsor)` reverts with `SlashExceedsLock`. The same happens
+without any attacker when two sponsors challenge and the first claim turns out invalid. The Safe can avoid this
+only if it realises it must slash *through* the attacker's own challenge (whose deposit then goes to the sock).
+
+**PoC:** `test_N2_01_sockChallengeShieldsStakeFromHonestChallenge`.
+
+**Recommended fix.** Store each challenge's claim, not a snapshot of the stake, and cap it when the stake is
+actually used:
+
+```solidity
+// challenge(): claim = native ? paid : 0 (see N2-02); claimOf[challengeId] = claim; claimedOf[organizer] += claim;
+// completeUnbond(): held = min(bonded + pending, claimedOf[organizer]) covered by bonded first, as today
+// resolve(): require(slashAmount <= min(claimOf[id], bonded + pending)); claimedOf[organizer] -= claimOf[id];
+```
+
+Dismissing one claim then never frees stake that backs another open claim.
+
+### N2-02 Low: a token campaign's challenge freezes the whole stake
+
+**Location:** `src/OrganizerBond.sol` `challenge` (`cam.token == address(0) && paid < free ? paid : free`).
+
+**Description.** For an ERC-20 campaign the lock is the entire unlocked stake. The precondition
+`paidForOrganizer > 0` is met by a campaign of 1 QUSDC unit that approves any of the organizer's events and
+settles a stranger's presence. For one deposit (1 QIE on mainnet), any account can freeze an organizer's whole
+bond, of any size, until the Safe resolves the challenge. The deposit goes to the organizer on dismissal, which
+compensates small bonds but not large ones. It also feeds N2-01: this is the cheapest way to take the first,
+all-covering lock.
+
+**PoC:** `test_N2_02_oneUnitTokenCampaignFreezesWholeStake`.
+
+**Recommended fix.** The bond only backs open-to-bonded campaigns, which are native-only, so token campaigns have
+no claim on it. Refuse their challenges, or let them lock 0 and slash 0. Better still, size every lock by
+`exposureOf[campaignId][organizer]` (what the bond actually backed for that campaign) instead of
+`paidForOrganizer`, and keep `paidForOrganizer` only as the "has a grievance" gate.
+
+## Checked and found sound
+
+- **Opt-in and opt-out.** Only `msg.sender` is affected, opt-in requires an existing open campaign, and opt-out is
+  harmless for unknown ids. Opting out stops new bonded payouts without touching recorded exposure (T-03). Campaign
+  terms cannot change after an organizer opts in (only `topUp` and an earlier `endsAt`).
+- **Exposure accounting.** `bondedExposure` and `exposureOf` grow together in the same step as `_credit`, and
+  `releaseExposure` subtracts exactly the per-campaign amount. No underflow, no double release (T-02). Release is
+  permissionless, but only after `endsAt + SETTLE_GRACE`, when no new settlement can add exposure, and never while
+  a challenge for the pair is open (T-02). Releasing does not stop later challenges. A sponsor who calls
+  `closeCampaign` only shortens its own challenge-before-release window.
+- **Lock arithmetic.** For every path (`bond`, `requestUnbond`, `completeUnbond`, `resolve`),
+  `lockedOf <= bonded + pending` holds: the slash is at most the challenge's lock and removes that lock entirely,
+  and `completeUnbond` keeps `max(0, locked - bonded)` in pending. `free = stake - lockedOf` therefore cannot
+  underflow. Partial unbond pays everything above the lock (T-04).
+- **Deposits.** Exact `msg.value` is required. `depositOwed` is credited once per resolution (to the sponsor after a
+  slash, to the organizer after a dismissal) and claimed by pull under `nonReentrant`. Bond holdings equal
+  bonded + pending + open deposits + owed deposits, and nothing is stranded (T-04). The Safe can return a deposit
+  by slashing 1 wei; that is within its stated discretion.
+- **Reentrancy.** `resolve`, `completeUnbond` and `claimDeposit` update state before `sendValue` and share one
+  guard. `challenge` makes only view calls to the immutable vault.
+
+## Tool results (second re-review)
+
+- `forge test`: 224 passed, 0 failed, 1 skipped (fork test), 14 suites, including 25 tests in `test/audit`.
+- `slither .`: 30 results, the same 7 benign detector classes as before. None is a vulnerability.
+
+## Verdict (second re-review)
+
+No finding lets anyone steal or lock sponsor escrow or attendee and organizer claimables. Everything about
+check-ins, settlement, refunds, pause and the oracle is ready for mainnet.
+
+The organizer bond is not yet trustworthy as a slashing guarantee. N2-01 means a rogue organizer can shield its
+stake behind a challenge it controls, and an honest sponsor's valid challenge can end up with nothing to slash,
+unless the Safe resolves challenges in exactly the right way. N2-02 lets anyone freeze any bond for one deposit.
+Because the contracts are immutable:
+
+- **If open-to-bonded campaigns and bonding are part of the launch:** fix N2-01 (claim-based locks) and N2-02 (no
+  bond claim for token campaigns, or locks sized by `exposureOf`) before deploying. Both are small, local changes
+  to `OrganizerBond.challenge`, `completeUnbond` and `resolve`.
+- **Otherwise:** deploy, hide bonding and open campaigns in the app, and document N2-01 and N2-02 as v1
+  limitations together with a Safe runbook: when several challenges are open against one organizer, never dismiss
+  one before checking that the others have locks covering their claims.
