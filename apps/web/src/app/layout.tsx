@@ -6,23 +6,36 @@ import { THEME_STORAGE_KEY } from "@/ui/theme";
 import "./globals.css";
 import { SkipLink } from "@/ui/SkipLink";
 
+// Only Geist, the interface face, is preloaded: it sets the text on every screen, including the
+// check-in route, where preloading three fonts held back the first script by about a second on 4G.
+// The serif and mono faces swap in when first used. adjustFontFallback sizes a local fallback to
+// each font's metrics so the swap barely moves the layout.
 const display = Instrument_Serif({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-instrument-serif",
   display: "swap",
+  preload: false,
+  adjustFontFallback: true,
+  fallback: ["Georgia", "Times New Roman", "serif"],
 });
 
 const sans = Geist({
   subsets: ["latin"],
   variable: "--font-geist",
   display: "swap",
+  preload: true,
+  adjustFontFallback: true,
+  fallback: ["Arial", "system-ui", "sans-serif"],
 });
 
 const mono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
   display: "swap",
+  preload: false,
+  adjustFontFallback: true,
+  fallback: ["ui-monospace", "Menlo", "monospace"],
 });
 
 // Hindi copy: Geist and Instrument Serif have no Devanagari, so these fill in for those glyphs only.
