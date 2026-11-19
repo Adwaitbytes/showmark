@@ -7,9 +7,9 @@ import { browserStorage, readJson, writeJson, type KeyValueStorage } from "./sto
 // are read from the chain. These records only bridge the seconds before the index catches up, keep a
 // signed check-in alive through a network outage, and remember which events the person opened.
 
-const OUTBOX_KEY = "showmark.outbox.v1";
-const STAMPS_KEY = "showmark.stamps.v1";
-const RECENT_KEY = "showmark.recent-events.v1";
+export const OUTBOX_KEY = "showmark.outbox.v1";
+export const STAMPS_KEY = "showmark.stamps.v1";
+export const RECENT_KEY = "showmark.recent-events.v1";
 const LINK_PROMPT_KEY = "showmark.link-prompt-dismissed.v1";
 
 const MAX_RECENT = 8;

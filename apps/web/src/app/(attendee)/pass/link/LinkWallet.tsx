@@ -7,7 +7,9 @@ import { localizedError, type Copy } from "@/lib/checkin/i18n";
 import { useLocale } from "@/lib/checkin/locale";
 import { linkDeadlineFromNow, linkWalletTypedData } from "@/lib/checkin/sign";
 import { connect, useWallet, walletClient } from "@/lib/wallet/use-wallet";
-import { loadPass } from "@/lib/wallet/pass";
+import { parsePassKey, PASS_STORAGE_KEY } from "@/lib/checkin/pass-key";
+import { usePassAddress, useStoredItem } from "@/lib/checkin/use-stored";
+import { privateKeyToAccount } from "viem/accounts";
 import { toWalletError } from "@/lib/wallet/wallet-store";
 import { AddressChip } from "@/ui/AddressChip";
 import { Button } from "@/ui/Button";
@@ -18,7 +20,6 @@ import { Sheet, SheetSection } from "@/ui/Sheet";
 import { LoadingRegion, SkeletonText } from "@/ui/Skeleton";
 import { TxLink } from "@/ui/TxLink";
 import { WalletIcon } from "../../_components/icons";
-import { useHydrated } from "../../_components/useHydrated";
 
 const QIE_WALLET_URL = "https://qiewallet.me";
 
@@ -36,10 +37,16 @@ type WalletCheck = { wallet: Address; status: "free" | "taken" | "failed" };
 
 export function LinkWallet() {
   const { t, errors } = useLocale();
-  const hydrated = useHydrated();
+  const passAddress = usePassAddress();
+  const hydrated = passAddress !== undefined;
+  const rawPass = useStoredItem(PASS_STORAGE_KEY);
   const wallet = useWallet();
   const checkboxId = useId();
-  const pass = useMemo(() => (hydrated ? loadPass() : null), [hydrated]);
+  // A viem account for the pass, rebuilt whenever the stored pass changes (see use-stored.ts).
+  const pass = useMemo(() => {
+    const key = parsePassKey(rawPass ?? null);
+    return key ? privateKeyToAccount(key) : null;
+  }, [rawPass]);
   const [passport, setPassport] = useState<PassportLoad>({ status: "loading" });
   const [walletCheck, setWalletCheck] = useState<WalletCheck | null>(null);
   const [moveStamps, setMoveStamps] = useState(true);

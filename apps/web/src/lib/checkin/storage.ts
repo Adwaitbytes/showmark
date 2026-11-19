@@ -22,11 +22,19 @@ export function readJson(storage: KeyValueStorage | null, key: string): unknown 
   }
 }
 
+/** Fired on this window after Showmark changes its own storage; the "storage" event only reaches other tabs. */
+export const STORAGE_CHANGED_EVENT = "showmark:storage";
+
+export function notifyStorageChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(STORAGE_CHANGED_EVENT));
+}
+
 /** Writes JSON and reports whether it stuck. A full or blocked store must not break a check-in. */
 export function writeJson(storage: KeyValueStorage | null, key: string, value: unknown): boolean {
   if (!storage) return false;
   try {
     storage.setItem(key, JSON.stringify(value));
+    notifyStorageChanged();
     return true;
   } catch {
     return false;

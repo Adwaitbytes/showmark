@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Address } from "viem";
 import { getCampaignBrief, getPassport, linkedWalletOf, type PassportData } from "@/lib/checkin/api-passport";
 import { localizedError } from "@/lib/checkin/i18n";
-import { localStamps, mergeStamps, outboxEntries, type OutboxEntry } from "@/lib/checkin/local-records";
+import { localStamps, mergeStamps, OUTBOX_KEY, outboxEntries, STAMPS_KEY, type OutboxEntry } from "@/lib/checkin/local-records";
+import { usePassAddress, useStoredItem } from "@/lib/checkin/use-stored";
 import { useLocale } from "@/lib/checkin/locale";
-import { loadPass } from "@/lib/wallet/pass";
 import { AddressChip } from "@/ui/AddressChip";
 import { Amount } from "@/ui/Amount";
 import { Button } from "@/ui/Button";
@@ -19,7 +19,6 @@ import { Perforation } from "@/ui/Perforation";
 import { Sheet, SheetSection } from "@/ui/Sheet";
 import { LoadingRegion, Skeleton, SkeletonStamp, SkeletonText } from "@/ui/Skeleton";
 import { WalletIcon } from "../_components/icons";
-import { useHydrated } from "../_components/useHydrated";
 import { AttendeeCodeCard } from "./AttendeeCodeCard";
 import { OutboxNotice } from "./OutboxNotice";
 import { StampBooklet, type BookletEntry } from "./StampBooklet";
@@ -27,9 +26,10 @@ import { StampBooklet, type BookletEntry } from "./StampBooklet";
 /** Settlement stays open this long after a campaign ends (CampaignVault SETTLE_GRACE). */
 const SETTLE_GRACE_MS = 3 * 24 * 60 * 60_000;
 
+/** A passport response, tagged with the pass it was for so a newer pass never shows an older answer. */
 type Fetched =
-  | { status: "ready"; passport: PassportData }
-  | { status: "failed"; message: string; action: string };
+  | { status: "ready"; pass: Address; passport: PassportData }
+  | { status: "failed"; pass: Address; message: string; action: string };
 
 type Load =
   | { status: "loading" }
@@ -39,7 +39,6 @@ type Load =
 
 export function PassportScreen() {
   const { t, errors } = useLocale();
-  const hydrated = useHydrated();
   const [fetched, setFetched] = useState<Fetched | null>(null);
   const [deadlines, setDeadlines] = useState<Record<string, string>>({});
   const [reloadKey, setReloadKey] = useState(0);
@@ -48,13 +47,15 @@ export function PassportScreen() {
     setReloadKey((k) => k + 1);
   }, []);
 
-  // The pass and anything saved for it live only on this phone, so they are read after hydration.
-  const passAddress = useMemo(() => (hydrated ? (loadPass()?.address ?? null) : null), [hydrated]);
+  // The pass and anything saved for it live only on this phone. They are read as stores, so a
+  // passport kept mounted by Next from an earlier visit sees a pass created since (see use-stored.ts).
+  const passAddress = usePassAddress();
+  const hydrated = passAddress !== undefined;
+  const rawOutbox = useStoredItem(OUTBOX_KEY);
+  const rawStamps = useStoredItem(STAMPS_KEY);
   const outbox = useMemo<OutboxEntry[]>(
-    () => (hydrated ? outboxEntries().filter((e) => passAddress !== null && e.request.attendee.toLowerCase() === passAddress.toLowerCase()) : []),
-    // reloadKey: a sent check-in leaves the outbox, so read it again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hydrated, passAddress, reloadKey],
+    () => (rawOutbox && passAddress ? outboxEntries().filter((e) => e.request.attendee.toLowerCase() === passAddress.toLowerCase()) : []),
+    [rawOutbox, passAddress],
   );
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export function PassportScreen() {
     getPassport(passAddress, { signal: controller.signal }).then((result) => {
       if (controller.signal.aborted) return;
       if (result.ok) {
-        setFetched({ status: "ready", passport: result.data });
+        setFetched({ status: "ready", pass: passAddress, passport: result.data });
         return;
       }
       const english = {
@@ -71,7 +72,7 @@ export function PassportScreen() {
         action: result.failure.action ?? t.pass.loadFailed.action,
       };
       const copy = result.failure.kind === "api" && result.failure.message ? localizedError(result.failure.code, english, errors?.api ?? null) : t.pass.loadFailed;
-      setFetched({ status: "failed", ...copy });
+      setFetched({ status: "failed", pass: passAddress, ...copy });
     });
     return () => controller.abort();
   }, [passAddress, reloadKey, errors, t]);
@@ -79,11 +80,12 @@ export function PassportScreen() {
   const load = useMemo<Load>(() => {
     if (!hydrated) return { status: "loading" };
     if (!passAddress) return { status: "no-pass" };
-    if (!fetched) return { status: "loading" };
+    if (!fetched || fetched.pass !== passAddress) return { status: "loading" };
     if (fetched.status === "failed") return { status: "failed", pass: passAddress, message: fetched.message, action: fetched.action };
     // Stamps confirmed on this phone fill in until the index has them.
-    return { status: "ready", pass: passAddress, passport: fetched.passport, entries: mergeStamps(fetched.passport.stamps, localStamps(passAddress)) };
-  }, [hydrated, passAddress, fetched]);
+    const local = rawStamps ? localStamps(passAddress) : [];
+    return { status: "ready", pass: passAddress, passport: fetched.passport, entries: mergeStamps(fetched.passport.stamps, local) };
+  }, [hydrated, passAddress, fetched, rawStamps]);
 
   // A "QIE ID needed" payout can still be paid until the campaign's settlement window closes.
   const pending = load.status === "ready" ? load.passport.pending : [];
@@ -106,7 +108,10 @@ export function PassportScreen() {
   const pass = load.status === "ready" || load.status === "failed" ? load.pass : null;
   const passport = load.status === "ready" ? load.passport : null;
   const wallet = passport && pass ? linkedWalletOf(passport, pass) : null;
-  const entries = useMemo(() => (load.status === "ready" ? load.entries : pass ? mergeStamps([], localStamps(pass)) : []), [load, pass]);
+  const entries = useMemo(
+    () => (load.status === "ready" ? load.entries : pass && rawStamps ? mergeStamps([], localStamps(pass)) : []),
+    [load, pass, rawStamps],
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-[76rem] flex-col gap-8 px-4 pt-6 sm:px-6 sm:pt-10 lg:px-8">

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { listUpcomingEvents, type EventListItem } from "@/lib/checkin/api-passport";
-import { recentEvents, type RecentEvent } from "@/lib/checkin/local-records";
+import { RECENT_KEY, recentEvents, type RecentEvent } from "@/lib/checkin/local-records";
 import { useLocale } from "@/lib/checkin/locale";
 import { ensurePassKey, PassStorageError } from "@/lib/checkin/pass-key";
 import { attendeeCode } from "@/lib/checkin/sign";
@@ -14,7 +14,7 @@ import { QrFrame } from "@/ui/QrFrame";
 import { Sheet, SheetSection } from "@/ui/Sheet";
 import { Skeleton } from "@/ui/Skeleton";
 import { ExpandIcon } from "../_components/icons";
-import { useHydrated } from "../_components/useHydrated";
+import { useStoredItem } from "@/lib/checkin/use-stored";
 
 interface Choice {
   eventId: string;
@@ -30,8 +30,9 @@ interface Choice {
 export function AttendeeCodeCard() {
   const { t } = useLocale();
   const selectId = useId();
-  const hydrated = useHydrated();
-  const recent = useMemo<RecentEvent[]>(() => (hydrated ? recentEvents() : []), [hydrated]);
+  // Read as a store so a door code opened since this card first mounted shows up (see use-stored.ts).
+  const rawRecent = useStoredItem(RECENT_KEY);
+  const recent = useMemo<RecentEvent[]>(() => (rawRecent ? recentEvents() : []), [rawRecent]);
   const [upcoming, setUpcoming] = useState<EventListItem[] | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [svg, setSvg] = useState<string | null>(null);

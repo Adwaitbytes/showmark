@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Address, Hex } from "viem";
 import { getPassport, linkedWalletOf, postWithdraw, waitForTx, type PassportData } from "@/lib/checkin/api-passport";
 import { localizedError, type Copy } from "@/lib/checkin/i18n";
 import { useLocale } from "@/lib/checkin/locale";
-import { loadPass } from "@/lib/wallet/pass";
+import { usePassAddress } from "@/lib/checkin/use-stored";
 import { AddressChip } from "@/ui/AddressChip";
 import { Amount } from "@/ui/Amount";
 import { Button } from "@/ui/Button";
@@ -17,7 +17,6 @@ import { Sheet, SheetSection } from "@/ui/Sheet";
 import { LoadingRegion, SkeletonText } from "@/ui/Skeleton";
 import { TxLink } from "@/ui/TxLink";
 import { WalletIcon } from "../../_components/icons";
-import { useHydrated } from "../../_components/useHydrated";
 
 type Load = { status: "loading" } | { status: "ready"; passport: PassportData } | { status: "failed"; copy: Copy };
 
@@ -30,8 +29,9 @@ type RowState =
 
 export function Withdraw() {
   const { t, errors } = useLocale();
-  const hydrated = useHydrated();
-  const pass = useMemo(() => (hydrated ? (loadPass()?.address ?? null) : null), [hydrated]);
+  const passAddress = usePassAddress();
+  const hydrated = passAddress !== undefined;
+  const pass = passAddress ?? null;
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [reloadKey, setReloadKey] = useState(0);
