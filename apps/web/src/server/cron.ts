@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { chainContext, contractsDeployed } from "./chain";
 import { getDatabase } from "./db/client";
 import { cronSecret, relayerPrivateKey } from "./env";
 import { AppError, isAppError, READ_ERRORS } from "./errors";
@@ -39,6 +40,7 @@ const SYNC_BUDGET_MS = 40_000;
  * settlements that can now pay. Each step runs even if an earlier one failed, and reports its own outcome.
  */
 export async function runCron() {
+  if (!contractsDeployed(chainContext())) return { ok: true, skipped: "not_deployed" } as const;
   const sync = await step("sync", () => syncForCron(SYNC_BUDGET_MS));
   const profiles = await step("profiles", () => refreshProfiles(20));
   const relayerConfigured = relayerPrivateKey() !== null;

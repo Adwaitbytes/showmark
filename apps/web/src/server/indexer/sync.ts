@@ -156,8 +156,8 @@ export async function ensureFresh(options: { kv?: KeyValueStore; deps?: SyncDeps
 
 /** Full catch-up for the cron route: holds the lock longer and runs until head or the time budget. */
 export async function syncForCron(budgetMs: number, options: { kv?: KeyValueStore; deps?: SyncDeps } = {}): Promise<SyncResult | { skipped: string }> {
+  if (!contractsDeployed(options.deps?.ctx ?? chainContext())) return { skipped: "not_deployed" };
   const deps = options.deps ?? defaultDeps();
-  if (!contractsDeployed(deps.ctx)) return { skipped: "not_deployed" };
   const kv = options.kv ?? getStore();
   const lock = await tryLock(kv, `idx:lock:${deps.ctx.chainId}`, budgetMs + 10_000);
   if (!lock) return { skipped: "locked" };

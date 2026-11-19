@@ -42,8 +42,8 @@ export const COMMON_ERRORS = {
     action: "Try again in a few minutes. If this keeps happening, tell the Showmark team.",
   },
   redisNotConfigured: {
-    code: "queue_not_configured",
-    message: "Showmark cannot reach its queue service right now.",
+    code: "redis_not_configured",
+    message: "Showmark cannot reach its rate limit and queue service right now.",
     action: "Try again in a few minutes. If this keeps happening, tell the Showmark team.",
   },
   relayerNotConfigured: {
