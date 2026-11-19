@@ -14,7 +14,7 @@ export const DEFINITIONS = [
   ["Verified attendees", "Distinct passes with at least one CheckedIn event on the registry."],
   ["Events with check-ins", "Events that recorded at least one presence. Events nobody attended are not counted."],
   ["Team-funded and external", "A campaign is team-funded when its sponsor address belongs to the Showmark team. Everything else is external."],
-  ["Settled", "Sum of Settled events from the vault, per token. Dollar values use the QIE/USD oracle price at the time this page was read."],
+  ["Settled", "Sum of Settled events from the vault, per token. Dollar values use the QIE/USDT oracle price at the time this page was read."],
   ["New wallets", "Addresses whose first transaction on QIE was a Showmark check-in or link."],
   ["Linked a QIE Wallet", "Guest passes that were linked to a QIE Wallet through WalletLinked, the step people take to cash out."],
   ["Share of chain activity", "Showmark transactions in the last day divided by the chain's daily total from the explorer's stats API."],
@@ -241,7 +241,7 @@ export function TractionView({ traction }: { traction: Traction }) {
             </Ledger>
             {hasPrice ? (
               <p className="mt-3 text-sm text-ink-faint">
-                USD at the QIE/USD oracle price of {traction.settledUsd.price} from{" "}
+                USD at the QIE/USDT oracle price of {traction.settledUsd.price} from{" "}
                 {formatTime(traction.settledUsd.priceUpdatedAt)}.
               </p>
             ) : null}

@@ -66,7 +66,7 @@ const integrations = [
     where: "CampaignVault.withdraw",
   },
   {
-    name: "QIE/USD oracle",
+    name: "QIE/USDT oracle",
     job: "A sponsor can price a person in dollars and pay in QIE at the rate when the person checks in. If the price is stale, payment waits instead of going out at the wrong rate.",
     where: "CampaignVault.quote",
   },

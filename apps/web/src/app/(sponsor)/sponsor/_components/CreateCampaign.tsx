@@ -291,7 +291,7 @@ function Form({ seat }: { seat: SponsorSeat }) {
                   Every person is paid the same QIE, whatever the price does.
                 </ChoiceCard>
                 <ChoiceCard name="pricing" value="usd" checked={values.pricing === "usd"} onChange={() => set("pricing", "usd")} title="A US dollar amount, paid in QIE">
-                  Converted at the QIE/USD oracle price at the moment each person is paid.
+                  Converted at the QIE/USDT oracle price at the moment each person is paid.
                 </ChoiceCard>
               </div>
               {values.pricing === "usd" ? <OraclePanel oracle={oracle} now={now} maxAge={maxAge} onRetry={oracle.reload} /> : null}

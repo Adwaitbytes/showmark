@@ -39,7 +39,7 @@ export default function SponsorGuide() {
             <tr>
               <td>Price per person</td>
               <td>
-                An amount of the token, or a dollar amount paid in QIE at the QIE/USD oracle price when each person
+                An amount of the token, or a dollar amount paid in QIE at the QIE/USDT oracle price when each person
                 checks in.
               </td>
             </tr>

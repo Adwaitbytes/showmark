@@ -17,7 +17,7 @@ export interface OraclePrice {
   updatedAt: number;
 }
 
-/** Latest QIE/USD round. Re-read every minute. */
+/** Latest QIE/USDT round. Re-read every minute. */
 export function useOraclePrice(): Read<OraclePrice> & { reload: () => void } {
   const [state, setState] = useState<Read<OraclePrice>>(() => (addresses.qieUsdOracle === zeroAddress ? { status: "error" } : { status: "loading" }));
   const [nonce, setNonce] = useState(0);

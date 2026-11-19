@@ -14,7 +14,7 @@ const CACHE_MS = 60_000;
 let cached: { chainId: number; at: number; value: QiePrice | null } | null = null;
 
 /**
- * QIE/USD from the on-chain oracle (8 decimals on mainnet). Null when the network has no oracle configured or the
+ * QIE/USDT from the on-chain oracle (treated as dollars) (8 decimals on mainnet). Null when the network has no oracle configured or the
  * feed has never answered with a positive price. The feed updates on deviation, so `updatedAt` can be hours old;
  * callers that show a USD figure show this time next to it.
  */
