@@ -1,0 +1,22 @@
+{
+  "bond": "0xd9737Ca433D58496d46d947138e97c28E19fA722",
+  "chainId": 1983,
+  "challengeDeposit": 10000000000000000,
+  "deployBlock": 9859857,
+  "deployer": "0xA8C849C243BA940102d2deB99971e4c713411926",
+  "feeBps": 0,
+  "feeRecipient": "0xA8C849C243BA940102d2deB99971e4c713411926",
+  "lens": "0x28dB120c102c743d6846254E90bA9ef85f3b2145",
+  "nameRegistry": "0x7990C7e9Da5a0Ff1FC5ac4ED4e880E704c7AE144",
+  "oracle": "0xce0b19eD5a08De5C2Cb7162c79C6A2b664DAf602",
+  "oracleMaxAge": 172800,
+  "pendingOwner": "0x0000000000000000000000000000000000000000",
+  "qieIdCheck": "0x5BC38FC820dee09FE8Cb2E573ebA31769987F5a3",
+  "qusdc": "0x4019d9F2aD9dBEF176680E73245D325fc624E251",
+  "registry": "0xd03B9d6691296761216b02053f00d77FD0f2802A",
+  "stamp": "0xAceE5A7EdA63af6952429c97a693ca690024559E",
+  "stampBaseURI": "https://showmark.vercel.app/api/stamp/",
+  "testnetInitialPrice": 16500000,
+  "testnetMocks": true,
+  "vault": "0xFAA5c9159F5dfB4b9fbB104E10c7280a1fe6FCDe"
+}
