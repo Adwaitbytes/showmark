@@ -41,7 +41,8 @@
     "typecheck": "tsc --noEmit",
     "examples": "node scripts/run-examples.mjs",
     "digests": "node scripts/forge-digests.mjs",
-    "sync-abi": "node scripts/sync-abi.mjs"
+    "sync-abi": "node scripts/sync-abi.mjs",
+    "test:sol": "forge test --root test/foundry"
   },
   "keywords": [
     "showmark",
