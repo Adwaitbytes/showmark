@@ -1,14 +1,16 @@
+import { eq } from "drizzle-orm";
 import { zeroAddress, type Address } from "viem";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { registryAbi, vaultAbi } from "@/lib/chain/abi";
 import { setChainContext } from "./chain";
 import { setDatabase } from "./db/client";
+import * as t from "./db/schema";
 import { AppError } from "./errors";
 import { MemoryStore, setStore } from "./kv";
 import { nameRegistryAbi } from "./qie/names";
 import { getCampaign, getEvent, getPassport, getTraction, listCampaigns, listEvents } from "./queries";
 import { fakeChainClient } from "./testing/fake-chain";
-import { FIXTURE_CHAIN_ID, indexFixture, organizer, pass, pass2, registry, sponsor, startsAt, vault, wallet } from "./testing/fixtures";
+import { FIXTURE_CHAIN_ID, indexFixture, organizer, pass, pass2, endsAt, registry, sponsor, startsAt, vault, wallet } from "./testing/fixtures";
 import { createTestDatabase } from "./testing/pglite";
 
 const names: Address = "0x6000000000000000000000000000000000000006";
@@ -114,7 +116,9 @@ describe("passport", () => {
   it("explains payouts that are waiting", async () => {
     const passport = await getPassport(pass2);
     expect(passport).toMatchObject({ pass: pass2, wallet: null, holdsQieId: false });
-    expect(passport?.pending).toEqual([{ campaignId: "1", eventId: "1", reason: "NeedsQieId" }]);
+    expect(passport?.pending).toEqual([
+      { campaignId: "1", eventId: "1", reason: "NeedsQieId", deadline: new Date(Number(endsAt + 3n * 86_400n) * 1000).toISOString() },
+    ]);
   });
 
   it("returns null for names that do not exist and rejects garbage", async () => {
@@ -137,16 +141,21 @@ describe("campaigns", () => {
       settledAmount: (10n ** 18n).toString(),
       teamFunded: true,
       status: "live",
+      maxPerEvent: 0,
+      maxTotal: 0,
+      openToBonded: false,
+      minBond: "0",
     });
     expect(await listCampaigns({ sponsor: organizer })).toEqual([]);
   });
 
   it("returns approved events and settlements with transaction hashes", async () => {
+    await database.db.update(t.profiles).set({ qieName: "guest.qie" }).where(eq(t.profiles.address, wallet.toLowerCase()));
     const detail = await getCampaign("1");
     expect(detail?.events).toHaveLength(1);
     expect(detail?.events[0]).toMatchObject({ id: "1", approved: true, settled: 1 });
     expect(detail?.settlements).toHaveLength(1);
-    expect(detail?.settlements[0]).toMatchObject({ attendee: pass, organizer, eventName: "Delhi builders night 2", gross: (10n ** 18n).toString() });
+    expect(detail?.settlements[0]).toMatchObject({ attendee: pass, attendeeName: "guest.qie", organizer, organizerName: null, eventName: "Delhi builders night 2", gross: (10n ** 18n).toString() });
     expect(detail?.settlements[0].tx).toMatch(/^0x[0-9a-f]{64}$/);
     expect(await getCampaign("99")).toBeNull();
   });

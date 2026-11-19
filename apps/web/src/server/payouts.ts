@@ -44,7 +44,9 @@ export async function pendingFor(db: Db, pass: string): Promise<Passport["pendin
   for (const row of rows) {
     if (row.endsAt.getTime() + SETTLE_GRACE_MS < now) continue;
     const reason = row.status === 8 ? "NeedsQieId" : row.status === 9 ? "PriceStale" : row.status === null || row.status === 10 || row.status === 12 ? "Pending" : null;
-    if (reason) out.push({ campaignId: row.campaignId.toString(), eventId: row.eventId.toString(), reason });
+    if (reason) {
+      out.push({ campaignId: row.campaignId.toString(), eventId: row.eventId.toString(), reason, deadline: new Date(row.endsAt.getTime() + SETTLE_GRACE_MS).toISOString() });
+    }
   }
   return out;
 }

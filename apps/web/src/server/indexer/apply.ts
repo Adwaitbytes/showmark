@@ -9,8 +9,17 @@ import { parseCampaignMetadata, parseEventMetadata, parseSeriesName } from "./me
 // ON CONFLICT DO NOTHING; mutable rows (event metadata, approvals, closes) are applied in log order.
 // Everything for one block range runs in a single batch together with the sync_state update.
 
+export interface CampaignTerms {
+  maxPerEvent: number;
+  maxTotal: number;
+  openToBonded: boolean;
+  minBond: bigint;
+}
+
 export interface ApplyContext {
   teamAddresses: ReadonlySet<Address>;
+  /** Campaign fields CampaignCreated does not emit, read from vault.campaign(id) for campaigns created in this range. */
+  campaignTerms?: ReadonlyMap<bigint, CampaignTerms>;
 }
 
 const INSERT_CHUNK = 500;
@@ -137,6 +146,7 @@ export function buildStatements(db: Db, logs: ShowmarkLog[], blockTimes: Readonl
       case "CampaignCreated": {
         const a = log.args;
         const m = parseCampaignMetadata(a.metadata, a.campaignId);
+        const terms = ctx.campaignTerms?.get(a.campaignId);
         seen(a.sponsor, block);
         ordered.push(
           db
@@ -158,6 +168,7 @@ export function buildStatements(db: Db, logs: ShowmarkLog[], blockTimes: Readonl
               description: m.description,
               url: m.url,
               teamFunded: isTeam(ctx, a.sponsor),
+              ...(terms ?? {}),
               createdBlock: block,
               createdTx: tx,
             })

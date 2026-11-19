@@ -9,7 +9,8 @@ import { AppError } from "../errors";
 import { getStore, type KeyValueStore } from "../kv";
 import { tryLock } from "../lock";
 import { log } from "../log";
-import { buildStatements, syncStateStatement } from "./apply";
+import { vaultAbi } from "@/lib/chain/abi";
+import { buildStatements, syncStateStatement, type CampaignTerms } from "./apply";
 import { decodeShowmarkLogs } from "./decode";
 import { refreshProfiles } from "./profiles";
 
@@ -102,7 +103,12 @@ export async function syncOnce(options: SyncOptions, deps: SyncDeps = defaultDep
       const block = await ctx.client.getBlock({ blockNumber });
       return [blockNumber, new Date(Number(block.timestamp) * 1000)] as const;
     });
-    const statements = buildStatements(database.db, logs, new Map(times), { teamAddresses: team });
+    const created = logs.flatMap((l) => (l.eventName === "CampaignCreated" ? [l.args.campaignId] : []));
+    const terms = await mapLimit(created, BLOCK_FETCH_CONCURRENCY, async (id) => {
+      const c = await ctx.client.readContract({ address: ctx.vault, abi: vaultAbi, functionName: "campaign", args: [id] });
+      return [id, { maxPerEvent: c.maxPerEvent, maxTotal: c.maxTotal, openToBonded: c.openToBonded, minBond: c.minBond } satisfies CampaignTerms] as const;
+    });
+    const statements = buildStatements(database.db, logs, new Map(times), { teamAddresses: team, campaignTerms: new Map(terms) });
     statements.push(syncStateStatement(database.db, ctx.chainId, [ctx.registry, ctx.vault], to));
     await database.batch(statements);
     if (logs.length > 0) log.info("indexer.range", { from, to, logs: logs.length, raw: raw.length });

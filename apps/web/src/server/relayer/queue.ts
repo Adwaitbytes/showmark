@@ -43,8 +43,10 @@ interface WireCheckIn {
   attendee: Address;
   mode: 1 | 2;
   doorTime: string;
+  ticket: Address;
   attendeeSig: Hex;
   doorSig: Hex;
+  ticketSig: Hex;
 }
 
 interface Queued {

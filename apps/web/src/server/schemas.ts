@@ -1,4 +1,4 @@
-import { getAddress, isAddress, isHex, type Address, type Hex } from "viem";
+import { getAddress, isAddress, isHex, zeroAddress, type Address, type Hex } from "viem";
 import { z } from "zod";
 
 // Wire schemas for every /api route input. Big integers travel as decimal strings, bytes as 0x hex.
@@ -37,14 +37,33 @@ export const walletSignature = z
   .refine((v) => isHex(v) && v.length >= 4 && v.length <= 2 + 8192 && v.length % 2 === 0, "must be 0x hex bytes")
   .transform((v): Hex => v.toLowerCase() as Hex);
 
-export const checkInDataSchema = z.object({
-  eventId: idString,
-  attendee: addressSchema,
-  mode: z.union([z.literal(1), z.literal(2)]),
-  doorTime: uint64String,
-  attendeeSig: signature65,
-  doorSig: signature65,
-});
+/**
+ * CheckInData in the field order of the registry struct. Mode 1 (rotating QR) carries the ticket key's address and
+ * its Ticket signature; mode 2 (door scans you) carries the zero address and empty bytes.
+ */
+export const checkInDataSchema = z
+  .object({
+    eventId: idString,
+    attendee: addressSchema,
+    mode: z.union([z.literal(1), z.literal(2)]),
+    doorTime: uint64String,
+    ticket: addressSchema,
+    attendeeSig: signature65,
+    doorSig: signature65,
+    ticketSig: z
+      .string()
+      .regex(/^0x([0-9a-fA-F]{130})?$/, "must be a 65 byte signature, or 0x in mode 2")
+      .transform((v): Hex => v.toLowerCase() as Hex),
+  })
+  .superRefine((d, ctx) => {
+    if (d.mode === 1) {
+      if (d.ticket === zeroAddress) ctx.addIssue({ code: "custom", path: ["ticket"], message: "mode 1 needs the ticket address" });
+      if (d.ticketSig === "0x") ctx.addIssue({ code: "custom", path: ["ticketSig"], message: "mode 1 needs a ticket signature" });
+    } else {
+      if (d.ticket !== zeroAddress) ctx.addIssue({ code: "custom", path: ["ticket"], message: "mode 2 has no ticket" });
+      if (d.ticketSig !== "0x") ctx.addIssue({ code: "custom", path: ["ticketSig"], message: "mode 2 has no ticket signature" });
+    }
+  });
 export type CheckInData = z.output<typeof checkInDataSchema>;
 
 export const MAX_BATCH_ITEMS = 50;

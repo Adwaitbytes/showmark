@@ -80,7 +80,16 @@ function fakeChain(state: FakeState): RelayerChain {
 }
 
 function checkIn(attendee: Address, eventId = 1n): CheckInData {
-  return { eventId, attendee, mode: 1, doorTime: 1_795_000_000n, attendeeSig: `0x${"11".repeat(65)}`, doorSig: `0x${"22".repeat(65)}` };
+  return {
+    eventId,
+    attendee,
+    mode: 1,
+    doorTime: 1_795_000_000n,
+    ticket: "0x3000000000000000000000000000000000000003",
+    attendeeSig: `0x${"11".repeat(65)}`,
+    doorSig: `0x${"22".repeat(65)}`,
+    ticketSig: `0x${"33".repeat(65)}`,
+  };
 }
 
 const attendees: Address[] = [

@@ -66,7 +66,8 @@ export interface Passport {
   stamps: Stamp[];
   streaks: { seriesId: string; seriesName: string; current: number; best: number }[];
   claimable: { token: Address; symbol: "QIE" | "QUSDC"; amount: string }[];
-  pending: { campaignId: string; eventId: string; reason: "NeedsQieId" | "PriceStale" | "Pending" }[];
+  // deadline: campaign endsAt + 3 days (SETTLE_GRACE); after it the payout can no longer happen.
+  pending: { campaignId: string; eventId: string; reason: "NeedsQieId" | "PriceStale" | "Pending"; deadline: string }[];
 }
 
 export interface CampaignSummary {
@@ -91,6 +92,10 @@ export interface CampaignSummary {
   settledAmount: string;
   teamFunded: boolean;
   status: "scheduled" | "live" | "ended" | "refundable" | "refunded";
+  maxPerEvent: number; // 0 = unlimited
+  maxTotal: number; // 0 = unlimited
+  openToBonded: boolean;
+  minBond: string; // native QIE base units
 }
 
 export interface Settlement {
@@ -98,7 +103,9 @@ export interface Settlement {
   eventId: string;
   eventName: string;
   attendee: Address;
+  attendeeName: string | null; // .qie name of the pass's linked wallet, if any
   organizer: Address;
+  organizerName: string | null;
   gross: string;
   toAttendee: string;
   toOrganizer: string;
@@ -137,8 +144,11 @@ export interface RelaySubmitted {
 }
 
 export interface TxStatus {
+  // With ?event=&attendee=, a mined batch whose item for that attendee was rejected reads "reverted".
   status: "pending" | "success" | "reverted";
   blockNumber?: string;
+  // Present when ?event=&attendee= were given and the transaction is mined: that attendee's own result.
+  checkIn?: { recorded: boolean; status: number; error?: ApiError["error"] };
 }
 
 export interface Session {

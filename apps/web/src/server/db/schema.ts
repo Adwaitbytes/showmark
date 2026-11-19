@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { bigint, boolean, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp } from "drizzle-orm/pg-core";
 
 // Mirrors docs/INTERFACES.md section 4, plus four tables the indexer needs that the spec does not list
@@ -93,6 +94,11 @@ export const campaigns = pgTable(
     /** Not in the spec: optional link from the campaign metadata. */
     url: text("url"),
     teamFunded: boolean("team_funded").notNull(),
+    /** Not in the spec: immutable caps and bond rule, read once from vault.campaign(id) because the event omits them. */
+    maxPerEvent: integer("max_per_event").notNull().default(0),
+    maxTotal: integer("max_total").notNull().default(0),
+    openToBonded: boolean("open_to_bonded").notNull().default(false),
+    minBond: amount("min_bond").notNull().default(sql`0`),
     /** Not in the spec: block of CampaignCreated, for ordering. */
     createdBlock: blockNumber("created_block").notNull(),
     createdTx: text("created_tx").notNull(),

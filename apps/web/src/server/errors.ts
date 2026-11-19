@@ -169,8 +169,16 @@ function snake(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
 
+const BAD_TICKET_SIG: ErrorCopy = {
+  code: "bad_ticket_sig",
+  message: "This door code could not be verified.",
+  action: "Scan the code on the door screen again.",
+};
+
 /** Copy for a non-zero `checkInBatch` status code. Unknown codes fall back to a generic rejection. */
 export function checkInStatusCopy(status: number): ErrorCopy {
+  // 11 BadTicketSig (audit C-01): the ticket key's signature over this attendee did not match the door pass.
+  if (status === 11) return BAD_TICKET_SIG;
   const name = CHECK_IN_STATUS[status];
   if (!name || name === "Recorded") {
     return { code: "check_in_rejected", message: "The network did not record this check-in.", action: "Scan the door code again." };

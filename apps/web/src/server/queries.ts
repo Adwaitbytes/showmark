@@ -1,6 +1,7 @@
 import "server-only";
 
 import { and, asc, count, countDistinct, desc, eq, gte, inArray, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { getAddress, isAddress, isAddressEqual, zeroAddress } from "viem";
 import type {
   Address,
@@ -464,6 +465,10 @@ async function selectCampaigns(r: Ready, where: SQL | undefined, limit: number, 
       settledAmount: settledAmount.toString(),
       teamFunded: c.teamFunded,
       status: campaignStatus(c.startsAt, c.endsAt, balance, refundedAmount > 0n),
+      maxPerEvent: c.maxPerEvent,
+      maxTotal: c.maxTotal,
+      openToBonded: c.openToBonded,
+      minBond: c.minBond.toString(),
     });
   }
   return out;
@@ -506,20 +511,28 @@ export async function getCampaign(id: string | bigint, options: CampaignDetailOp
     .orderBy(asc(t.events.startsAt));
 
   const limit = options.settlementLimit === undefined ? CAMPAIGN_SETTLEMENTS : options.settlementLimit;
+  // Attendees are passes: their name is the name of the wallet they linked, if any.
+  const attendeeProfile = alias(t.profiles, "attendee_profile");
+  const organizerProfile = alias(t.profiles, "organizer_profile");
   const settlementQuery = db
-    .select({ s: t.settlements, eventName: t.events.name })
+    .select({ s: t.settlements, eventName: t.events.name, attendeeName: attendeeProfile.qieName, organizerName: organizerProfile.qieName })
     .from(t.settlements)
     .leftJoin(t.events, eq(t.events.id, t.settlements.eventId))
+    .leftJoin(t.links, eq(t.links.pass, t.settlements.attendee))
+    .leftJoin(attendeeProfile, eq(attendeeProfile.address, t.links.wallet))
+    .leftJoin(organizerProfile, eq(organizerProfile.address, t.settlements.organizer))
     .where(eq(t.settlements.campaignId, campaignId))
     .orderBy(desc(t.settlements.block), asc(t.settlements.attendee));
   const settlementRows = limit === null ? await settlementQuery : await settlementQuery.limit(limit);
 
-  const settlements: Settlement[] = settlementRows.map(({ s, eventName }) => ({
+  const settlements: Settlement[] = settlementRows.map(({ s, eventName, attendeeName, organizerName }) => ({
     campaignId: s.campaignId.toString(),
     eventId: s.eventId.toString(),
     eventName: eventName ?? `Event ${s.eventId}`,
     attendee: checksum(s.attendee),
+    attendeeName: attendeeName ?? null,
     organizer: checksum(s.organizer),
+    organizerName: organizerName ?? null,
     gross: s.gross.toString(),
     toAttendee: s.toAttendee.toString(),
     toOrganizer: s.toOrganizer.toString(),

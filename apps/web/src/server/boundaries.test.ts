@@ -10,7 +10,9 @@ import { checkInBatchSchema, checkInDataSchema, eventsQuerySchema, linkWalletSch
 
 const sig = `0x${"ab".repeat(65)}`;
 const attendee = "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65";
-const valid = { eventId: "12", attendee, mode: 1, doorTime: "1795000000", attendeeSig: sig, doorSig: sig };
+const ticket = "0x3000000000000000000000000000000000000003";
+const valid = { eventId: "12", attendee, mode: 1, doorTime: "1795000000", ticket, attendeeSig: sig, doorSig: sig, ticketSig: sig };
+const attested = { ...valid, mode: 2, ticket: "0x0000000000000000000000000000000000000000", ticketSig: "0x" };
 
 describe("wire schemas", () => {
   it("parses check-in data into bigints and a checksummed address", () => {
@@ -28,9 +30,18 @@ describe("wire schemas", () => {
       { ...valid, attendee: "0x123" },
       { ...valid, attendeeSig: `0x${"ab".repeat(64)}` },
       { ...valid, doorSig: "not hex" },
+      { ...valid, ticket: attested.ticket },
+      { ...valid, ticketSig: "0x" },
+      { ...attested, ticket },
+      { ...attested, ticketSig: sig },
+      { ...valid, ticketSig: `0x${"ab".repeat(64)}` },
     ]) {
       expect(checkInDataSchema.safeParse(bad).success).toBe(false);
     }
+  });
+
+  it("accepts a door-scans-you attestation with no ticket", () => {
+    expect(checkInDataSchema.parse(attested)).toMatchObject({ mode: 2, ticketSig: "0x" });
   });
 
   it("caps batches at 50 items", () => {
