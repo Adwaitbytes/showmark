@@ -20,7 +20,6 @@ interface Props {
 interface Code {
   slot: number;
   svg: string;
-  url: string;
   issuedAt: bigint;
 }
 
@@ -49,12 +48,13 @@ export function RotatingCode({ doorKey, eventId, registry, clock, className }: P
         const issuedAt = issuedAtFor(now);
         const pass = await signDoorPass(doorKey, eventId, issuedAt, registry);
         const url = doorPassUrl(window.location.origin, pass);
+        // The link holds this rotation's ticket key, so it exists only inside the QR: never in the DOM, storage or logs.
         // Low error correction keeps the modules large, which is what matters for a camera at the back of a hall. With
         // the ticket key the link is about 170 characters, a version 8 code (49 modules); on a 1080p projector that is
         // still about 13 pixels per module, and the code decodes from a quarter-size capture of the screen.
         const svg = await QRCode.toString(url, { type: "svg", margin: 0, errorCorrectionLevel: "L", color: { dark: "#141311", light: "#00000000" } });
         if (!cancelled) {
-          setCode({ slot, svg, url, issuedAt });
+          setCode({ slot, svg, issuedAt });
           setFailed(false);
         }
       } catch {
@@ -91,7 +91,6 @@ export function RotatingCode({ doorKey, eventId, registry, clock, className }: P
             aria-label="Door check-in code. Point your phone camera at it to check in."
             data-testid="door-qr"
             data-issued-at={code?.issuedAt.toString() ?? ""}
-            data-url={code?.url ?? ""}
             className="grid aspect-square w-full place-items-center rounded-doc bg-[#faf7f0] p-[7%] shadow-sheet [&_svg]:size-full"
           >
             {code ? (

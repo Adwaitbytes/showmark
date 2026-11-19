@@ -89,7 +89,7 @@ const shots: Shot[] = [
   { name: "event-not-found", path: "/organize/99", state: () => createState(), prepare: async (page) => void (await expect(page.getByText("There is no event 99 on Showmark")).toBeVisible()) },
   { name: "door-authorize", path: "/door/1", door: true, state: () => createState(), prepare: async (page) => void (await expect(page.getByText(/gas fee of about/)).toBeVisible()) },
   { name: "door-connect", path: "/door/1", door: true, wallet: false, state: () => createState(), prepare: async (page) => void (await expect(page.getByText("Connect the organizer’s QIE Wallet")).toBeVisible()) },
-  { name: "door-running", path: "/door/1", door: true, state: () => createState({ authorizeAll: true }), prepare: async (page) => void (await expect(page.getByTestId("door-qr")).toHaveAttribute("data-url", /\/c\//)) },
+  { name: "door-running", path: "/door/1", door: true, state: () => createState({ authorizeAll: true }), prepare: async (page) => void (await expect(page.getByTestId("door-qr")).not.toHaveAttribute("data-issued-at", "")) },
   {
     name: "door-before-open",
     path: "/door/1",
@@ -108,7 +108,7 @@ const shots: Shot[] = [
     door: true,
     state: () => createState({ authorizeAll: true }),
     prepare: async (page) => {
-      await expect(page.getByTestId("door-qr")).toHaveAttribute("data-url", /\/c\//);
+      await expect(page.getByTestId("door-qr")).not.toHaveAttribute("data-issued-at", "");
       await page.getByRole("button", { name: "Settings" }).click();
       await expect(page.getByRole("heading", { name: "Door settings" })).toBeVisible();
     },

@@ -164,7 +164,10 @@ describe("door signatures", () => {
   it("round-trips the door pass through the QR url", async () => {
     const pass = await signDoorPass(doorKey, 12n, 1_764_245_000n, REGISTRY);
     const url = doorPassUrl("https://showmark.app/", pass);
-    expect(url.startsWith("https://showmark.app/c/12.1764245000.")).toBe(true);
+    // The ticket key rides in the fragment, which browsers never send to a server (audit N-03).
+    const [path, fragment] = url.split("#");
+    expect(path).toMatch(/^https:\/\/showmark\.app\/c\/12\.1764245000\.[A-Za-z0-9_-]{87}$/);
+    expect(fragment).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(decodeDoorPass(url)).toEqual(pass);
   });
 

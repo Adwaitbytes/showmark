@@ -23,6 +23,36 @@ const checkInTypes = {
 } as const;
 const domain = { name: "Showmark", version: "1", chainId: 1983, verifyingContract: REGISTRY } as const;
 
+/** Reads the door code the way a phone does: renders the QR SVG to pixels and decodes it with jsQR. */
+async function readDoorQr(page: import("@playwright/test").Page): Promise<string> {
+  const hasDecoder = await page.evaluate(() => typeof (window as unknown as { jsQR?: unknown }).jsQR === "function");
+  if (!hasDecoder) await page.addScriptTag({ path: require.resolve("jsqr/dist/jsQR.js") });
+  return page.evaluate(async () => {
+    const svg = document.querySelector('[data-testid="door-qr"] svg');
+    if (!svg) return "";
+    const size = 600;
+    const img = new Image(size, size);
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.outerHTML)}`;
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size + 80;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 40, 40, size, size);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const decode = (window as unknown as { jsQR: (d: Uint8ClampedArray, w: number, h: number) => { data: string } | null }).jsQR;
+    return decode(data.data, data.width, data.height)?.data ?? "";
+  });
+}
+
+/** Waits until the door shows a code issued at a different time than `previous`, then reads it. */
+async function nextCode(page: import("@playwright/test").Page, previous: string, timeout: number): Promise<string> {
+  const qr = page.getByTestId("door-qr");
+  await expect(qr).not.toHaveAttribute("data-issued-at", previous, { timeout });
+  return readDoorQr(page);
+}
+
 async function storedDoorKey(page: import("@playwright/test").Page): Promise<string> {
   return page.evaluate(() => {
     for (let i = 0; i < localStorage.length; i++) {
@@ -44,11 +74,15 @@ test("shows a signed code that rotates every 15 seconds and the live count", asy
 
   const qr = page.getByTestId("door-qr");
   // The first code appears straight away, not at the next rotation.
-  await expect(qr).toHaveAttribute("data-url", /\/c\/1\.\d+\.[A-Za-z0-9_-]{87}\.[A-Za-z0-9_-]{43}$/, { timeout: 4_000 });
-  const firstUrl = (await qr.getAttribute("data-url")) ?? "";
+  await expect(qr).not.toHaveAttribute("data-issued-at", "", { timeout: 4_000 });
+  const firstUrl = await readDoorQr(page);
+  // The ticket key travels in the fragment, after #, so it never reaches a server (audit N-03).
+  expect(firstUrl).toMatch(/\/c\/1\.\d+\.[A-Za-z0-9_-]{87}#[A-Za-z0-9_-]{43}$/);
   const first = decodeDoorPass(firstUrl);
   expect(first).not.toBeNull();
   if (!first) return;
+  // The link, and so the ticket key, is only inside the QR, never in the page's markup.
+  expect(await page.content()).not.toContain(firstUrl.split("#")[1]);
 
   // The code is signed by the key this browser stored, under the registry's EIP-712 domain.
   const doorKey = await storedDoorKey(page);
@@ -56,20 +90,14 @@ test("shows a signed code that rotates every 15 seconds and the live count", asy
   expect(getAddress(signer)).toBe(getAddress(doorKey));
   expect(Math.abs(Number(first.issuedAt) - Date.now() / 1000)).toBeLessThan(20);
 
-  // A new code within one rotation, issued about 15 seconds later.
-  await expect(qr).not.toHaveAttribute("data-url", firstUrl, { timeout: 17_000 });
-  const second = decodeDoorPass((await qr.getAttribute("data-url")) ?? "");
+  // A new code within one rotation, issued about 15 seconds later, with its own ticket key.
+  const second = decodeDoorPass(await nextCode(page, first.issuedAt.toString(), 17_000));
   expect(second).not.toBeNull();
-  // Every rotation carries its own ticket key.
   expect(second!.ticketKey).not.toBe(first.ticketKey);
   const gap = Number(second!.issuedAt - first.issuedAt);
   expect(gap).toBeGreaterThanOrEqual(1);
   expect(gap).toBeLessThanOrEqual(16);
-  const third = await (async () => {
-    const before = await qr.getAttribute("data-url");
-    await expect(qr).not.toHaveAttribute("data-url", before ?? "", { timeout: 17_000 });
-    return decodeDoorPass((await qr.getAttribute("data-url")) ?? "");
-  })();
+  const third = decodeDoorPass(await nextCode(page, second!.issuedAt.toString(), 17_000));
   expect(Number(third!.issuedAt - second!.issuedAt)).toBeGreaterThanOrEqual(14);
   expect(Number(third!.issuedAt - second!.issuedAt)).toBeLessThanOrEqual(16);
 
@@ -84,7 +112,8 @@ test("asks the organizer to authorize a new door key once, then starts the door"
   await expect(page.getByRole("heading", { name: "Make this device the door" })).toBeVisible();
   await expect(page.getByText(/gas fee of about 0\.000225 QIE/)).toBeVisible();
   await page.getByRole("button", { name: "Authorize this device" }).click();
-  await expect(page.getByTestId("door-qr")).toHaveAttribute("data-url", /\/c\/1\./, { timeout: 30_000 });
+  await expect(page.getByTestId("door-qr")).not.toHaveAttribute("data-issued-at", "", { timeout: 30_000 });
+  expect(await readDoorQr(page)).toMatch(/\/c\/1\./);
   expect(state.sent).toHaveLength(1);
   expect(state.doorKeys.get((await storedDoorKey(page)).toLowerCase())).toBe(BigInt(state.events.get(1n)!.endsAt + 3600));
 });
