@@ -157,6 +157,8 @@ interface ICampaignVault {
     error ZeroAddress();
     /// @notice maxOracleAge must be positive.
     error InvalidOracleAge();
+    /// @notice The oracle reports more than 18 decimals.
+    error UnsupportedOracle();
     /// @notice Fee above MAX_FEE_BPS.
     error FeeTooHigh();
     /// @notice Campaign parameters are invalid.
