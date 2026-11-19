@@ -59,8 +59,8 @@ function initialValues(now: number): CampaignFormValues {
 
 function Part({ n, title, intro, children }: { n: number; title: string; intro?: ReactNode; children: ReactNode }) {
   return (
-    <section aria-labelledby={`part-${n}`} className="grid gap-6 border-t border-rule-soft py-10 first:border-t-0 first:pt-0 md:grid-cols-[3rem_1fr]">
-      <span aria-hidden="true" className="font-display text-3xl leading-none text-ink-faint">
+    <section aria-labelledby={`part-${n}`} className="grid gap-2 border-t border-rule-soft py-10 first:border-t-0 first:pt-0 md:grid-cols-[3rem_1fr] md:gap-6">
+      <span aria-hidden="true" className="font-display text-2xl leading-none text-ink-faint md:text-3xl">
         {n}
       </span>
       <div className="flex min-w-0 flex-col gap-6">
@@ -464,7 +464,11 @@ function Form({ seat }: { seat: SponsorSeat }) {
             value={values.deposit}
             onChange={(e) => set("deposit", e.target.value)}
             error={errors.deposit}
-            hint="You can top up later while the campaign runs."
+            hint={
+              preview.covered !== null && preview.covered > 0n
+                ? `Pays for ${formatCount(Number(preview.covered))} verified people${values.pricing === "usd" ? " at today's price" : ""}. You can top up later while the campaign runs.`
+                : "You can top up later while the campaign runs."
+            }
             fieldClassName="max-w-xs"
           />
           {showErrors && !validation.ok ? (

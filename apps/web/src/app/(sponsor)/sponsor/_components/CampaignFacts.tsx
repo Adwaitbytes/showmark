@@ -4,11 +4,15 @@ import { splitPayout } from "@/lib/sponsor/math";
 import type { OnChainCampaign } from "@/lib/sponsor/use-chain";
 import { basisPointsToPercent, formatCount, formatDate, formatTime, formatUsd } from "@/ui/format";
 import { Ledger, LedgerRow } from "@/ui/Ledger";
-import { amountText, perPresenceText, PROOF_MODE_COPY } from "./campaign";
+import { amountText, PROOF_MODE_COPY } from "./campaign";
 
 function when(seconds: number): string {
   const iso = new Date(seconds * 1000).toISOString();
   return `${formatDate(iso)}, ${formatTime(iso)}`;
+}
+
+function perPerson(c: CampaignSummary): string {
+  return c.pricing === 1 ? `${formatUsd(Number(c.amountPerPresence) / 1e6)} in QIE` : amountText(c.amountPerPresence, c.tokenSymbol);
 }
 
 /** The terms of a campaign as the vault holds them, in plain words. */
@@ -22,23 +26,25 @@ export function CampaignFacts({ c, chain }: { c: CampaignSummary; chain: OnChain
 
   return (
     <Ledger label="Campaign terms">
-      <LedgerRow label="Per verified person" value={perPresenceText(c)} />
+      <LedgerRow label="Per person" value={perPerson(c)} note={c.pricing === 1 ? "Paid in QIE at the oracle price when each person checks in" : undefined} />
       <LedgerRow
-        label="Split"
-        value={`${each(split.toAttendee)} / ${each(split.toOrganizer)}`}
-        note={`Attendee ${basisPointsToPercent(c.attendeeShareBps)} and organizer the rest, after a ${basisPointsToPercent(c.feeBps)} protocol fee fixed at creation`}
+        label="Attendee gets"
+        value={each(split.toAttendee)}
+        note={`${basisPointsToPercent(c.attendeeShareBps)} of what is left after the ${basisPointsToPercent(c.feeBps)} protocol fee`}
       />
-      <LedgerRow label="Proof required" value={PROOF_MODE_COPY[c.minProofMode].title} />
-      <LedgerRow label="QIE ID required" value={c.requireQieId ? "Yes" : "No"} />
-      <LedgerRow label="Pays from" value={when(startsAt)} />
-      <LedgerRow label="Pays until" value={when(endsAt)} note={chain && chain.endsAt < Math.floor(Date.parse(c.endsAt) / 1000) ? "Closed early by the sponsor" : undefined} />
+      <LedgerRow label="Organizer gets" value={each(split.toOrganizer)} />
+      <LedgerRow label="Proof" value={PROOF_MODE_COPY[c.minProofMode].short} note={PROOF_MODE_COPY[c.minProofMode].title} />
+      <LedgerRow label="QIE ID needed" value={c.requireQieId ? "Yes" : "No"} />
+      <LedgerRow label="From" value={when(startsAt)} />
+      <LedgerRow label="Until" value={when(endsAt)} note={chain && chain.endsAt < Math.floor(Date.parse(c.endsAt) / 1000) ? "Closed early by the sponsor" : undefined} />
       {chain ? (
         <>
-          <LedgerRow label="Cap per event" value={chain.maxPerEvent === 0 ? "None" : `${formatCount(chain.maxPerEvent)} people`} />
-          <LedgerRow label="Cap in total" value={chain.maxTotal === 0 ? "None" : `${formatCount(chain.maxTotal)} people`} />
+          <LedgerRow label="Per event cap" value={chain.maxPerEvent === 0 ? "None" : formatCount(chain.maxPerEvent)} />
+          <LedgerRow label="Total cap" value={chain.maxTotal === 0 ? "None" : formatCount(chain.maxTotal)} />
           <LedgerRow
             label="Bonded organizers"
-            value={chain.openToBonded ? `Bond of ${formatUnits(chain.minBond, 18)} QIE or more` : "Approved events only"}
+            value={chain.openToBonded ? "Paid" : "Not paid"}
+            note={chain.openToBonded ? `Organizers with a bond of ${formatUnits(chain.minBond, 18)} QIE or more are paid without approval` : "Only events the sponsor approved are paid"}
           />
         </>
       ) : null}

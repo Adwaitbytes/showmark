@@ -89,7 +89,7 @@ function CampaignRow({ c }: { c: CampaignSummary }) {
           <StatusMark tone={mark.tone} className="w-fit">
             {mark.label}
           </StatusMark>
-          <dl className="contents">
+          <dl className="grid grid-cols-3 gap-3 md:contents">
             <Figure label="People paid">{formatCount(c.settledCount)}</Figure>
             <Figure label="Settled">{amountText(c.settledAmount, c.tokenSymbol)}</Figure>
             <Figure label="Left in escrow">

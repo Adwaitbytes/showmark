@@ -6,7 +6,12 @@ export interface SettlementLike {
   eventName: string;
   attendee: string;
   organizer: string;
+  organizerName?: string | null;
   at: string;
+}
+
+function shortAddress(address: string): string {
+  return address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
 }
 
 export type SignalKind = "burst" | "concentration" | "hopping";
@@ -61,14 +66,19 @@ export function findSoftSignals(settlements: readonly SettlementLike[]): SoftSig
 
   if (settlements.length >= CONCENTRATION_MIN_SETTLEMENTS && byEvent.size >= 2) {
     const perOrganizer = new Map<string, number>();
-    for (const s of settlements) perOrganizer.set(s.organizer.toLowerCase(), (perOrganizer.get(s.organizer.toLowerCase()) ?? 0) + 1);
+    const label = new Map<string, string>();
+    for (const s of settlements) {
+      const key = s.organizer.toLowerCase();
+      perOrganizer.set(key, (perOrganizer.get(key) ?? 0) + 1);
+      label.set(key, s.organizerName ?? shortAddress(s.organizer));
+    }
     for (const [organizer, n] of perOrganizer) {
       const share = n / settlements.length;
       if (share > CONCENTRATION_SHARE) {
         signals.push({
           kind: "concentration",
           title: `One organizer received ${Math.round(share * 100)} percent of payouts`,
-          detail: `${n} of ${settlements.length} payouts went to events run by ${organizer}. That can simply be your most active partner. If it is unexpected, review their events before topping up.`,
+          detail: `${n} of ${settlements.length} payouts went to events run by ${label.get(organizer) ?? organizer}. That can simply be your most active partner. If it is unexpected, review their events before topping up.`,
         });
       }
     }

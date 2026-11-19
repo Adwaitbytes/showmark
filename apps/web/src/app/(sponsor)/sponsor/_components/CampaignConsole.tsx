@@ -11,13 +11,13 @@ import { AddressChip } from "@/ui/AddressChip";
 import { Button } from "@/ui/Button";
 import { EmptyState } from "@/ui/EmptyState";
 import { ErrorState } from "@/ui/ErrorState";
-import { formatCount, formatTime } from "@/ui/format";
+import { formatCount, formatTime, formatTokenAmount } from "@/ui/format";
 import { RetryIcon } from "@/ui/icons";
 import { Notice } from "@/ui/Notice";
 import { Sheet, SheetSection } from "@/ui/Sheet";
 import { LoadingRegion, Skeleton } from "@/ui/Skeleton";
 import { StatusMark } from "@/ui/StatusMark";
-import { amountText, statusMark } from "./campaign";
+import { statusMark } from "./campaign";
 import { CampaignFacts } from "./CampaignFacts";
 import { EventsPanel } from "./EventsPanel";
 import { ManageCampaign } from "./ManageCampaign";
@@ -72,17 +72,20 @@ function Reach({ d, chain }: { d: SponsorCampaignDetail; chain: OnChainCampaign 
     more = "Reading price";
   }
   const cells = [
-    { label: "Verified people paid", value: formatCount(d.settledCount), note: "One explorer transaction each" },
-    { label: "Settled", value: amountText(d.settledAmount, d.tokenSymbol), note: "Including the protocol fee" },
-    { label: "Left in escrow", value: amountText(balance, d.tokenSymbol), note: chain ? "Read from the vault just now" : "From the index" },
-    { label: "Pays for", value: `${more} more`, note: d.pricing === 1 ? "At today's QIE price" : "At the current amount per person" },
+    { label: "Verified people paid", value: formatCount(d.settledCount), unit: "", note: "One explorer transaction each" },
+    { label: "Settled", value: formatTokenAmount(d.settledAmount, d.tokenSymbol), unit: d.tokenSymbol, note: "Including the protocol fee" },
+    { label: "Left in escrow", value: formatTokenAmount(balance.toString(), d.tokenSymbol), unit: d.tokenSymbol, note: chain ? "Read from the vault just now" : "From the index" },
+    { label: "Pays for", value: more, unit: "more people", note: d.pricing === 1 ? "At today's QIE price" : "At the current amount per person" },
   ];
   return (
     <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-doc bg-rule-soft lg:grid-cols-4 [&>*]:bg-sheet">
       {cells.map((c) => (
         <div key={c.label} className="flex flex-col gap-1 px-5 py-5">
           <dt className="text-sm text-ink-soft">{c.label}</dt>
-          <dd className="font-mono text-xl leading-tight text-ink sm:text-2xl">{c.value}</dd>
+          <dd className="flex flex-wrap items-baseline gap-x-2 leading-tight text-ink">
+            <span className="font-mono text-xl sm:text-2xl">{c.value}</span>
+            {c.unit ? <span className="text-sm text-ink-soft">{c.unit}</span> : null}
+          </dd>
           <dd className="text-xs text-ink-faint">{c.note}</dd>
         </div>
       ))}
@@ -187,7 +190,7 @@ function Detail({ id }: { id: string }) {
         </p>
       </div>
 
-      <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-16">
+      <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-16">
         <div className="flex min-w-0 flex-col gap-14">
           <Section id="events" title="Events" intro="Check-ins at these events are paid from this campaign.">
             <EventsPanel detail={d} seat={seat} onChanged={refresh} />
@@ -195,19 +198,6 @@ function Detail({ id }: { id: string }) {
 
           <SoftSignals d={d} />
 
-          <Section
-            id="payouts"
-            title="Payouts"
-            intro={total > d.settlements.length ? `Latest ${formatCount(d.settlements.length)} of ${formatCount(total)}. The CSV and the printable report list every one.` : "Every verified person this campaign paid, newest first."}
-          >
-            {d.settlements.length === 0 ? (
-              <EmptyState as="h3" title="No payouts yet">
-                The first one appears here a few seconds after someone checks in at an approved event, with its transaction.
-              </EmptyState>
-            ) : (
-              <SettlementsTable settlements={d.settlements} symbol={d.tokenSymbol} />
-            )}
-          </Section>
         </div>
 
         <aside className="flex flex-col gap-10 lg:sticky lg:top-24 lg:self-start" aria-label="Terms and controls">
@@ -240,6 +230,20 @@ function Detail({ id }: { id: string }) {
           )}
         </aside>
       </div>
+
+      <Section
+        id="payouts"
+        title="Payouts"
+        intro={total > d.settlements.length ? `Latest ${formatCount(d.settlements.length)} of ${formatCount(total)}. The CSV and the printable report list every one.` : "Every verified person this campaign paid, newest first."}
+      >
+        {d.settlements.length === 0 ? (
+          <EmptyState as="h3" title="No payouts yet">
+            The first one appears here a few seconds after someone checks in at an approved event, with its transaction.
+          </EmptyState>
+        ) : (
+          <SettlementsTable settlements={d.settlements} symbol={d.tokenSymbol} />
+        )}
+      </Section>
     </div>
   );
 }
