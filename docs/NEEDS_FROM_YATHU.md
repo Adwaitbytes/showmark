@@ -6,6 +6,11 @@ Written once. Everything else is being built without waiting. Secrets go only in
 
 0. **GitHub workflow scope.** The public repo is https://github.com/23f2000979/showmark but pushes are rejected because the CLI token lacks the `workflow` scope (needed for CI). Run `! gh auth refresh -h github.com -s workflow` in this session and approve in the browser.
 
+1. **Database and Redis (free tiers).** The Vercel project `showmark` is linked. My attempt to provision through the Marketplace was blocked by the permission system, so please run these two lines from the repo root in this session:
+   `! vercel integration add neon --yes --no-claim --name showmark-db`
+   `! vercel integration add upstash/upstash-kv --yes --no-claim --name showmark-kv`
+   They create a free Neon Postgres and a free Upstash Redis and attach the env vars to the project.
+
 ## Blocking mainnet (needed by Mon 23 Nov)
 
 1. **Fund two addresses with mainnet QIE.** The keys were generated locally and live only in `.env.local` (gitignored). Send about 60 QIE to the deployer and 40 QIE to the relayer. The addresses are listed in `docs/STATUS.md` under "Wallets".
