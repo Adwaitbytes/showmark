@@ -142,6 +142,8 @@ contract AuditPoCTest is ProtocolFixture {
         vm.deal(rogue, 1 ether);
         vm.startPrank(rogue);
         bond.bond{value: 1 ether}();
+        vault.optInOpenCampaign(a);
+        vault.optInOpenCampaign(b);
         uint256 ev = registry.createEvent(T0, T0 + 1 hours, 0, 60, 0, META);
         registry.authorizeDoorKey(ev, vm.addr(rogueDoorPk), T0 + 1 hours);
         vm.stopPrank();
@@ -168,10 +170,19 @@ contract AuditPoCTest is ProtocolFixture {
         vm.prank(rogue);
         bond.requestUnbond(1 ether);
         vm.prank(sponsor);
-        uint256 cid = bond.challenge(rogue, a, "sybil event");
-        vm.prank(owner);
-        bond.resolve(cid, drained, sponsor);
-        assertEq(sponsor.balance, 1_000_000 ether - 20 ether + drained);
+        uint256 cid = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, a, "sybil event");
+        // a's own payouts are what the challenge locks; b's sponsor would challenge for b's share
+        uint256 lockedForA = bond.challengeOf(cid).locked;
+        assertEq(lockedForA, vault.paidForOrganizer(a, rogue));
+        vm.prank(sponsor);
+        uint256 cid2 = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, b, "sybil event");
+        assertEq(lockedForA + bond.challengeOf(cid2).locked, drained, "the whole drained amount is locked");
+        vm.startPrank(owner);
+        bond.resolve(cid, lockedForA, sponsor);
+        bond.resolve(cid2, drained - lockedForA, sponsor);
+        vm.stopPrank();
+        assertEq(sponsor.balance, 1_000_000 ether - 20 ether + drained - 2 * CHALLENGE_DEPOSIT);
+        assertEq(bond.depositOwed(sponsor), 2 * CHALLENGE_DEPOSIT, "deposits come back after a slash");
     }
 
     // ------------------------------------------------------------------ L-01 (accepted, documented)
@@ -234,8 +245,9 @@ contract AuditPoCTest is ProtocolFixture {
         address griefer = makeAddr("griefer");
         vm.startPrank(griefer);
         uint256 cid = vault.createCampaign(_params(NATIVE), 0);
+        vm.deal(griefer, CHALLENGE_DEPOSIT);
         vm.expectRevert(IOrganizerBond.OrganizerNotPaid.selector);
-        bond.challenge(organizer, cid, "");
+        bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, cid, "");
         vm.stopPrank();
 
         // a sponsor that did pay may open exactly one
@@ -243,9 +255,9 @@ contract AuditPoCTest is ProtocolFixture {
         _checkInNow(eventId, attendeePk);
         vault.settle(paidCampaign, eventId, attendee);
         vm.startPrank(sponsor);
-        uint256 challengeId = bond.challenge(organizer, paidCampaign, "first");
+        uint256 challengeId = bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, paidCampaign, "first");
         vm.expectRevert(IOrganizerBond.DuplicateChallenge.selector);
-        bond.challenge(organizer, paidCampaign, "spam");
+        bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, paidCampaign, "spam");
         vm.stopPrank();
         assertEq(bond.openChallenges(organizer), 1);
 

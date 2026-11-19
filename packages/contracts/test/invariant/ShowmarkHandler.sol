@@ -405,6 +405,23 @@ contract ShowmarkHandler is Test {
         else if (state == 4) oracle.setRound(uint80(priceSeed % 1000 + 2), price, block.timestamp, 1);
     }
 
+    /// The organizers accept (or leave) open campaigns, so bonded settlement keeps being exercised.
+    function optIn(uint256 campaignSeed, bool viaAttacker, bool leave) external {
+        if (campaignIds.length == 0) return;
+        uint256 id = campaignIds[campaignSeed % campaignIds.length];
+        if (!vault.campaign(id).openToBonded) return;
+        bytes memory call = leave
+            ? abi.encodeCall(CampaignVault.optOutOpenCampaign, (id))
+            : abi.encodeCall(CampaignVault.optInOpenCampaign, (id));
+        if (viaAttacker) {
+            attacker.exec(address(vault), call);
+        } else {
+            vm.prank(org);
+            (bool ok,) = address(vault).call(call);
+            require(ok, "opt-in");
+        }
+    }
+
     function bondOrganizer(uint96 amount) external {
         uint256 amt = bound(amount, 1, 5 ether);
         vm.deal(org, org.balance + amt);

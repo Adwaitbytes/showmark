@@ -42,7 +42,7 @@ contract InvariantsTest is Test {
         MockQieNameRegistry names = new MockQieNameRegistry();
         MockAggregator oracle = new MockAggregator(8);
         oracle.setPrice(16_500_000, block.timestamp);
-        bond = new OrganizerBond(owner);
+        bond = new OrganizerBond(owner, 0.1 ether);
         vault = new CampaignVault(
             address(registry),
             address(new QieIdCheck(address(names))),
@@ -106,7 +106,8 @@ contract InvariantsTest is Test {
         bondCode = address(bond).codehash;
         stampCode = address(stamp).codehash;
 
-        bytes4[] memory selectors = new bytes4[](21);
+        bytes4[] memory selectors = new bytes4[](22);
+        selectors[21] = ShowmarkHandler.optIn.selector;
         selectors[20] = ShowmarkHandler.warpPastGrace.selector;
         selectors[0] = ShowmarkHandler.checkIn.selector;
         selectors[1] = ShowmarkHandler.checkIn.selector; // weighted: check-ins and settlement are the hot paths

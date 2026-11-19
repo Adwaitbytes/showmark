@@ -19,7 +19,7 @@ import {IQieIdCheck} from "./interfaces/IQieIdCheck.sol";
 /// @notice Sponsor escrow that pays per verified presence. Each settled presence moves `gross` from the campaign
 /// balance into claimable balances for the attendee, the organizer and the protocol fee recipient. Payouts are
 /// pulled with `withdraw`; unspent funds return to the sponsor with `refund` after the settlement grace period.
-/// @dev Reads the registry (presence, organizer, wallet links), the bond, the QIE ID check and the QIE/USD oracle.
+/// @dev Reads the registry (presence, organizer, wallet links), the bond, the QIE ID check and the QIE/USDT oracle.
 /// Accounting per token: `totalLiabilities == sum(campaign balances) + sum(claimables) <= balance held`.
 /// Pause blocks createCampaign, topUp and settlement only; refund and withdraw always work.
 contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, ReentrancyGuard {
@@ -55,7 +55,7 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
     IShowmarkRegistry public immutable registry;
     /// @notice Decides whether a linked wallet holds a QIE ID, for `requireQieId`.
     IQieIdCheck public immutable qieIdCheck;
-    /// @notice The QIE/USD price feed used for UsdInNative campaigns.
+    /// @notice The QIE/USDT price feed used for UsdInNative campaigns (USDT is treated as USD).
     IAggregatorV3 public immutable oracle;
     /// @notice The organizer bond used for `openToBonded` campaigns.
     IOrganizerBond public immutable bond;
@@ -74,10 +74,14 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
     mapping(uint256 campaignId => mapping(uint256 eventId => uint32)) public settledPerEvent;
     /// @inheritdoc ICampaignVault
     mapping(uint256 campaignId => mapping(address organizer => uint256)) public paidForOrganizer;
-    /// @notice Cumulative gross (native wei) ever paid at an organizer's events through open-to-bonded eligibility,
-    /// across all campaigns. It may never exceed the organizer's current bond, so one stake cannot back unbounded
-    /// payouts (audit M-02). Payouts for explicitly approved events are not counted.
+    /// @notice Gross (native wei) paid at an organizer's events through open-to-bonded eligibility, summed over the
+    /// campaigns the organizer accepted and not yet released. It may never exceed the organizer's current bond, so
+    /// one stake cannot back unbounded payouts (audit M-02). Payouts for explicitly approved events are not counted.
     mapping(address organizer => uint256) public bondedExposure;
+    /// @notice The part of `bondedExposure[organizer]` that one campaign contributed.
+    mapping(uint256 campaignId => mapping(address organizer => uint256)) public exposureOf;
+    /// @notice Whether the organizer accepted the open-to-bonded campaign (re-review N-01).
+    mapping(uint256 campaignId => mapping(address organizer => bool)) public optedIn;
 
     mapping(uint256 campaignId => Campaign) private _campaigns;
     mapping(uint256 campaignId => mapping(uint256 eventId => bool)) private _approved;
@@ -87,7 +91,7 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
 
     /// @param registry_ The ShowmarkRegistry.
     /// @param qieIdCheck_ The QIE ID check (QieIdCheck over QIE's name registry).
-    /// @param oracle_ The QIE/USD aggregator.
+    /// @param oracle_ The QIE/USDT aggregator.
     /// @param bond_ The OrganizerBond.
     /// @param maxOracleAge_ Oldest acceptable oracle update, in seconds.
     /// @param owner_ Owner (pause and fee); move to the protocol Safe after deploy.
@@ -208,6 +212,32 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
     }
 
     /// @inheritdoc ICampaignVault
+    function optInOpenCampaign(uint256 campaignId) external {
+        if (!_existing(campaignId).openToBonded) revert NotOpenCampaign();
+        optedIn[campaignId][msg.sender] = true;
+        emit OpenCampaignJoined(campaignId, msg.sender);
+    }
+
+    /// @inheritdoc ICampaignVault
+    function optOutOpenCampaign(uint256 campaignId) external {
+        optedIn[campaignId][msg.sender] = false;
+        emit OpenCampaignLeft(campaignId, msg.sender);
+    }
+
+    /// @inheritdoc ICampaignVault
+    function releaseExposure(uint256 campaignId, address organizer) external {
+        Campaign storage c = _existing(campaignId);
+        if (block.timestamp <= uint256(c.endsAt) + SETTLE_GRACE || bond.hasOpenChallenge(campaignId, organizer)) {
+            revert ReleaseNotAvailable();
+        }
+        uint256 amount = exposureOf[campaignId][organizer];
+        if (amount == 0) revert NothingToRelease();
+        exposureOf[campaignId][organizer] = 0;
+        bondedExposure[organizer] -= amount;
+        emit ExposureReleased(campaignId, organizer, amount);
+    }
+
+    /// @inheritdoc ICampaignVault
     function refund(uint256 campaignId) external nonReentrant {
         Campaign storage c = _sponsored(campaignId);
         if (block.timestamp <= uint256(c.endsAt) + SETTLE_GRACE) revert RefundNotYetAvailable();
@@ -317,7 +347,7 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
         // type(uint256).max marks an explicitly approved event, which is not limited by the organizer's bond
         uint256 bondRoom = type(uint256).max;
         if (!_approved[campaignId][eventId]) {
-            if (!c.openToBonded) return (EVENT_NOT_ELIGIBLE, 0);
+            if (!c.openToBonded || !optedIn[campaignId][organizer]) return (EVENT_NOT_ELIGIBLE, 0);
             uint256 bonded = bond.bondOf(organizer);
             if (bonded < c.minBond) return (EVENT_NOT_ELIGIBLE, 0);
             uint256 exposure = bondedExposure[organizer];
@@ -334,7 +364,10 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
         if (gross > bondRoom) return (EVENT_NOT_ELIGIBLE, 0);
         if (gross > c.balance) return (INSUFFICIENT_BUDGET, 0);
 
-        if (bondRoom != type(uint256).max) bondedExposure[organizer] += gross;
+        if (bondRoom != type(uint256).max) {
+            bondedExposure[organizer] += gross;
+            exposureOf[campaignId][organizer] += gross;
+        }
         _credit(campaignId, eventId, attendee, organizer, gross, price);
         return (SETTLED, gross);
     }

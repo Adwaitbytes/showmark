@@ -12,8 +12,9 @@ import {ICampaignVault} from "./interfaces/ICampaignVault.sol";
 /// @notice Organizers stake native QIE so sponsors can open campaigns to any bonded organizer. A sponsor may
 /// challenge an organizer over one of its campaigns; the arbitrator (the owner, the protocol Safe) resolves it and
 /// may slash. Arbitration is centralized in v1.
-/// @dev An organizer with an open challenge cannot complete an unbond, so the slashable pending amount cannot
-/// leave while the arbitrator decides.
+/// @dev Each open challenge locks at most what its campaign paid for the organizer's events, and only that much is
+/// held back from unbonding and can be slashed. A challenger posts `challengeDeposit`, returned if the arbitrator
+/// slashes and forfeited to the organizer if the challenge is dismissed, so spam is paid for (re-review N-02).
 contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuard {
     /// @notice Delay between requestUnbond and completeUnbond.
     uint256 public constant UNBOND_DELAY = 7 days;
@@ -28,8 +29,15 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
     /// @notice The CampaignVault used to check that a challenger sponsors the campaign. Set once.
     address public vault;
 
+    /// @notice Deposit a challenger must post with each challenge, in native QIE.
+    uint256 public immutable challengeDeposit;
+
     /// @notice Number of unresolved challenges per organizer.
     mapping(address organizer => uint256) public openChallenges;
+    /// @notice Stake held back by an organizer's open challenges; always at most bonded plus pending.
+    mapping(address organizer => uint256) public lockedOf;
+    /// @notice Challenge deposits awarded to an account and not yet claimed.
+    mapping(address account => uint256) public depositOwed;
 
     uint256 private _nextChallengeId = 1;
     mapping(address organizer => uint256) private _bonded;
@@ -38,7 +46,11 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
     mapping(uint256 campaignId => mapping(address organizer => bool)) private _openFor;
 
     /// @param owner_ The arbitrator; move to the protocol Safe after deploy.
-    constructor(address owner_) Ownable(owner_) {}
+    /// @param challengeDeposit_ Deposit per challenge, in wei (1 QIE on mainnet; a small value on testnet).
+    constructor(address owner_, uint256 challengeDeposit_) Ownable(owner_) {
+        if (challengeDeposit_ == 0) revert ZeroAmount();
+        challengeDeposit = challengeDeposit_;
+    }
 
     /// @notice Sets the vault once. Owner only. Needed because the vault itself is constructed with this bond.
     /// @param vault_ The CampaignVault.
@@ -79,37 +91,62 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
 
     /// @inheritdoc IOrganizerBond
     function completeUnbond() external nonReentrant {
-        Pending memory p = _pending[msg.sender];
-        if (p.amount == 0) revert NothingPending();
+        Pending storage p = _pending[msg.sender];
+        uint256 pending = p.amount;
+        if (pending == 0) revert NothingPending();
         if (block.timestamp < p.availableAt) revert UnbondNotReady();
-        if (openChallenges[msg.sender] != 0) revert ChallengeOpen();
+        // Locks are covered by the bonded stake first; only the rest must stay in the pending unbond.
+        uint256 locked = lockedOf[msg.sender];
+        uint256 bonded = _bonded[msg.sender];
+        uint256 held = locked > bonded ? locked - bonded : 0;
+        if (pending <= held) revert ChallengeOpen();
 
-        delete _pending[msg.sender];
-        emit Unbonded(msg.sender, p.amount);
-        Address.sendValue(payable(msg.sender), p.amount);
+        uint256 payout = pending - held;
+        p.amount = held;
+        emit Unbonded(msg.sender, payout);
+        Address.sendValue(payable(msg.sender), payout);
     }
 
     /// @inheritdoc IOrganizerBond
     function challenge(address organizer, uint256 campaignId, string calldata reason)
         external
+        payable
         returns (uint256 challengeId)
     {
+        if (msg.value != challengeDeposit) revert BadChallengeDeposit();
         address v = vault;
         if (v == address(0)) revert VaultNotSettable();
         if (organizer == address(0)) revert ZeroAddress();
         if (bytes(reason).length > MAX_REASON_BYTES) revert ReasonTooLong();
-        if (ICampaignVault(v).campaign(campaignId).sponsor != msg.sender) revert NotCampaignSponsor();
+        ICampaignVault.Campaign memory cam = ICampaignVault(v).campaign(campaignId);
+        if (cam.sponsor != msg.sender) revert NotCampaignSponsor();
         // Only a campaign that actually paid this organizer has a grievance, and one open challenge per pair is
-        // enough, so nobody can freeze an unrelated organizer's unbond with spam (audit L-03).
-        if (ICampaignVault(v).paidForOrganizer(campaignId, organizer) == 0) revert OrganizerNotPaid();
+        // enough (audit L-03).
+        uint256 paid = ICampaignVault(v).paidForOrganizer(campaignId, organizer);
+        if (paid == 0) revert OrganizerNotPaid();
         if (_openFor[campaignId][organizer]) revert DuplicateChallenge();
         _openFor[campaignId][organizer] = true;
 
+        // Lock no more than the grievance (re-review N-02). A token campaign's payout is not comparable with a QIE
+        // stake, so it locks whatever is unlocked; the deposit is what makes spamming that costly.
+        uint256 alreadyLocked = lockedOf[organizer];
+        uint256 stake = _bonded[organizer] + _pending[organizer].amount;
+        uint256 free = stake - alreadyLocked;
+        uint256 lock = cam.token == address(0) && paid < free ? paid : free;
+        lockedOf[organizer] = alreadyLocked + lock;
+
         challengeId = _nextChallengeId++;
-        _challenges[challengeId] =
-            Challenge({sponsor: msg.sender, organizer: organizer, campaignId: campaignId, resolved: false});
+        _challenges[challengeId] = Challenge({
+            sponsor: msg.sender,
+            organizer: organizer,
+            campaignId: campaignId,
+            resolved: false,
+            locked: lock,
+            deposit: msg.value
+        });
         openChallenges[organizer] += 1;
         emit Challenged(challengeId, organizer, campaignId, msg.sender, reason);
+        emit StakeLocked(challengeId, organizer, lock, msg.value);
     }
 
     /// @inheritdoc IOrganizerBond
@@ -118,14 +155,19 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
         address organizer = c.organizer;
         if (organizer == address(0) || c.resolved) revert ChallengeNotOpen();
 
+        if (slashAmount > c.locked) revert SlashExceedsLock();
+        if (slashAmount != 0 && recipient == address(0)) revert ZeroAddress();
         uint256 bonded = _bonded[organizer];
         uint256 pending = _pending[organizer].amount;
-        if (slashAmount > bonded + pending) revert SlashExceedsBond();
-        if (slashAmount != 0 && recipient == address(0)) revert ZeroAddress();
 
         c.resolved = true;
         _openFor[c.campaignId][organizer] = false;
         openChallenges[organizer] -= 1;
+        lockedOf[organizer] -= c.locked;
+        // The deposit goes back to a vindicated challenger, or to the organizer when the challenge is dismissed.
+        // Pull payment, so neither side can block resolution.
+        address awarded = slashAmount != 0 ? c.sponsor : organizer;
+        depositOwed[awarded] += c.deposit;
         if (slashAmount <= bonded) {
             _bonded[organizer] = bonded - slashAmount;
         } else {
@@ -133,7 +175,17 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
             _pending[organizer].amount = pending - (slashAmount - bonded);
         }
         emit Resolved(challengeId, organizer, slashAmount, recipient);
+        emit DepositAwarded(challengeId, awarded, c.deposit);
         if (slashAmount != 0) Address.sendValue(payable(recipient), slashAmount);
+    }
+
+    /// @notice Pays the caller every challenge deposit awarded to it.
+    function claimDeposit() external nonReentrant {
+        uint256 amount = depositOwed[msg.sender];
+        if (amount == 0) revert NothingToClaim();
+        depositOwed[msg.sender] = 0;
+        emit DepositClaimed(msg.sender, amount);
+        Address.sendValue(payable(msg.sender), amount);
     }
 
     /// @inheritdoc IOrganizerBond
@@ -157,10 +209,7 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
         return _challenges[challengeId];
     }
 
-    /// @notice Whether `campaignId` has an unresolved challenge against `organizer`.
-    /// @param campaignId The campaign.
-    /// @param organizer The organizer.
-    /// @return The flag.
+    /// @inheritdoc IOrganizerBond
     function hasOpenChallenge(uint256 campaignId, address organizer) external view returns (bool) {
         return _openFor[campaignId][organizer];
     }

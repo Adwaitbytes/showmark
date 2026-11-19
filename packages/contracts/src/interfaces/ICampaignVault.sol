@@ -148,6 +148,22 @@ interface ICampaignVault {
     /// @param amount Amount paid.
     event Withdrawn(address indexed token, address indexed account, address indexed to, uint256 amount);
 
+    /// @notice Emitted when an organizer accepts an open-to-bonded campaign, letting it pay through the bond.
+    /// @param campaignId The campaign.
+    /// @param organizer The organizer.
+    event OpenCampaignJoined(uint256 indexed campaignId, address indexed organizer);
+
+    /// @notice Emitted when an organizer withdraws its acceptance of an open-to-bonded campaign.
+    /// @param campaignId The campaign.
+    /// @param organizer The organizer.
+    event OpenCampaignLeft(uint256 indexed campaignId, address indexed organizer);
+
+    /// @notice Emitted when a finished campaign's bonded exposure is released back to the organizer.
+    /// @param campaignId The campaign.
+    /// @param organizer The organizer.
+    /// @param amount Exposure released.
+    event ExposureReleased(uint256 indexed campaignId, address indexed organizer, uint256 amount);
+
     /// @notice Emitted when the protocol fee for future campaigns changes.
     /// @param bps Fee in basis points.
     /// @param recipient Fee recipient.
@@ -179,6 +195,12 @@ interface ICampaignVault {
     error NothingToPay();
     /// @notice An unlinked account's balance may only be withdrawn by the account itself.
     error WithdrawNotAllowed();
+    /// @notice The campaign is not open to bonded organizers.
+    error NotOpenCampaign();
+    /// @notice Exposure can be released only after endsAt + SETTLE_GRACE, with no open challenge for the pair.
+    error ReleaseNotAvailable();
+    /// @notice The campaign holds no exposure for this organizer.
+    error NothingToRelease();
 
     /// @notice The presence for this campaign, event and attendee was already paid.
     error AlreadySettled();
@@ -252,6 +274,22 @@ interface ICampaignVault {
     /// @param token The token, address(0) for native QIE.
     /// @param account The account whose claimable balance is paid.
     function withdraw(address token, address account) external;
+
+    /// @notice Accepts an open-to-bonded campaign for the caller's events, so it may pay them through the caller's
+    /// bond. Without this, an open campaign can never consume an organizer's bonded exposure (re-review N-01).
+    /// @param campaignId An open-to-bonded campaign.
+    function optInOpenCampaign(uint256 campaignId) external;
+
+    /// @notice Withdraws the caller's acceptance of an open-to-bonded campaign; payouts already made stand.
+    /// @param campaignId The campaign.
+    function optOutOpenCampaign(uint256 campaignId) external;
+
+    /// @notice Releases a finished campaign's contribution to the organizer's bonded exposure. Anyone may call once
+    /// the campaign can no longer pay (now > endsAt + SETTLE_GRACE) and its sponsor has no open challenge against the
+    /// organizer.
+    /// @param campaignId The campaign.
+    /// @param organizer The organizer.
+    function releaseExposure(uint256 campaignId, address organizer) external;
 
     /// @notice Sets the protocol fee for campaigns created from now on. Owner only.
     /// @param bps Fee in basis points, at most MAX_FEE_BPS.

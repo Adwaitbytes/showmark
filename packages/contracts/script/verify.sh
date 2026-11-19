@@ -37,6 +37,7 @@ FEE_BPS=$(field feeBps)
 FEE_RECIPIENT=$(field feeRecipient)
 BASE_URI=$(jq -r '.stampBaseURI' "$FILE")
 TESTNET_MOCKS=$(field testnetMocks)
+CHALLENGE_DEPOSIT=$(field challengeDeposit)
 
 verify() {
   local address=$1 target=$2 args=${3:-}
@@ -61,7 +62,7 @@ verify "$REGISTRY" src/ShowmarkRegistry.sol:ShowmarkRegistry \
 verify "$STAMP" src/PresenceStamp.sol:PresenceStamp \
   "$(cast abi-encode 'constructor(address,address,string)' "$REGISTRY" "$DEPLOYER" "$BASE_URI")"
 verify "$BOND" src/OrganizerBond.sol:OrganizerBond \
-  "$(cast abi-encode 'constructor(address)' "$DEPLOYER")"
+  "$(cast abi-encode 'constructor(address,uint256)' "$DEPLOYER" "$CHALLENGE_DEPOSIT")"
 verify "$VAULT" src/CampaignVault.sol:CampaignVault \
   "$(cast abi-encode 'constructor(address,address,address,address,uint256,address,address,uint16)' \
     "$REGISTRY" "$QIE_ID_CHECK" "$ORACLE" "$BOND" "$ORACLE_MAX_AGE" "$DEPLOYER" "$FEE_RECIPIENT" "$FEE_BPS")"

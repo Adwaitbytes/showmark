@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IAggregatorV3} from "../interfaces/IAggregatorV3.sol";
 
 /// @title TestnetAggregator
-/// @notice Testnet stand-in for the QIE/USD feed (8 decimals), which exists on mainnet only. The owner posts
+/// @notice Testnet stand-in for the QIE/USDT feed (8 decimals), which exists on mainnet only. The owner posts
 /// prices; each post is a complete, fresh round. The vault treats rounds older than maxOracleAge as stale, so the
 /// owner must post at least that often. Plain Ownable on purpose: it stays with the team and is not handed to the
 /// protocol Safe. Never deploy on mainnet.
@@ -37,7 +37,7 @@ contract TestnetAggregator is IAggregatorV3, Ownable {
     /// @notice Human-readable feed name.
     /// @return The description.
     function description() external pure returns (string memory) {
-        return "QIE / USD (Showmark testnet)";
+        return "QIE / USDT (Showmark testnet)";
     }
 
     /// @notice Posts a new price as a fresh round. Owner only.

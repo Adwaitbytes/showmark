@@ -7,16 +7,10 @@ import {IOrganizerBond} from "../../src/interfaces/IOrganizerBond.sol";
 import {ProtocolFixture} from "../utils/ProtocolFixture.sol";
 import {SigUtils} from "../utils/SigUtils.sol";
 
-/// @notice Re-review of the audit fixes (docs/AUDIT.md, "Re-review"). N-* tests pass while the new issue exists;
-/// S-* tests pin down attacks on the new code that were tried and fail.
+/// @notice Re-review of the audit fixes (docs/AUDIT.md, "Re-review"). The N-* tests began as proofs of concept and
+/// now assert each attack fails; S-* tests pin down attacks on the ticket design that were tried and fail.
 contract ReReviewPoCTest is ProtocolFixture {
     uint256 internal constant SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
-
-    function _bondOrganizer(uint256 amount) internal {
-        vm.deal(organizer, amount);
-        vm.prank(organizer);
-        bond.bond{value: amount}();
-    }
 
     function _openParams(uint128 amount, uint16 attendeeShare)
         internal
@@ -30,88 +24,95 @@ contract ReReviewPoCTest is ProtocolFixture {
         p.attendeeShareBps = attendeeShare;
     }
 
-    // ------------------------------------------------------------------ N-01
+    // ------------------------------------------------------------------ N-01 (fixed: organizer opt-in, release)
 
-    /// Anyone who was once present at one of an organizer's events can use up that organizer's whole bonded
-    /// exposure for the cost of gas: an open campaign paying the full remaining room, 100% to the attendee, settled
-    /// on the griefer's own presence. The money comes straight back; the organizer is then ineligible for every
-    /// open campaign until it bonds more, and the griefer can repeat after each top-up.
-    function test_N01_bondedExposureGriefedAtGasCost() public {
+    /// A griefer's own open campaign can no longer consume the organizer's bonded exposure: the organizer never
+    /// accepted it, so the self-settlement is refused and honest open campaigns keep their room.
+    function test_N01_strangerOpenCampaignCannotBurnExposure() public {
         _bondOrganizer(10 ether);
-        // an honest sponsor's open campaign the organizer is counting on
         uint256 honest = _create(_openParams(1 ether, 5000), 20 ether);
+        _optIn(honest);
 
-        // griefer = an ordinary attendee of one past event (here the fixture's attendee)
         _checkInNow(eventId, attendeePk);
-        uint256 before = attendee.balance;
-        vm.deal(attendee, before + 10 ether);
+        vm.deal(attendee, attendee.balance + 10 ether);
         vm.startPrank(attendee);
         uint256 grief = vault.createCampaign{value: 10 ether}(_openParams(10 ether, 10_000), 10 ether);
-        vault.settle(grief, eventId, attendee);
-        vault.withdraw(NATIVE, attendee);
-        vm.stopPrank();
-        assertEq(attendee.balance, before + 10 ether, "griefer got every wei back (fee 0)");
-        assertEq(vault.bondedExposure(organizer), 10 ether, "whole bond consumed");
-
-        // the organizer's real attendees can no longer be paid by any open campaign
-        _checkInNow(eventId, 0xC0FFEE);
         vm.expectRevert(ICampaignVault.EventNotEligible.selector);
-        vault.settle(honest, eventId, vm.addr(0xC0FFEE));
+        vault.settle(grief, eventId, attendee);
+        vm.stopPrank();
+        assertEq(vault.bondedExposure(organizer), 0, "nothing consumed");
+
+        _checkInNow(eventId, 0xC0FFEE);
+        assertEq(vault.settle(honest, eventId, vm.addr(0xC0FFEE)), 1 ether);
     }
 
-    /// Exposure never decreases, so even without an attacker an honest organizer's lifetime revenue from open
-    /// campaigns is capped at its current bond.
-    function test_N01_exposureNeverReleases() public {
+    /// Exposure is released once a campaign can no longer pay, so an honest organizer's open-campaign revenue is
+    /// no longer capped at its bond for life.
+    function test_N01_exposureReleasesAfterTheCampaignEnds() public {
         _bondOrganizer(2 ether);
         uint256 c = _create(_openParams(1 ether, 5000), 10 ether);
+        _optIn(c);
         _checkInNow(eventId, 0xA1);
         _checkInNow(eventId, 0xA2);
-        _checkInNow(eventId, 0xA3);
         vault.settle(c, eventId, vm.addr(0xA1));
         vault.settle(c, eventId, vm.addr(0xA2));
+        assertEq(vault.bondedExposure(organizer), 2 ether);
 
-        // a year later, no challenge ever filed, the old payouts still count
         vm.warp(block.timestamp + 365 days);
+        vault.releaseExposure(c, organizer);
+        assertEq(vault.bondedExposure(organizer), 0);
+
         ICampaignVault.CampaignParams memory fresh = _openParams(1 ether, 5000);
         fresh.startsAt = uint64(block.timestamp - 1);
         fresh.endsAt = uint64(block.timestamp + 7 days);
         uint256 later = _create(fresh, 10 ether);
+        _optIn(later);
         uint256 ev2 = _createEvent(organizer, uint64(block.timestamp), uint64(block.timestamp + 1 hours), 0, 0);
         _authorize(organizer, ev2, doorKey, uint64(block.timestamp + 1 hours));
         _checkInNow(ev2, 0xA4);
-        vm.expectRevert(ICampaignVault.EventNotEligible.selector);
-        vault.settle(later, ev2, vm.addr(0xA4));
+        assertEq(vault.settle(later, ev2, vm.addr(0xA4)), 1 ether);
     }
 
-    // ------------------------------------------------------------------ N-02
+    // ------------------------------------------------------------------ N-02 (fixed: proportional lock, deposit)
 
-    /// The L-03 precondition (campaign paid the organizer) costs 1 wei: approve the organizer's event in your own
-    /// campaign and settle any stranger's recorded presence there. Repeating per campaign still freezes the unbond.
-    function test_N02_challengeSpamStillPossibleForOneWeiPerChallenge() public {
+    /// One-wei campaigns can still challenge, but each locks one wei, costs a deposit, and the organizer collects
+    /// every deposit when the Safe dismisses them. The unbond is no longer frozen.
+    function test_N02_oneWeiChallengesLockDustAndPayTheOrganizer() public {
         _bondOrganizer(1 ether);
         vm.prank(organizer);
         bond.requestUnbond(1 ether);
-        _checkInNow(eventId, attendeePk); // a stranger's presence; the griefer never attended
+        _checkInNow(eventId, attendeePk);
 
         address griefer = makeAddr("griefer");
-        vm.deal(griefer, 1 ether);
+        vm.deal(griefer, 1 ether + 10 * CHALLENGE_DEPOSIT);
         ICampaignVault.CampaignParams memory p = _params(NATIVE);
         p.amountPerPresence = 1;
         uint256[] memory ids = new uint256[](1);
         ids[0] = eventId;
+        uint256[] memory challenges = new uint256[](10);
         for (uint256 i; i < 10; ++i) {
             vm.startPrank(griefer);
             uint256 cid = vault.createCampaign{value: 1}(p, 1);
             vault.approveEvents(cid, ids);
             vault.settle(cid, eventId, attendee);
-            bond.challenge(organizer, cid, "");
+            challenges[i] = bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, cid, "");
             vm.stopPrank();
         }
         assertEq(bond.openChallenges(organizer), 10);
+        assertEq(bond.lockedOf(organizer), 10, "ten wei locked in total");
+
         vm.warp(block.timestamp + 7 days);
+        uint256 before = organizer.balance;
         vm.prank(organizer);
-        vm.expectRevert(IOrganizerBond.ChallengeOpen.selector);
         bond.completeUnbond();
+        assertEq(organizer.balance - before, 1 ether - 10, "the organizer exits with everything but the dust");
+
+        vm.startPrank(owner);
+        for (uint256 i; i < 10; ++i) {
+            bond.resolve(challenges[i], 0, address(0));
+        }
+        vm.stopPrank();
+        assertEq(bond.depositOwed(organizer), 10 * CHALLENGE_DEPOSIT, "the griefer paid the organizer");
     }
 
     // ------------------------------------------------------------------ S-*: attacks on the ticket design that fail

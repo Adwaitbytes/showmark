@@ -408,6 +408,11 @@ contract CampaignVaultTest is ProtocolFixture {
         vm.deal(organizer, 5 ether);
         vm.prank(organizer);
         bond.bond{value: 5 ether}();
+        // bonded but not opted in: still not eligible (re-review N-01)
+        vm.expectRevert(ICampaignVault.EventNotEligible.selector);
+        vault.settle(id, eventId, attendee);
+
+        _optIn(id);
         assertEq(vault.settle(id, eventId, attendee), 1 ether);
     }
 
@@ -785,6 +790,8 @@ contract CampaignVaultTest is ProtocolFixture {
         uint256 a = _create(p, 10 ether);
         uint256 b = _create(p, 10 ether);
         uint256 approvedOnly = _createApproved(_params(NATIVE), 10 ether);
+        _optIn(a);
+        _optIn(b);
 
         vm.deal(organizer, 2 ether);
         vm.prank(organizer);
@@ -824,6 +831,7 @@ contract CampaignVaultTest is ProtocolFixture {
         p.openToBonded = true;
         p.minBond = 1 ether;
         uint256 id = _create(p, 100 ether);
+        _optIn(id);
         vm.deal(organizer, 7 ether);
         vm.prank(organizer);
         bond.bond{value: 7 ether}();
@@ -833,6 +841,118 @@ contract CampaignVaultTest is ProtocolFixture {
         assertEq(vault.bondedExposure(organizer), q);
         vm.expectRevert(ICampaignVault.EventNotEligible.selector);
         vault.settle(id, eventId, vm.addr(0x5B12));
+    }
+
+    // ---------------------------------------------------------------- opt-in and exposure release (re-review N-01)
+
+    function test_optIn_rules() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1;
+        uint256 open = _create(p, 0);
+        uint256 closedToBond = _create(_params(NATIVE), 0);
+
+        vm.startPrank(organizer);
+        vm.expectRevert(ICampaignVault.UnknownCampaign.selector);
+        vault.optInOpenCampaign(99);
+        vm.expectRevert(ICampaignVault.NotOpenCampaign.selector);
+        vault.optInOpenCampaign(closedToBond);
+
+        vm.expectEmit(address(vault));
+        emit ICampaignVault.OpenCampaignJoined(open, organizer);
+        vault.optInOpenCampaign(open);
+        assertTrue(vault.optedIn(open, organizer));
+
+        vm.expectEmit(address(vault));
+        emit ICampaignVault.OpenCampaignLeft(open, organizer);
+        vault.optOutOpenCampaign(open);
+        assertFalse(vault.optedIn(open, organizer));
+        vm.stopPrank();
+    }
+
+    function test_optOut_stopsFurtherBondedPayouts() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1;
+        uint256 id = _create(p, 5 ether);
+        _bondOrganizer(5 ether);
+        _optIn(id);
+        _checkInNow(eventId, 0xA1);
+        _checkInNow(eventId, 0xA2);
+        vault.settle(id, eventId, vm.addr(0xA1));
+        vm.prank(organizer);
+        vault.optOutOpenCampaign(id);
+        vm.expectRevert(ICampaignVault.EventNotEligible.selector);
+        vault.settle(id, eventId, vm.addr(0xA2));
+    }
+
+    function test_releaseExposure_restoresRoomAfterTheCampaignIsDone() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1;
+        uint256 id = _create(p, 5 ether);
+        _bondOrganizer(2 ether);
+        _optIn(id);
+        _checkInNow(eventId, 0xA1);
+        _checkInNow(eventId, 0xA2);
+        vault.settle(id, eventId, vm.addr(0xA1));
+        vault.settle(id, eventId, vm.addr(0xA2));
+        assertEq(vault.exposureOf(id, organizer), 2 ether);
+        assertEq(vault.bondedExposure(organizer), 2 ether);
+
+        // not while the campaign can still pay
+        vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
+        vault.releaseExposure(id, organizer);
+
+        // not while the campaign's sponsor has an open challenge against the organizer
+        vm.deal(sponsor, sponsor.balance + CHALLENGE_DEPOSIT);
+        vm.prank(sponsor);
+        uint256 cid = bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, id, "check");
+        vm.warp(uint256(p.endsAt) + vault.SETTLE_GRACE() + 1);
+        vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
+        vault.releaseExposure(id, organizer);
+
+        vm.prank(owner);
+        bond.resolve(cid, 0, address(0));
+        vm.expectEmit(address(vault));
+        emit ICampaignVault.ExposureReleased(id, organizer, 2 ether);
+        vm.prank(makeAddr("anyone"));
+        vault.releaseExposure(id, organizer);
+        assertEq(vault.exposureOf(id, organizer), 0);
+        assertEq(vault.bondedExposure(organizer), 0);
+
+        vm.expectRevert(ICampaignVault.NothingToRelease.selector);
+        vault.releaseExposure(id, organizer);
+    }
+
+    function test_optedInButUnderBondedIsNotEligible() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 2 ether;
+        uint256 id = _create(p, 5 ether);
+        _optIn(id);
+        _bondOrganizer(1 ether);
+        _checkInNow(eventId, 0xA1);
+        vm.expectRevert(ICampaignVault.EventNotEligible.selector);
+        vault.settle(id, eventId, vm.addr(0xA1));
+    }
+
+    function test_bondedExposure_aboveAShrunkBondLeavesNoRoom() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1;
+        uint256 id = _create(p, 5 ether);
+        _bondOrganizer(3 ether);
+        _optIn(id);
+        _checkInNow(eventId, 0xA1);
+        _checkInNow(eventId, 0xA2);
+        vault.settle(id, eventId, vm.addr(0xA1));
+        vault.settle(id, eventId, vm.addr(0xA2));
+        vm.prank(organizer);
+        bond.requestUnbond(2 ether); // bond 1 QIE now sits below the 2 QIE already paid through it
+        _checkInNow(eventId, 0xA3);
+        vm.expectRevert(ICampaignVault.EventNotEligible.selector);
+        vault.settle(id, eventId, vm.addr(0xA3));
     }
 
     function test_openToBondedIsNativeOnly() public {

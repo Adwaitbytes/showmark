@@ -26,6 +26,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 ///   FEE_BPS               optional, default 0, at most 500
 ///   FEE_RECIPIENT         testnet optional (default the deployer), mainnet required
 ///   STAMP_BASE_URI        optional, default "" (owner can set it later with PresenceStamp.setBaseURI)
+///   CHALLENGE_DEPOSIT     optional, wei posted with each bond challenge; default 1 QIE on mainnet, 0.01 QIE otherwise
 ///   DEPLOYMENTS_DIR       optional, default "deployments"
 contract Deploy is Script {
     uint256 internal constant QIE_MAINNET = 1990;
@@ -35,6 +36,8 @@ contract Deploy is Script {
     address internal constant MAINNET_ORACLE = 0x3Bc617cF3A4Bb77003e4c556B87b13D556903D17;
     int256 internal constant TESTNET_INITIAL_PRICE = 16_500_000;
     uint256 internal constant DEFAULT_ORACLE_MAX_AGE = 172_800;
+    uint256 internal constant MAINNET_CHALLENGE_DEPOSIT = 1 ether;
+    uint256 internal constant TESTNET_CHALLENGE_DEPOSIT = 0.01 ether;
 
     /// @notice The script only knows QIE mainnet and testnet.
     error UnsupportedChain(uint256 chainId);
@@ -55,6 +58,7 @@ contract Deploy is Script {
         address feeRecipient;
         string stampBaseURI;
         string outDir;
+        uint256 challengeDeposit;
     }
 
     struct Deployment {
@@ -96,6 +100,9 @@ contract Deploy is Script {
         }
         c.stampBaseURI = vm.envOr("STAMP_BASE_URI", string(""));
         c.outDir = vm.envOr("DEPLOYMENTS_DIR", string("deployments"));
+        c.challengeDeposit = vm.envOr(
+            "CHALLENGE_DEPOSIT", block.chainid == QIE_MAINNET ? MAINNET_CHALLENGE_DEPOSIT : TESTNET_CHALLENGE_DEPOSIT
+        );
     }
 
     /// @notice Deploys everything for the current chain and writes the deployments file.
@@ -127,7 +134,7 @@ contract Deploy is Script {
         ShowmarkRegistry registry = new ShowmarkRegistry(d.deployer, c.stampBaseURI);
         d.registry = address(registry);
         d.stamp = registry.stamp();
-        OrganizerBond bond = new OrganizerBond(d.deployer);
+        OrganizerBond bond = new OrganizerBond(d.deployer, c.challengeDeposit);
         d.bond = address(bond);
         CampaignVault vault = new CampaignVault(
             d.registry, d.qieIdCheck, d.oracle, d.bond, c.oracleMaxAge, d.deployer, c.feeRecipient, c.feeBps
@@ -175,6 +182,7 @@ contract Deploy is Script {
         vm.serializeAddress(k, "oracle", d.oracle);
         vm.serializeUint(k, "oracleMaxAge", c.oracleMaxAge);
         vm.serializeUint(k, "feeBps", c.feeBps);
+        vm.serializeUint(k, "challengeDeposit", c.challengeDeposit);
         vm.serializeAddress(k, "feeRecipient", c.feeRecipient);
         vm.serializeString(k, "stampBaseURI", c.stampBaseURI);
         vm.serializeInt(k, "testnetInitialPrice", d.testnetMocks ? TESTNET_INITIAL_PRICE : int256(0));
@@ -198,6 +206,7 @@ contract Deploy is Script {
         console2.log("oracle        ", d.oracle);
         console2.log("oracleMaxAge  ", c.oracleMaxAge);
         console2.log("feeBps        ", c.feeBps);
+        console2.log("challengeDep  ", c.challengeDeposit);
         if (c.safe != address(0)) console2.log("ownership pending for Safe", c.safe);
         else console2.log("SAFE_ADDRESS not set: the deployer still owns every contract");
     }

@@ -67,6 +67,7 @@ contract DeployTest is Test {
         assertEq(vm.parseJsonAddress(json, ".pendingOwner"), safe);
         assertEq(vm.parseJsonUint(json, ".oracleMaxAge"), 172_800);
         assertEq(vm.parseJsonUint(json, ".feeBps"), 250);
+        assertEq(vm.parseJsonUint(json, ".challengeDeposit"), 0.01 ether);
         assertTrue(vm.parseJsonBool(json, ".testnetMocks"));
         vm.removeFile(string.concat(OUT, "/1983.json"));
     }
@@ -114,6 +115,7 @@ contract DeployTest is Test {
         assertEq(c.feeRecipient, deployer, "testnet defaults the fee recipient to the deployer");
         assertEq(c.safe, address(0));
         assertEq(c.oracleMaxAge, 172_800);
+        assertEq(c.challengeDeposit, 0.01 ether, "testnet default");
 
         vm.chainId(1990);
         vm.expectRevert(Deploy.SafeRequired.selector);
@@ -127,6 +129,7 @@ contract DeployTest is Test {
         c = script.configFromEnv();
         assertEq(c.safe, safe);
         assertEq(c.feeRecipient, address(0xFEE));
+        assertEq(c.challengeDeposit, 1 ether, "mainnet default");
 
         vm.setEnv("FEE_BPS", "501");
         vm.expectRevert(abi.encodeWithSelector(Deploy.FeeTooHigh.selector, 501));
@@ -166,6 +169,7 @@ contract DeployTest is Test {
         assertEq(vault.feeBps(), c.feeBps);
         assertEq(vault.feeRecipient(), c.feeRecipient);
         assertEq(OrganizerBond(d.bond).vault(), d.vault);
+        assertEq(OrganizerBond(d.bond).challengeDeposit(), c.challengeDeposit);
         assertEq(address(PresenceLens(d.lens).registry()), d.registry);
         assertEq(registry.owner(), deployer);
         assertEq(vault.owner(), deployer);
@@ -180,5 +184,6 @@ contract DeployTest is Test {
         c.feeRecipient = deployer;
         c.stampBaseURI = "https://showmark.example/api/stamp/";
         c.outDir = OUT;
+        c.challengeDeposit = 0.01 ether;
     }
 }

@@ -13,6 +13,7 @@ import {MockAggregator} from "../mocks/MockAggregator.sol";
 /// @notice Registry fixture plus vault, bond, QIE ID check, QUSDC, name registry and oracle mocks, a funded sponsor and campaign helpers.
 abstract contract ProtocolFixture is RegistryFixture {
     uint256 internal constant MAX_ORACLE_AGE = 36 hours;
+    uint256 internal constant CHALLENGE_DEPOSIT = 0.1 ether;
     int256 internal constant PRICE = 16_500_000; // $0.165 per QIE, 8 decimals
     string internal constant CAMPAIGN_META = '{"v":1,"name":"Demo","sponsor":"Acme","description":"x"}';
 
@@ -34,7 +35,7 @@ abstract contract ProtocolFixture is RegistryFixture {
         qieIdCheck = new QieIdCheck(address(names));
         oracle = new MockAggregator(8);
         oracle.setPrice(PRICE, block.timestamp);
-        bond = new OrganizerBond(owner);
+        bond = new OrganizerBond(owner, CHALLENGE_DEPOSIT);
         vault = new CampaignVault(
             address(registry),
             address(qieIdCheck),
@@ -87,6 +88,17 @@ abstract contract ProtocolFixture is RegistryFixture {
         ids[0] = eventId_;
         vm.prank(sponsor);
         vault.approveEvents(campaignId, ids);
+    }
+
+    function _optIn(uint256 campaignId) internal {
+        vm.prank(organizer);
+        vault.optInOpenCampaign(campaignId);
+    }
+
+    function _bondOrganizer(uint256 amount) internal {
+        vm.deal(organizer, organizer.balance + amount);
+        vm.prank(organizer);
+        bond.bond{value: amount}();
     }
 
     function _linkWithQieId(uint256 passPk, uint256 signerPk) internal returns (address wal) {
