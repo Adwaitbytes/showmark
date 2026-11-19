@@ -1,13 +1,14 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { ShowmarkClient, qieTestnet, registryAbi, vaultAbi } from "@showmark/sdk";
-import { createPublicClient, custom, decodeFunctionData, encodeFunctionResult, type Address, type Hex } from "viem";
+import { createPublicClient, custom, decodeFunctionData, encodeFunctionResult, zeroAddress, type Address, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { createShowmarkMcpServer, ShowmarkDataError, type ShowmarkMcpOptions } from "../src/index";
 import { alice, fakeData, organizer, tx } from "./fixtures";
 
 const registry: Address = "0x1111111111111111111111111111111111111111";
 const vault: Address = "0x2222222222222222222222222222222222222222";
+const linkedWallet: Address = "0x7777777777777777777777777777777777777777";
 
 function chainClient(): ShowmarkClient {
   const publicClient = createPublicClient({
@@ -18,7 +19,8 @@ function chainClient(): ShowmarkClient {
         const [call] = params as [{ to: Address; data: Hex }];
         const abi = call.to === vault ? vaultAbi : registryAbi;
         const { functionName, args } = decodeFunctionData({ abi, data: call.data });
-        if (functionName === "hasAttended") return encodeFunctionResult({ abi: registryAbi, functionName, result: args?.[1] === alice });
+        if (functionName === "hasAttended") return encodeFunctionResult({ abi: registryAbi, functionName, result: args?.[1] === alice || args?.[1] === linkedWallet });
+        if (functionName === "passOf") return encodeFunctionResult({ abi: registryAbi, functionName, result: args?.[0] === linkedWallet ? alice : zeroAddress });
         if (functionName === "presenceOf") {
           return encodeFunctionResult({ abi: registryAbi, functionName, result: args?.[1] === alice ? { mode: 2, at: 1795000000n } : { mode: 0, at: 0n } });
         }
@@ -126,11 +128,14 @@ describe("Showmark MCP tools", () => {
     expect(yes.structuredContent).toEqual({
       eventId: "42",
       account: alice,
+      pass: alice,
       attended: true,
       presence: { mode: 2, recordedAt: new Date(1795000000 * 1000).toISOString() },
       chainId: 1983,
       registry,
     });
+    const viaWallet = await call(client, "showmark_has_attended", { eventId: "42", account: linkedWallet });
+    expect(viaWallet.structuredContent).toMatchObject({ account: linkedWallet, pass: alice, attended: true, presence: { mode: 2 } });
     const no = await call(client, "showmark_has_attended", { eventId: "42", account: organizer });
     expect(no.structuredContent).toMatchObject({ attended: false, presence: null });
   });

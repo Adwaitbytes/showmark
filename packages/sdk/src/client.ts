@@ -243,6 +243,24 @@ export class ShowmarkClient {
     return { present: mode !== 0, mode, at: presence.at };
   }
 
+  /** The pass linked to a wallet, or null when the wallet is not linked. */
+  async passOf(wallet: Address): Promise<Address | null> {
+    const registry = this.address("registry");
+    const pass = await this.read("passOf", () =>
+      this.publicClient.readContract({ address: registry, abi: registryAbi, functionName: "passOf", args: [wallet] }),
+    );
+    return pass === zeroAddress ? null : pass;
+  }
+
+  /** The wallet linked to a pass, or null when the pass is not linked. */
+  async walletOf(pass: Address): Promise<Address | null> {
+    const registry = this.address("registry");
+    const wallet = await this.read("walletOf", () =>
+      this.publicClient.readContract({ address: registry, abi: registryAbi, functionName: "walletOf", args: [pass] }),
+    );
+    return wallet === zeroAddress ? null : wallet;
+  }
+
   /**
    * Current and best streak in a series. Goes through PresenceLens when its address is known, which accepts a
    * wallet or a pass; otherwise asks the registry, which expects the pass address.

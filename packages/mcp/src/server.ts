@@ -445,6 +445,7 @@ export function createShowmarkMcpServer(options: ShowmarkMcpOptions): McpServer 
       outputSchema: {
         eventId: decimal,
         account: address,
+        pass: address.describe("The pass presence is keyed by: the account itself, or the pass it is linked to"),
         attended: z.boolean(),
         presence: z.object({ mode: z.number(), recordedAt: z.string() }).nullable(),
         chainId: z.number(),
@@ -457,10 +458,14 @@ export function createShowmarkMcpServer(options: ShowmarkMcpOptions): McpServer 
         const { client, registry } = needClient();
         const id = BigInt(eventId);
         const who = account as `0x${string}`;
-        const [attended, presence] = await Promise.all([client.hasAttended(id, who), client.presenceOf(id, who)]);
+        // Presence is keyed by the pass, so a linked wallet is resolved to its pass before reading the record.
+        const [attended, linkedPass] = await Promise.all([client.hasAttended(id, who), client.passOf(who)]);
+        const pass = linkedPass ?? who;
+        const presence = await client.presenceOf(id, pass);
         return ok({
           eventId,
           account,
+          pass,
           attended,
           presence: presence.present ? { mode: presence.mode, recordedAt: new Date(Number(presence.at) * 1000).toISOString() } : null,
           chainId: client.chainId,

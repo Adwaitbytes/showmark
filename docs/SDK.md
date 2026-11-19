@@ -77,6 +77,7 @@ Chain reads:
 | `streakOf(seriesId, account)` | `{ current, best }` |
 | `attendedCount(account, eventIds)` | how many of the listed events the account attended (needs `lens`) |
 | `presenceKeyOf(account)` | the pass that presence is keyed by; use it for one-per-person rewards (needs `lens`) |
+| `passOf(wallet)` and `walletOf(pass)` | the other side of a pass-to-wallet link, or `null` |
 | `getCampaign(campaignId)` | the stored campaign, or `null` |
 | `quote(campaignId)` | `{ amount, priceFresh }`: what one presence pays right now |
 | `claimable(token, account)` | withdrawable balance; zero address for native QIE |

@@ -61,7 +61,9 @@ export function DoorQR(props: DoorQRProps): ReactNode {
   const [frame, setFrame] = useState<Frame | null>(null);
   const [state, setState] = useState<DoorQRState>("loading");
   const callbacks = useRef({ onRotate, onError });
-  callbacks.current = { onRotate, onError };
+  useEffect(() => {
+    callbacks.current = { onRotate, onError };
+  });
 
   useEffect(() => {
     let generation = 0;

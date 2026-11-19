@@ -143,6 +143,17 @@ describe("ShowmarkClient reads", () => {
     ]);
   });
 
+  it("reads pass and wallet links, with null for unlinked", async () => {
+    const { publicClient } = mockedClient((call) =>
+      call.functionName === "passOf"
+        ? encodeFunctionResult({ abi: registryAbi, functionName: "passOf", result: alice })
+        : encodeFunctionResult({ abi: registryAbi, functionName: "walletOf", result: zeroAddress }),
+    );
+    const client = new ShowmarkClient({ chain: 1983, publicClient, addresses: { registry } });
+    expect(await client.passOf(organizer)).toBe(alice);
+    expect(await client.walletOf(alice)).toBeNull();
+  });
+
   it("reports an absent presence as mode 0", async () => {
     const { publicClient } = mockedClient(() =>
       encodeFunctionResult({ abi: registryAbi, functionName: "presenceOf", result: { mode: 0, at: 0n } }),

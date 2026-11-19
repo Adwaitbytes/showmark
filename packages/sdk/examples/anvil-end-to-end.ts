@@ -155,6 +155,7 @@ export interface EndToEndResult {
   /** Through PresenceLens: the wallet resolves to attendee A's pass. */
   walletPresenceKey: Address;
   walletAttendedCount: number;
+  linkedPass: Address | null;
 }
 
 export async function runEndToEnd(): Promise<EndToEndResult> {
@@ -254,6 +255,7 @@ export async function runEndToEnd(): Promise<EndToEndResult> {
       checkedIn: event?.checkedIn ?? 0,
       walletAttended: await showmark.hasAttended(eventId, wallet.address),
       walletPresenceKey: await showmark.presenceKeyOf(wallet.address),
+      linkedPass: await showmark.passOf(wallet.address),
       walletAttendedCount: await showmark.attendedCount(wallet.address, [eventId, eventId + 1n]),
     };
   } finally {

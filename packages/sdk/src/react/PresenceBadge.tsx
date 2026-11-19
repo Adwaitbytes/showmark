@@ -29,7 +29,9 @@ export function PresenceBadge(props: PresenceBadgeProps): ReactNode {
   const { client, eventId, account, labels, onError, children, ...spanProps } = props;
   const [state, setState] = useState<PresenceBadgeState>("loading");
   const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+  useEffect(() => {
+    onErrorRef.current = onError;
+  });
 
   useEffect(() => {
     let current = true;

@@ -93,7 +93,9 @@ export function CheckInButton(props: CheckInButtonProps): ReactNode {
   const inFlight = useRef(false);
   const abort = useRef<AbortController | null>(null);
   const onStateChangeRef = useRef(onStateChange);
-  onStateChangeRef.current = onStateChange;
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  });
 
   const update = useCallback((next: CheckInState) => {
     setState(next);
