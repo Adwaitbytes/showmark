@@ -120,3 +120,9 @@ Run it: `pnpm --filter web exec playwright test -c e2e/live/playwright.config.ts
 ### Spend
 
 Test wallet 0.300 to 0.085 QIE. Locked: campaigns 3 and 4 (0.05 QIE each, from runs that stopped at the approval bug, never approved, refundable after they end), campaign 6 holds 0.02 QIE, and 0.045 QIE is claimable by the organizer (blocked by B1). Earlier aborted runs also created events 3, 4, 5 and 7 ([0x70a7a7c1…c4b5](https://testnet.qie.digital/tx/0x70a7a7c1be43d55b24b84cd8dbbb88e91d83455ea13238684ad84d944a39c4b5), [0xc26d8cad…1741](https://testnet.qie.digital/tx/0xc26d8cad69c39d4521139cee1de844d7f3923046c4387d80d7bad18863441741), [0x9bcbf6e0…84cf](https://testnet.qie.digital/tx/0x9bcbf6e01db83edcbbdd1892d3643cd7b6632f6454aab4eabe6c3fa19e3d84cf), [0x87c8ec5f…d583](https://testnet.qie.digital/tx/0x87c8ec5f246b5bfcbe12be03f984efc8f777b35464b8d878fde44280a5f5d583)) and campaigns 3 and 4 ([0x26d3139c…daa1](https://testnet.qie.digital/tx/0x26d3139c8836e1987961f029ade3ebec82ca31231caea6ed30bfbd2500d6daa1), [0x87a02499…7204](https://testnet.qie.digital/tx/0x87a0249963c7cbb84fc24c3b1cf86110945d0d94bee1789ec7c0acf661a77204)).
+
+### 5. Check-in latency after moving functions to Mumbai (19 Nov 2026, 19:00 IST)
+
+- Functions now run in bom1 (`x-vercel-id: bom1::bom1`), next to the Bengaluru QIE RPC and Mumbai Redis (D-044).
+- Fresh pass in a clean Playwright browser on https://showmark.vercel.app: 8.5 s from navigation to "You are checked in". The check-in POST left at 1.5 s, the relay answered in 2.3 s, and the transaction was confirmed at about 8.2 s.
+- The first request after the deploy hung in the browser for 15 s although the server broadcast the check-in in 2.5 s; the page recovered by retrying and showed the stamp. A chain-side presence check on the phone is being added so a lost response cannot cost more than a second or two.
