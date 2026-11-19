@@ -3,7 +3,7 @@
 Run from `packages/contracts` with `slither .` (Slither 0.11.6, 102 detectors). `slither.config.json` limits the
 report to `src/` by filtering `lib/`, `test/` and `script/`.
 
-Result on 19 Nov 2026: 28 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
+Result on 19 Nov 2026: 29 results in 7 detectors. None is a defect, so no code change was needed. Each is listed
 below with the reason it is accepted. Two lint-level items found earlier by `forge lint` were fixed in code: the
 `CheckedIn` event is emitted before the stamp mint, and the `uint64(block.timestamp)` cast is annotated.
 
@@ -22,7 +22,7 @@ below with the reason it is accepted. Two lint-level items found earlier by `for
 | `CampaignVault._quote` ignores `startedAt` from `latestRoundData` | Freshness is judged by `updatedAt` and `answeredInRound`; `startedAt` carries no extra safety signal. |
 | `ShowmarkRegistry._recover` ignores `errArg` from `ECDSA.tryRecover` | Only the error kind matters; any error maps to "no signer" and a rejected check-in. |
 
-## calls-loop (11)
+## calls-loop (12)
 
 | Location | Justification |
 |---|---|
@@ -35,6 +35,7 @@ below with the reason it is accepted. Two lint-level items found earlier by `for
 | `PresenceLens.attendedCount` calls `registry.hasAttended` per id | View helper; the caller chooses the list length. |
 | `ShowmarkRegistry._record` calls `stamp.mint` (2) | The stamp is deployed by the registry, has no receiver hook and cannot revert for a fresh presence. |
 | `ShowmarkRegistry.linkWallet` calls `stamp.relocate` per id | Same stamp; ids the pass does not hold are skipped, so a stale list cannot block a link. |
+| `ShowmarkRegistry.relocateStamps` calls `stamp.relocate` per id | Same stamp and the same skip rule; the caller pays for the list it chooses. |
 
 ## reentrancy-events (1)
 
