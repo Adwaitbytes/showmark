@@ -9,7 +9,9 @@ import {
   type Address,
   type Hex,
 } from "viem";
+import { generatePrivateKey } from "viem/accounts";
 import { registryAbi, vaultAbi } from "../../src/lib/chain/abi";
+import { doorPassUrl } from "../../src/lib/qr/payload";
 
 // Test doubles for everything outside the browser: the QIE RPC, the Showmark API and QIE Wallet. The app under test
 // is real; only its network and wallet are fake, so these tests exercise the same code organizers run.
@@ -47,6 +49,10 @@ export interface MockState {
   /** Answer for /api/relay/check-in: "ok", "already" or "offline". */
   relayMode: "ok" | "already" | "offline";
   apiDown: boolean;
+  /** /api/judges-desk/pass: "open" signs passes, "not-open" answers like a server without the desk env. */
+  desk: "open" | "not-open";
+  /** Desk URLs handed out, newest last. */
+  deskUrls: string[];
 }
 
 export function nowSeconds(): number {
@@ -80,6 +86,8 @@ export function createState(patch: Partial<MockState> = {}): MockState {
     checkInsPosted: [],
     relayMode: "ok",
     apiDown: false,
+    desk: "open",
+    deskUrls: [],
     ...patch,
   };
 }
@@ -280,6 +288,10 @@ function detail(e: MockEvent) {
   };
 }
 
+function url0(route: Route): string {
+  return new URL(route.request().url()).origin;
+}
+
 function json(route: Route, status: number, body: unknown) {
   return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
@@ -308,6 +320,21 @@ async function handleApi(state: MockState, route: Route) {
   if (eventMatch) {
     const e = state.events.get(BigInt(eventMatch[1]));
     return e ? json(route, 200, detail(e)) : json(route, 404, { error: { code: "not_found", message: "Showmark has no record of this.", action: "Check the link and try again." } });
+  }
+  if (path === "/api/judges-desk/pass") {
+    if (state.desk === "not-open") {
+      return json(route, 503, { error: { code: "judges_desk_not_open", message: "The judges' desk is not open yet.", action: "It opens for demo week, 1 to 10 December." } });
+    }
+    const issuedAt = nowSeconds();
+    const pass = { eventId: 1n, issuedAt: BigInt(issuedAt), doorSig: `0x${"1b".repeat(65)}` as Hex, ticketKey: generatePrivateKey() };
+    const url = doorPassUrl(url0(route), pass);
+    state.deskUrls.push(url);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "cache-control": "no-store" },
+      body: JSON.stringify({ url, issuedAt: iso(issuedAt), expiresAt: iso(issuedAt + 120) }),
+    });
   }
   if (path === "/api/relay/check-in") {
     state.checkInsPosted.push(route.request().postDataJSON());

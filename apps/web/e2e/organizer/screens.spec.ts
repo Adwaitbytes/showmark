@@ -113,6 +113,8 @@ const shots: Shot[] = [
       await expect(page.getByRole("heading", { name: "Door settings" })).toBeVisible();
     },
   },
+  { name: "judges-desk", path: "/judges", door: true, wallet: false, state: () => createState(), prepare: async (page) => void (await expect(page.getByTestId("door-qr")).not.toHaveAttribute("data-issued-at", "")) },
+  { name: "judges-desk-not-open", path: "/judges", door: true, wallet: false, state: () => createState({ desk: "not-open" }), prepare: async (page) => void (await expect(page.getByText("The judges' desk is not open yet")).toBeVisible()) },
   { name: "scan", path: "/door/1/scan", state: () => createState({ authorizeAll: true }), prepare: async (page) => void (await expect(page.getByText("Saved on this device")).toBeVisible()) },
   {
     name: "scan-failure",
