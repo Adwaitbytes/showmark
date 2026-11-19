@@ -24,12 +24,14 @@ import { useQrCamera } from "./use-qr-camera";
 type Result =
   | { tone: "success"; title: string; body: string; tx: Hex | null }
   | { tone: "queued"; title: string; body: string }
+  | { tone: "confirming"; title: string; body: string }
   | { tone: "already"; title: string; body: string }
   | { tone: "failure"; title: string; body: string };
 
 const RESULT_MS = 3_200;
 const SAME_CODE_MS = 5_000;
 const FLUSH_EVERY_MS = 20_000;
+const CONFIRM_EVERY_MS = 3_000;
 
 function vibrate(pattern: number | number[]) {
   try {
@@ -43,6 +45,7 @@ const toneStyle: Record<Result["tone"], { band: string; mark: string; label: str
   success: { band: "bg-ledger-green text-paper", mark: "bg-paper text-ledger-green", label: "Checked in" },
   already: { band: "bg-stamp-blue text-paper", mark: "bg-paper text-stamp-blue", label: "Already in" },
   queued: { band: "bg-ink text-paper", mark: "bg-paper text-ink", label: "Saved" },
+  confirming: { band: "bg-ledger-green text-paper", mark: "bg-paper text-ledger-green", label: "Checked in, confirming" },
   failure: { band: "bg-vermilion text-on-vermilion", mark: "bg-on-vermilion text-vermilion", label: "Not checked in" },
 };
 
@@ -78,6 +81,7 @@ function ResultBand({ result, onDismiss }: { result: Result; onDismiss(): void }
 function stateLabel(r: QueuedAttestation): string {
   if (r.state === "sent") return r.txHash ? "Sent" : "Already in";
   if (r.state === "rejected") return "Not recorded";
+  if (r.state === "confirming") return "Confirming";
   return "Waiting to send";
 }
 
@@ -90,7 +94,7 @@ export function DoorScanner() {
   const persistent = useMemo(() => indexedDbAvailable(), []);
 
   const [result, setResult] = useState<Result | null>(null);
-  const [summary, setSummary] = useState<QueueSummary>({ pending: 0, sent: 0, rejected: 0 });
+  const [summary, setSummary] = useState<QueueSummary>({ pending: 0, confirming: 0, sent: 0, rejected: 0 });
   const [recent, setRecent] = useState<QueuedAttestation[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -143,6 +147,18 @@ export function DoorScanner() {
     return () => clearInterval(id);
   }, [ready, summary.pending, setup.online, flush]);
 
+  // Check-ins the relayer queued (202) are asked about every few seconds until they confirm.
+  useEffect(() => {
+    if (!ready || !eventKey || summary.confirming === 0 || !setup.online) return;
+    const id = setInterval(() => {
+      void queue
+        .confirm(eventKey)
+        .then((out) => (out.requeued > 0 ? flush() : refreshQueue()))
+        .catch(() => setSyncError("This device could not check on the check-ins it is waiting for. It tries again by itself."));
+    }, CONFIRM_EVERY_MS);
+    return () => clearInterval(id);
+  }, [ready, eventKey, summary.confirming, setup.online, queue, flush, refreshQueue]);
+
   const show = useCallback((next: Result) => {
     setResult(next);
     vibrate(next.tone === "failure" ? [90, 60, 90] : next.tone === "queued" ? [40, 40, 40] : 70);
@@ -185,15 +201,19 @@ export function DoorScanner() {
           return true;
         }
         const outcome = await submitAttestation(signed);
-        if (outcome.kind === "ok") {
+        if (outcome.kind === "ok" && outcome.value.sent) {
           await queue.recordSent(signed, outcome.value.txHash);
           show({ tone: "success", title: "Welcome in", body: "The stamp is on its way to their passport.", tx: outcome.value.txHash });
+        } else if (outcome.kind === "ok" && !outcome.value.sent) {
+          // 202: the relayer has it in its queue. That is a check-in, not a failure, and never goes to the offline queue.
+          await queue.recordQueued(signed, outcome.value.queuedId);
+          show({ tone: "confirming", title: "Welcome in", body: "The network is busy, so this check-in is in line. It confirms in a moment. There is no need to scan again." });
         } else if (outcome.kind === "rejected" && outcome.error.code === ALREADY_PRESENT_CODE) {
           await queue.recordSent(signed, null);
           show({ tone: "already", title: "Already checked in", body: "This person is already recorded for this event. Let them in." });
         } else if (outcome.kind === "rejected") {
           show({ tone: "failure", title: outcome.error.message, body: outcome.error.action });
-        } else {
+        } else if (outcome.kind === "retry") {
           const added = await queue.enqueue(signed);
           show(
             added === "duplicate"
@@ -246,7 +266,7 @@ export function DoorScanner() {
 
   const closed = setup.phase.window === "closed";
   const name = setup.details?.metadata.name ?? null;
-  const synced = summary.pending === 0;
+  const synced = summary.pending === 0 && summary.confirming === 0;
 
   return (
     <DoorFrame bar={bar}>
@@ -338,13 +358,13 @@ export function DoorScanner() {
                 )}
               >
                 <span aria-hidden="true" className={cn("size-1.5 rounded-pill", synced ? "bg-ledger-green" : "bg-vermilion")} />
-                <span className="text-ink">{synced ? "All sent" : syncing ? "Sending" : "Waiting to send"}</span>
+                <span className="text-ink">{synced ? "All sent" : syncing ? "Sending" : summary.pending === 0 ? "Confirming" : "Waiting to send"}</span>
               </span>
             </div>
             <dl className="grid grid-cols-3 gap-3 text-center">
               {[
                 ["Waiting", summary.pending, "queue-pending"],
-                ["Sent", summary.sent, "queue-sent"],
+                ["Sent", summary.sent + summary.confirming, "queue-sent"],
                 ["Not recorded", summary.rejected, "queue-rejected"],
               ].map(([label, value, id]) => (
                 <div key={label} className="rounded-doc bg-paper-deep px-2 py-3">

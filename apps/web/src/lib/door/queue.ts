@@ -1,8 +1,11 @@
 import type { Hex } from "@/lib/api/types";
 import {
   MAX_BATCH,
+  pollAttestation,
   submitAttestation,
   submitAttestationBatch,
+  type BatchAnswer,
+  type CheckInAnswer,
   type ErrorCopy,
   type RelayOutcome,
 } from "./relay";
@@ -15,7 +18,11 @@ import type { SignedAttestation } from "./sign";
 // Records are keyed by event and attendee: the chain records one presence per attendee per event, so a second scan of
 // the same code is a duplicate, never a second check-in.
 
-export type QueueState = "pending" | "sent" | "rejected";
+/**
+ * pending: signed here, not yet with the relayer. confirming: the relayer accepted it into its own queue (202) and
+ * this device is waiting for the transaction. sent: broadcast, or already recorded. rejected: the chain said no.
+ */
+export type QueueState = "pending" | "confirming" | "sent" | "rejected";
 
 export interface QueuedAttestation {
   id: string;
@@ -28,6 +35,10 @@ export interface QueuedAttestation {
   txHash: Hex | null;
   /** Why the last attempt failed, in words staff can act on. */
   error: ErrorCopy | null;
+  /** The relayer's queue id while confirming. */
+  relayId?: string | null;
+  /** When the relayer queued it, to give up waiting and resend after its results expire. */
+  confirmingSince?: number | null;
 }
 
 export interface QueueStore {
@@ -64,6 +75,7 @@ export function attestationId(item: Pick<SignedAttestation, "eventId" | "attende
 
 export interface QueueSummary {
   pending: number;
+  confirming: number;
   sent: number;
   rejected: number;
 }
@@ -78,17 +90,34 @@ export interface FlushResult {
 }
 
 export interface Submitters {
-  batch(items: readonly SignedAttestation[]): Promise<RelayOutcome<{ txHash: Hex; accepted: number }>>;
-  single(item: SignedAttestation): Promise<RelayOutcome<{ txHash: Hex }>>;
+  batch(items: readonly SignedAttestation[]): Promise<RelayOutcome<BatchAnswer>>;
+  single(item: SignedAttestation): Promise<RelayOutcome<CheckInAnswer>>;
+  poll(relayId: string): Promise<RelayOutcome<CheckInAnswer>>;
 }
 
 const defaultSubmitters: Submitters = {
   batch: (items) => submitAttestationBatch(items),
   single: (item) => submitAttestation(item),
+  poll: (relayId) => pollAttestation(relayId),
 };
 
 /** The relayer's answer when this attendee is already recorded. That is a success for the door. */
 export const ALREADY_PRESENT_CODE = "already_present";
+/** The relayer could not broadcast this item; it is worth sending again. */
+export const SEND_FAILED_CODE = "relay_send_failed";
+/**
+ * The relayer keeps queued results for 10 minutes. A check-in still unconfirmed after 9 goes back to pending and is
+ * sent again in a batch; if it was recorded meanwhile, the batch reports it as already present, so nothing doubles.
+ */
+export const CONFIRM_GIVE_UP_MS = 9 * 60_000;
+
+export interface ConfirmResult {
+  confirmed: number;
+  rejected: number;
+  /** Moved back to pending because the relayer's result expired. */
+  requeued: number;
+  stillConfirming: number;
+}
 
 export class DoorQueue {
   private readonly inflight = new Map<string, Promise<FlushResult>>();
@@ -114,6 +143,38 @@ export class DoorQueue {
     await this.store.put({ id, eventId: item.eventId, item, state: "sent", queuedAt: this.now(), attempts: 1, txHash, error: null });
   }
 
+  /** Records a single check-in the relayer queued (202): accepted, waiting for its transaction. */
+  async recordQueued(item: SignedAttestation, relayId: string): Promise<void> {
+    const id = attestationId(item);
+    const now = this.now();
+    await this.store.put({ id, eventId: item.eventId, item, state: "confirming", queuedAt: now, attempts: 1, txHash: null, error: null, relayId, confirmingSince: now });
+  }
+
+  /** Asks the relayer about every confirming check-in for an event and settles the ones it has an answer for. */
+  async confirm(eventId: string): Promise<ConfirmResult> {
+    const out: ConfirmResult = { confirmed: 0, rejected: 0, requeued: 0, stillConfirming: 0 };
+    const waiting = (await this.store.listByEvent(eventId)).filter((r) => r.state === "confirming");
+    for (const r of waiting) {
+      const outcome = r.relayId ? await this.submitters.poll(r.relayId) : null;
+      if (outcome?.kind === "ok" && outcome.value.sent) {
+        await this.store.put({ ...r, state: "sent", txHash: outcome.value.txHash, error: null, relayId: null });
+        out.confirmed += 1;
+      } else if (outcome?.kind === "rejected" && outcome.error.code === ALREADY_PRESENT_CODE) {
+        await this.store.put({ ...r, state: "sent", txHash: null, error: null, relayId: null });
+        out.confirmed += 1;
+      } else if (outcome?.kind === "rejected" && outcome.status !== 404) {
+        await this.store.put({ ...r, state: "rejected", error: outcome.error, relayId: null });
+        out.rejected += 1;
+      } else if (outcome === null || this.now() - (r.confirmingSince ?? r.queuedAt) > CONFIRM_GIVE_UP_MS || outcome.kind === "rejected") {
+        await this.store.put({ ...r, state: "pending", relayId: null, confirmingSince: null });
+        out.requeued += 1;
+      } else {
+        out.stillConfirming += 1;
+      }
+    }
+    return out;
+  }
+
   async list(eventId: string): Promise<QueuedAttestation[]> {
     const records = await this.store.listByEvent(eventId);
     return records.sort((a, b) => b.queuedAt - a.queuedAt);
@@ -121,7 +182,7 @@ export class DoorQueue {
 
   async summary(eventId: string): Promise<QueueSummary> {
     const records = await this.store.listByEvent(eventId);
-    const summary: QueueSummary = { pending: 0, sent: 0, rejected: 0 };
+    const summary: QueueSummary = { pending: 0, confirming: 0, sent: 0, rejected: 0 };
     for (const r of records) summary[r.state] += 1;
     return summary;
   }
@@ -143,9 +204,27 @@ export class DoorQueue {
       const chunk = pending.slice(start, start + MAX_BATCH);
       const outcome = await this.submitters.batch(chunk.map((r) => r.item));
       if (outcome.kind === "ok") {
-        for (const r of chunk) await this.store.put({ ...r, state: "sent", attempts: r.attempts + 1, txHash: outcome.value.txHash, error: null });
-        result.sent += chunk.length;
-        result.remaining -= chunk.length;
+        const refused = new Map(outcome.value.rejected.map((r) => [r.index, r]));
+        for (const [index, r] of chunk.entries()) {
+          const attempts = r.attempts + 1;
+          const no = refused.get(index);
+          if (!no) {
+            await this.store.put({ ...r, state: "sent", attempts, txHash: outcome.value.txHash, error: null });
+            result.sent += 1;
+            result.remaining -= 1;
+          } else if (no.code === ALREADY_PRESENT_CODE) {
+            await this.store.put({ ...r, state: "sent", attempts, txHash: null, error: null });
+            result.sent += 1;
+            result.remaining -= 1;
+          } else if (no.code === SEND_FAILED_CODE) {
+            // Not the item's fault: it stays pending and goes out with the next flush.
+            await this.store.put({ ...r, attempts, error: { code: no.code, message: no.message, action: no.action } });
+          } else {
+            await this.store.put({ ...r, state: "rejected", attempts, error: { code: no.code, message: no.message, action: no.action } });
+            result.rejected += 1;
+            result.remaining -= 1;
+          }
+        }
         continue;
       }
       if (outcome.kind === "retry") {
@@ -171,8 +250,12 @@ export class DoorQueue {
     for (const r of chunk) {
       const outcome = await this.submitters.single(r.item);
       const attempts = r.attempts + 1;
-      if (outcome.kind === "ok") {
+      if (outcome.kind === "ok" && outcome.value.sent) {
         await this.store.put({ ...r, state: "sent", attempts, txHash: outcome.value.txHash, error: null });
+        out.sent += 1;
+      } else if (outcome.kind === "ok" && !outcome.value.sent) {
+        const now = this.now();
+        await this.store.put({ ...r, state: "confirming", attempts, error: null, relayId: outcome.value.queuedId, confirmingSince: now });
         out.sent += 1;
       } else if (outcome.kind === "rejected" && outcome.error.code === ALREADY_PRESENT_CODE) {
         await this.store.put({ ...r, state: "sent", attempts, txHash: null, error: null });
@@ -180,7 +263,7 @@ export class DoorQueue {
       } else if (outcome.kind === "rejected") {
         await this.store.put({ ...r, state: "rejected", attempts, error: outcome.error });
         out.rejected += 1;
-      } else {
+      } else if (outcome.kind === "retry") {
         await this.store.put({ ...r, attempts, error: outcome.error });
         out.stoppedBy = outcome.error;
         return out;

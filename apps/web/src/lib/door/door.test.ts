@@ -16,7 +16,7 @@ import {
   type KeyValueStorage,
 } from "./keys";
 import { DoorQueue, MemoryQueueStore, attestationId, type Submitters } from "./queue";
-import { isRetryableStatus, submitAttestation, submitAttestationBatch, type FetchLike } from "./relay";
+import { isRetryableStatus, pollAttestation, submitAttestation, submitAttestationBatch, type BatchAnswer, type FetchLike } from "./relay";
 import {
   checkInWindow,
   doorKeyValidUntil,
@@ -283,39 +283,67 @@ function attestation(n: number, eventId = "12"): SignedAttestation {
   };
 }
 
+const okBatch = (items: readonly SignedAttestation[], rejected: BatchAnswer["rejected"] = []) => ({
+  kind: "ok" as const,
+  value: { txHash: TX, accepted: items.length - rejected.length, rejected },
+});
+const noCall = () => {
+  throw new Error("not expected");
+};
+
+function submitters(patch: Partial<Submitters>): Submitters {
+  return { batch: vi.fn(noCall), single: vi.fn(noCall), poll: vi.fn(noCall), ...patch };
+}
+
 describe("offline queue", () => {
   it("stores a scan once and reports a repeat scan as a duplicate", async () => {
     const queue = new DoorQueue(new MemoryQueueStore());
     expect(await queue.enqueue(attestation(1))).toBe("added");
     expect(await queue.enqueue(attestation(1))).toBe("duplicate");
-    expect(await queue.summary("12")).toEqual({ pending: 1, sent: 0, rejected: 0 });
+    expect(await queue.summary("12")).toEqual({ pending: 1, confirming: 0, sent: 0, rejected: 0 });
   });
 
   it("flushes in batches of at most 50 and marks them sent", async () => {
-    const batches: number[] = [];
-    const submitters: Submitters = {
-      batch: vi.fn(async (items) => {
-        batches.push(items.length);
-        return { kind: "ok" as const, value: { txHash: TX, accepted: items.length } };
-      }),
-      single: vi.fn(),
-    };
-    const queue = new DoorQueue(new MemoryQueueStore(), submitters);
+    const sizes: number[] = [];
+    const batch = vi.fn(async (items: readonly SignedAttestation[]) => {
+      sizes.push(items.length);
+      return okBatch(items);
+    });
+    const subs = submitters({ batch });
+    const queue = new DoorQueue(new MemoryQueueStore(), subs);
     for (let i = 1; i <= 120; i++) await queue.enqueue(attestation(i));
     await queue.enqueue(attestation(500, "13"));
 
     const result = await queue.flush("12");
-    expect(batches).toEqual([50, 50, 20]);
+    expect(sizes).toEqual([50, 50, 20]);
     expect(result).toEqual({ sent: 120, rejected: 0, remaining: 0, stoppedBy: null });
-    expect(await queue.summary("12")).toEqual({ pending: 0, sent: 120, rejected: 0 });
-    expect(await queue.summary("13")).toEqual({ pending: 1, sent: 0, rejected: 0 });
-    expect(submitters.single).not.toHaveBeenCalled();
+    expect(await queue.summary("12")).toEqual({ pending: 0, confirming: 0, sent: 120, rejected: 0 });
+    expect(await queue.summary("13")).toEqual({ pending: 1, confirming: 0, sent: 0, rejected: 0 });
+    expect(subs.single).not.toHaveBeenCalled();
+  });
+
+  it("reads the per-item answers in a batch: already present is sent, a send failure stays pending, the rest are rejected", async () => {
+    const batch = vi.fn(async (items: readonly SignedAttestation[]) =>
+      okBatch(items, [
+        { index: 1, code: "already_present", message: "Already.", action: "None." },
+        { index: 2, code: "relay_send_failed", message: "Not sent.", action: "Again." },
+        { index: 3, code: "bad_attendee_sig", message: "Bad sig.", action: "Rescan." },
+      ]),
+    );
+    const queue = new DoorQueue(new MemoryQueueStore(), submitters({ batch }));
+    for (const i of [1, 2, 3, 4]) await queue.enqueue(attestation(i));
+    expect(await queue.flush("12")).toEqual({ sent: 2, rejected: 1, remaining: 1, stoppedBy: null });
+    const byId = new Map((await queue.list("12")).map((r) => [r.id, r]));
+    expect(byId.get(attestationId(attestation(1)))).toMatchObject({ state: "sent", txHash: TX });
+    expect(byId.get(attestationId(attestation(2)))).toMatchObject({ state: "sent", txHash: null });
+    expect(byId.get(attestationId(attestation(3)))).toMatchObject({ state: "pending", error: { code: "relay_send_failed" } });
+    expect(byId.get(attestationId(attestation(4)))).toMatchObject({ state: "rejected", error: { code: "bad_attendee_sig" } });
   });
 
   it("keeps everything when the relayer is unreachable and stops trying", async () => {
     const offline = { code: "offline", message: "No connection.", action: "Wait." };
     const batch = vi.fn(async () => ({ kind: "retry" as const, error: offline }));
-    const queue = new DoorQueue(new MemoryQueueStore(), { batch, single: vi.fn() });
+    const queue = new DoorQueue(new MemoryQueueStore(), submitters({ batch }));
     for (let i = 1; i <= 60; i++) await queue.enqueue(attestation(i));
 
     const result = await queue.flush("12");
@@ -326,25 +354,50 @@ describe("offline queue", () => {
     expect(records.filter((r) => r.attempts === 1)).toHaveLength(50);
   });
 
-  it("isolates a bad item when the relayer refuses a whole batch", async () => {
+  it("isolates a bad item when the relayer refuses a whole batch, and treats a queued single as accepted", async () => {
     const bad = attestation(2);
-    const submitters: Submitters = {
+    const subs = submitters({
       batch: async () => ({ kind: "rejected", status: 400, error: { code: "invalid_request", message: "Bad.", action: "Fix." } }),
       single: async (item) => {
         if (item.attendee === bad.attendee) return { kind: "rejected", status: 422, error: { code: "bad_attendee_sig", message: "Bad sig.", action: "Rescan." } };
         if (item.attendee === attestation(3).attendee) return { kind: "rejected", status: 422, error: { code: "already_present", message: "Already.", action: "None." } };
-        return { kind: "ok", value: { txHash: TX } };
+        if (item.attendee === attestation(4).attendee) return { kind: "ok", value: { sent: false, queuedId: "abcdef0123456789abcdef01" } };
+        return { kind: "ok", value: { sent: true, txHash: TX } };
       },
-    };
-    const queue = new DoorQueue(new MemoryQueueStore(), submitters);
-    for (const i of [1, 2, 3]) await queue.enqueue(attestation(i));
+    });
+    const queue = new DoorQueue(new MemoryQueueStore(), subs);
+    for (const i of [1, 2, 3, 4]) await queue.enqueue(attestation(i));
 
     const result = await queue.flush("12");
-    expect(result).toEqual({ sent: 2, rejected: 1, remaining: 0, stoppedBy: null });
+    expect(result).toEqual({ sent: 3, rejected: 1, remaining: 0, stoppedBy: null });
     const byId = new Map((await queue.list("12")).map((r) => [r.id, r]));
     expect(byId.get(attestationId(bad))?.state).toBe("rejected");
-    expect(byId.get(attestationId(bad))?.error?.code).toBe("bad_attendee_sig");
     expect(byId.get(attestationId(attestation(3)))).toMatchObject({ state: "sent", txHash: null });
+    expect(byId.get(attestationId(attestation(4)))).toMatchObject({ state: "confirming", relayId: "abcdef0123456789abcdef01" });
+  });
+
+  it("confirms queued check-ins by polling, and never sends them to the offline queue while the relayer has them", async () => {
+    let clock = 1_000_000;
+    const answers = new Map<string, Awaited<ReturnType<Submitters["poll"]>>>([
+      ["a".repeat(24), { kind: "ok", value: { sent: false, queuedId: "a".repeat(24) } }],
+      ["b".repeat(24), { kind: "ok", value: { sent: true, txHash: TX } }],
+      ["c".repeat(24), { kind: "rejected", status: 422, error: { code: "already_present", message: "Already.", action: "None." } }],
+      ["d".repeat(24), { kind: "rejected", status: 422, error: { code: "at_capacity", message: "Full.", action: "Ask." } }],
+      ["e".repeat(24), { kind: "retry", error: { code: "offline", message: "Down.", action: "Wait." } }],
+    ]);
+    const poll = vi.fn(async (id: string) => answers.get(id)!);
+    const queue = new DoorQueue(new MemoryQueueStore(), submitters({ poll }), () => clock);
+    const letters = ["a", "b", "c", "d", "e"];
+    for (const [i, l] of letters.entries()) await queue.recordQueued(attestation(i + 1), l.repeat(24));
+    expect(await queue.summary("12")).toEqual({ pending: 0, confirming: 5, sent: 0, rejected: 0 });
+
+    expect(await queue.confirm("12")).toEqual({ confirmed: 2, rejected: 1, requeued: 0, stillConfirming: 2 });
+    expect(await queue.summary("12")).toEqual({ pending: 0, confirming: 2, sent: 2, rejected: 1 });
+
+    // After the relayer's results would have expired, anything still unconfirmed goes back to pending to be resent.
+    clock += 10 * 60_000;
+    expect(await queue.confirm("12")).toEqual({ confirmed: 0, rejected: 0, requeued: 2, stillConfirming: 0 });
+    expect(await queue.summary("12")).toEqual({ pending: 2, confirming: 0, sent: 2, rejected: 1 });
   });
 
   it("lets a rejected code be scanned again", async () => {
@@ -360,9 +413,9 @@ describe("offline queue", () => {
     const gate = new Promise<void>((resolve) => (release = resolve));
     const batch = vi.fn(async (items: readonly SignedAttestation[]) => {
       await gate;
-      return { kind: "ok" as const, value: { txHash: TX, accepted: items.length } };
+      return okBatch(items);
     });
-    const queue = new DoorQueue(new MemoryQueueStore(), { batch, single: vi.fn() });
+    const queue = new DoorQueue(new MemoryQueueStore(), submitters({ batch }));
     await queue.enqueue(attestation(1));
     const a = queue.flush("12");
     const b = queue.flush("12");
@@ -379,11 +432,26 @@ function respond(status: number, body: unknown): FetchLike {
 describe("relay client", () => {
   const item = attestation(1);
 
-  it("returns the transaction hash on success", async () => {
-    expect(await submitAttestation(item, respond(200, { txHash: TX, status: "submitted" }))).toEqual({ kind: "ok", value: { txHash: TX } });
-    expect(await submitAttestationBatch([item], respond(200, { txHash: TX, accepted: 1 }))).toEqual({
+  it("returns the transaction hash once broadcast", async () => {
+    expect(await submitAttestation(item, respond(200, { txHash: TX, status: "submitted" }))).toEqual({ kind: "ok", value: { sent: true, txHash: TX } });
+    expect(await submitAttestationBatch([item], respond(200, { txHash: TX, accepted: 1, rejected: [] }))).toEqual({
       kind: "ok",
-      value: { txHash: TX, accepted: 1 },
+      value: { txHash: TX, accepted: 1, rejected: [] },
+    });
+  });
+
+  it("treats 202 queued as accepted, with the id to poll", async () => {
+    const id = "0123456789abcdef01234567";
+    expect(await submitAttestation(item, respond(202, { status: "queued", id }))).toEqual({ kind: "ok", value: { sent: false, queuedId: id } });
+    expect(await pollAttestation(id, respond(202, { status: "queued", id }))).toEqual({ kind: "ok", value: { sent: false, queuedId: id } });
+    expect(await pollAttestation(id, respond(200, { txHash: TX, status: "submitted" }))).toEqual({ kind: "ok", value: { sent: true, txHash: TX } });
+  });
+
+  it("reads a batch where nothing needed sending", async () => {
+    const rejected = [{ index: 0, code: "already_present", message: "Already.", action: "None." }];
+    expect(await submitAttestationBatch([item], respond(200, { txHash: null, accepted: 0, rejected }))).toEqual({
+      kind: "ok",
+      value: { txHash: null, accepted: 0, rejected },
     });
   });
 

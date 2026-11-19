@@ -176,3 +176,25 @@ test("door scans you: signs an attestation for a scanned code and queues it when
   await expect(page.getByTestId("queue-state")).toHaveText("All sent");
   expect(state.checkInsPosted).toHaveLength(2);
 });
+
+test("door scans you: a queued answer under load counts as checked in and confirms in the background", async ({ page }) => {
+  const state = await installMocks(page, createState({ authorizeAll: true, relayMode: "queued" }));
+  await page.goto("/door/1/scan");
+  await expect(page.getByTestId("queue-state")).toHaveText("All sent");
+
+  const attendee = privateKeyToAccount(generatePrivateKey());
+  const attendeeSig = await attendee.signTypedData({ domain, types: checkInTypes, primaryType: "CheckIn", message: { eventId: 1n, attendee: attendee.address, mode: 2 } });
+  await page.getByLabel("Or type a code").fill(encodeAttendeeCode({ eventId: 1n, attendee: attendee.address, attendeeSig }));
+  await page.getByRole("button", { name: "Check in", exact: true }).click();
+
+  const band = page.getByTestId("scan-result");
+  await expect(band).toHaveAttribute("data-tone", "confirming");
+  await expect(band).toContainText("Checked in, confirming");
+  await expect(page.getByTestId("queue-pending")).toHaveText("0");
+
+  // The poll confirms it; it is never resent from the offline queue.
+  await expect(page.getByTestId("queue-state")).toHaveText("All sent", { timeout: 10_000 });
+  await expect(page.getByTestId("queue-sent")).toHaveText("1");
+  expect(state.batches).toEqual([]);
+  expect(state.checkInsPosted).toHaveLength(1);
+});

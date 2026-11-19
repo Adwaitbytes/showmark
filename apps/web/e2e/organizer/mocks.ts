@@ -46,8 +46,10 @@ export interface MockState {
   /** Transactions the fake wallet was asked to send. */
   sent: { to: string; data: Hex }[];
   checkInsPosted: unknown[];
-  /** Answer for /api/relay/check-in: "ok", "already" or "offline". */
-  relayMode: "ok" | "already" | "offline";
+  /** Answer for /api/relay/check-in: "ok", "already", "offline", or "queued" (202, then 200 on the first poll). */
+  relayMode: "ok" | "already" | "offline" | "queued";
+  /** Batch requests received, item counts. */
+  batches: number[];
   apiDown: boolean;
   /** /api/judges-desk/pass: "open" signs passes, "not-open" answers like a server without the desk env. */
   desk: "open" | "not-open";
@@ -89,6 +91,7 @@ export function createState(patch: Partial<MockState> = {}): MockState {
     sent: [],
     checkInsPosted: [],
     relayMode: "ok",
+    batches: [],
     apiDown: false,
     desk: "open",
     deskUrls: [],
@@ -349,6 +352,9 @@ async function handleApi(state: MockState, route: Route) {
   if (path === "/api/relay/check-in") {
     state.checkInsPosted.push(route.request().postDataJSON());
     if (state.relayMode === "offline") return route.abort("internetdisconnected");
+    if (state.relayMode === "queued") {
+      return json(route, 202, { status: "queued", id: "0123456789abcdef01234567" });
+    }
     if (state.relayMode === "already") {
       return json(route, 422, { error: { code: "already_present", message: "You are already checked in to this event.", action: "Open your passport to see the stamp." } });
     }
@@ -359,7 +365,13 @@ async function handleApi(state: MockState, route: Route) {
   if (path === "/api/relay/check-in/batch") {
     const body = route.request().postDataJSON() as { items: unknown[] };
     state.checkInsPosted.push(...body.items);
-    return json(route, 200, { txHash: `0x${"cd".repeat(32)}`, accepted: body.items.length });
+    state.batches.push(body.items.length);
+    return json(route, 200, { txHash: `0x${"cd".repeat(32)}`, accepted: body.items.length, rejected: [] });
+  }
+  if (/^\/api\/relay\/check-in\/[0-9a-f]{24}$/.test(path)) {
+    const e = state.events.get(1n);
+    if (e) e.checkedIn += 1;
+    return json(route, 200, { txHash: `0x${"ef".repeat(32)}`, status: "submitted" });
   }
   return json(route, 404, { error: { code: "not_found", message: "Not mocked.", action: "Add a mock." } });
 }
