@@ -25,16 +25,19 @@ export function DailyChart({ daily }: { daily: readonly Day[] }) {
   const ticks = [max, max / 2, 0];
   const peak = daily.reduce<Day | null>((best, day) => (!best || day.checkIns > best.checkIns ? day : best), null);
   const pct = (value: number) => `${(value / max) * 100}%`;
-  const first = daily[0];
-  const last = daily[daily.length - 1];
-  const middle = daily[Math.floor(daily.length / 2)];
+  // Label the first, middle and last day under their own columns.
+  const labelled = new Set(
+    [daily[0], daily.length > 6 ? daily[Math.floor(daily.length / 2)] : undefined, daily[daily.length - 1]]
+      .filter((day): day is Day => day !== undefined)
+      .map((day) => day.date),
+  );
 
   return (
     <figure className="flex flex-col gap-5">
       <figcaption className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <span className="flex flex-col gap-1">
-          <span className="text-lg font-medium text-ink">Check-ins and settlements per day</span>
-          <span className="text-sm text-ink-soft">Days in {DISPLAY_TIME_ZONE_LABEL}, counted from CheckedIn and Settled events on chain.</span>
+        <span className="text-sm text-ink-soft">
+          Check-ins and settlements per day in {DISPLAY_TIME_ZONE_LABEL}, counted from CheckedIn and Settled events on
+          chain.
         </span>
         <span className="flex gap-5 text-sm text-ink-soft" aria-hidden="true">
           <span className="inline-flex items-center gap-2">
@@ -48,7 +51,7 @@ export function DailyChart({ daily }: { daily: readonly Day[] }) {
         </span>
       </figcaption>
 
-      <div aria-hidden="true" className="relative h-60 sm:h-72">
+      <div aria-hidden="true" className="relative mb-6 h-60 sm:h-72">
         {ticks.map((tick) => (
           <div
             key={tick}
@@ -78,6 +81,11 @@ export function DailyChart({ daily }: { daily: readonly Day[] }) {
                   {formatCount(day.checkIns)}
                 </span>
               ) : null}
+              {labelled.has(day.date) ? (
+                <span className="absolute top-full left-1/2 mt-2 -translate-x-1/2 font-mono text-xs whitespace-nowrap text-ink-faint">
+                  {dayLabel(day.date)}
+                </span>
+              ) : null}
               <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-max -translate-x-1/2 rounded-doc bg-ink px-3 py-2 text-sm text-paper shadow-lift group-hover:block">
                 <span className="block font-medium">{dayLabel(day.date)}</span>
                 <span className="block">{formatCount(day.checkIns)} check-ins</span>
@@ -87,14 +95,6 @@ export function DailyChart({ daily }: { daily: readonly Day[] }) {
           ))}
         </ol>
       </div>
-      {first && last ? (
-        <div aria-hidden="true" className="-mt-2 ml-11 flex justify-between font-mono text-xs text-ink-faint">
-          <span>{dayLabel(first.date)}</span>
-          {middle && daily.length > 6 ? <span>{dayLabel(middle.date)}</span> : null}
-          <span>{dayLabel(last.date)}</span>
-        </div>
-      ) : null}
-
       <details className="group/table text-sm">
         <summary className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-ink-soft underline decoration-rule underline-offset-4 hover:text-ink">
           Show the numbers as a table

@@ -2,10 +2,10 @@ import type { Traction } from "@/lib/api/types";
 import { addresses, isDeployed } from "@/lib/chain/addresses";
 import { activeChain, explorerAddress } from "@/lib/chain/chains";
 import { Button } from "@/ui/Button";
-import { EmptyState } from "@/ui/EmptyState";
 import { formatCount, formatPercent, formatTime, formatTokenAmount, formatUsd } from "@/ui/format";
 import { Ledger, LedgerRow } from "@/ui/Ledger";
 import { Sheet, SheetSection } from "@/ui/Sheet";
+import { RubberMark } from "@/ui/stamp/RubberMark";
 import { DailyChart } from "./DailyChart";
 
 /** What each number means and where it comes from. Shown on the page so a judge can audit it. */
@@ -67,27 +67,49 @@ export function Definitions() {
 
 export function TractionEmpty() {
   return (
-    <Sheet>
-      <SheetSection className="py-10 sm:py-12">
-        <EmptyState
-          title="Nothing to count yet"
-          action={
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button href="/#judges-desk" variant="primary">
-                Check in at the judges&apos; desk
-              </Button>
-              <Button href="/docs/organizers" variant="quiet">
-                Run the first event
-              </Button>
-            </div>
-          }
-        >
+    <div className="flex flex-col gap-8">
+      <Sheet className="relative overflow-hidden">
+        <div aria-hidden="true" className="grid grid-cols-1 gap-x-12 gap-y-6 opacity-60 lg:grid-cols-2">
+          <SheetSection>
+            <p className="mb-3 font-display text-xl text-ink">People</p>
+            <Ledger>
+              <LedgerRow label="Verified attendees" value="0" />
+              <LedgerRow label="Came to two or more events" value="0" />
+              <LedgerRow label="New wallets first seen through Showmark" value="0" />
+              <LedgerRow label="Linked a QIE Wallet" value="0" />
+            </Ledger>
+          </SheetSection>
+          <SheetSection>
+            <p className="mb-3 font-display text-xl text-ink">Money settled to people</p>
+            <Ledger>
+              <LedgerRow label="QUSDC" value="0.00" />
+              <LedgerRow label="QIE" value="0" />
+              <LedgerRow label="Team-funded sponsors" value="0" />
+              <LedgerRow label="External sponsors" value="0" />
+            </Ledger>
+          </SheetSection>
+        </div>
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <RubberMark lines={["Awaiting", "first check-in"]} seed="traction-empty" className="w-60 sm:w-80" />
+        </div>
+      </Sheet>
+      <div className="flex max-w-2xl flex-col gap-5">
+        <h2 className="font-display text-2xl text-ink">Nothing to count yet</h2>
+        <p className="text-md text-ink-soft">
           {isDeployed()
-            ? `No one has checked in on ${activeChain.name} yet. This ledger starts at the first real check-in and every number below will link to the chain.`
+            ? `No one has checked in on ${activeChain.name} yet. This ledger starts at the first real check-in, and every number on it will link to the chain.`
             : `The Showmark contracts are not live on ${activeChain.name} yet. Once they are, this ledger counts every real check-in and payout straight from the chain.`}
-        </EmptyState>
-      </SheetSection>
-    </Sheet>
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button href="/#judges-desk" variant="primary">
+            Check in at the judges&apos; desk
+          </Button>
+          <Button href="/docs/organizers" variant="quiet">
+            Run the first event
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -101,7 +123,7 @@ export function TractionView({ traction }: { traction: Traction }) {
   return (
     <div className="flex flex-col gap-10 sm:gap-12">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-10">
-        <p className="text-[clamp(4rem,11vw,7.5rem)] leading-[0.9] font-medium tracking-[-0.035em] text-ink">
+        <p className="font-display text-[clamp(5rem,12vw,9rem)] leading-[0.85] tracking-[-0.02em] text-ink">
           {formatCount(traction.verifiedAttendees)}
         </p>
         <p className="max-w-xl pb-1 text-lg text-ink-soft">
@@ -139,8 +161,30 @@ export function TractionView({ traction }: { traction: Traction }) {
             <h2 id="money" className="mb-3 font-display text-xl text-ink">
               Money settled to people
             </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[22rem] text-left">
+            <div className="flex flex-col gap-5 sm:hidden">
+              {traction.settled.map((row) => (
+                <div key={row.token}>
+                  <p className="text-sm font-medium text-ink">{row.symbol}</p>
+                  <Ledger label={`${row.symbol} settled`}>
+                    <LedgerRow label="Team-funded" value={formatTokenAmount(row.teamFunded, row.symbol)} className="py-1.5" />
+                    <LedgerRow label="External" value={formatTokenAmount(row.external, row.symbol)} className="py-1.5" />
+                    <LedgerRow label="Total" value={formatTokenAmount(totalOf(row), row.symbol)} total className="py-1.5" />
+                  </Ledger>
+                </div>
+              ))}
+              {hasPrice ? (
+                <div>
+                  <p className="text-sm font-medium text-ink">In USD</p>
+                  <Ledger label="Settled in USD">
+                    <LedgerRow label="Team-funded" value={formatUsd(traction.settledUsd.teamFunded)} className="py-1.5" />
+                    <LedgerRow label="External" value={formatUsd(traction.settledUsd.external)} className="py-1.5" />
+                    <LedgerRow label="Total" value={formatUsd(usdTotal)} total className="py-1.5" />
+                  </Ledger>
+                </div>
+              ) : null}
+            </div>
+            <div className="hidden sm:block">
+              <table className="w-full text-left">
                 <caption className="sr-only">Value settled per token, split by who funded it</caption>
                 <thead>
                   <tr className="border-b border-ink text-sm text-ink-soft">
