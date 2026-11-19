@@ -96,6 +96,7 @@ export {
   type ProofMode,
 } from "./status";
 export { splitPayout, type PayoutSplit } from "./payout";
+export { optInOpenCampaign, optOutOpenCampaign, type OpenCampaignParams } from "./organizer";
 export {
   ShowmarkError,
   ShowmarkConfigError,

@@ -1,10 +1,12 @@
 import {
   createPublicClient,
+  createWalletClient,
   custom,
   decodeFunctionData,
   encodeErrorResult,
   encodeFunctionResult,
   parseAbi,
+  parseTransaction,
   recoverTypedDataAddress,
   zeroAddress,
   type Address,
@@ -16,11 +18,14 @@ import {
   ShowmarkClient,
   ShowmarkConfigError,
   ShowmarkContractError,
+  ShowmarkInputError,
   ShowmarkNetworkError,
   checkInTypedData,
   ticketTypedData,
   createDoorPass,
   doorPassUrl,
+  optInOpenCampaign,
+  optOutOpenCampaign,
   presenceAbi,
   qieTestnet,
   registryAbi,
@@ -304,5 +309,45 @@ describe("ShowmarkClient relay calls", () => {
   it("links to the explorer on its chain", () => {
     const client = new ShowmarkClient({ chain: 1990 });
     expect(client.explorerTxUrl(txHash)).toBe(`https://mainnet.qie.digital/tx/${txHash}`);
+  });
+});
+
+describe("open campaign opt-in", () => {
+  it("reads optedIn and sends optInOpenCampaign and optOutOpenCampaign from the organizer's wallet", async () => {
+    const { publicClient, calls } = mockedClient(() => encodeFunctionResult({ abi: vaultAbi, functionName: "optedIn", result: true }));
+    const client = new ShowmarkClient({ chain: 1983, publicClient, addresses: { vault } });
+    expect(await client.optedIn(7n, organizer)).toBe(true);
+    expect(calls[0]).toEqual({ to: vault, functionName: "optedIn", args: [7n, organizer] });
+
+    const sent: { to: Address; functionName: string; args: readonly unknown[] }[] = [];
+    const organizerKey = privateKeyToAccount(generatePrivateKey());
+    const walletClient = createWalletClient({
+      account: organizerKey,
+      chain: qieTestnet,
+      transport: custom({
+        async request({ method, params }: { method: string; params?: unknown }) {
+          if (method === "eth_chainId") return "0x7bf";
+          if (method === "eth_getTransactionCount") return "0x0";
+          if (method === "eth_estimateGas") return "0x5208";
+          if (method === "eth_gasPrice") return "0x3b9aca00";
+          if (method === "eth_getBlockByNumber") return { baseFeePerGas: null, number: "0x1" };
+          if (method === "eth_sendRawTransaction") {
+            const [raw] = params as [Hex];
+            const tx = parseTransaction(raw);
+            const decoded = decodeFunctionData({ abi: vaultAbi, data: tx.data ?? "0x" });
+            sent.push({ to: tx.to as Address, functionName: decoded.functionName, args: decoded.args ?? [] });
+            return `0x${"aa".repeat(32)}`;
+          }
+          throw new Error(`unexpected ${method}`);
+        },
+      }),
+    });
+    expect(await optInOpenCampaign({ walletClient, vault, campaignId: 7n })).toBe(`0x${"aa".repeat(32)}`);
+    await optOutOpenCampaign({ walletClient, vault, campaignId: 7n });
+    expect(sent.map((s) => [s.functionName, s.args])).toEqual([
+      ["optInOpenCampaign", [7n]],
+      ["optOutOpenCampaign", [7n]],
+    ]);
+    await expect(optInOpenCampaign({ walletClient, vault, campaignId: 0n })).rejects.toBeInstanceOf(ShowmarkInputError);
   });
 });

@@ -318,6 +318,14 @@ export class ShowmarkClient {
     }
   }
 
+  /** True when the organizer opted into this open campaign. */
+  async optedIn(campaignId: bigint, organizer: Address): Promise<boolean> {
+    const vault = this.address("vault");
+    return this.read("optedIn", () =>
+      this.publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "optedIn", args: [campaignId, organizer] }),
+    );
+  }
+
   /** What one verified presence pays right now. */
   async quote(campaignId: bigint): Promise<Quote> {
     const vault = this.address("vault");

@@ -81,6 +81,7 @@ Chain reads:
 | `getCampaign(campaignId)` | the stored campaign, or `null` |
 | `quote(campaignId)` | `{ amount, priceFresh }`: what one presence pays right now |
 | `claimable(token, account)` | withdrawable balance; zero address for native QIE |
+| `optedIn(campaignId, organizer)` | whether an organizer opted into a campaign open to bonded organizers |
 
 ```ts
 if (await showmark.hasAttended(42n, "0x...")) {
@@ -101,6 +102,8 @@ Relay calls go to the Showmark API (`/api/relay/*`, `/api/tx/*`). Bigints travel
 | `txStatus(hash)` and `waitForTx(hash)` | `{ status, blockNumber }` |
 
 The same functions exist standalone (`relayCheckIn(options, data)` and so on) for code that has no client.
+
+Organizers choose which open campaigns pay at their events. `optInOpenCampaign({ walletClient, vault, campaignId })` and `optOutOpenCampaign(...)` send that transaction from the organizer's own viem wallet client and resolve with the hash; payouts already settled stand after an opt-out.
 
 ### EIP-712 signatures
 
