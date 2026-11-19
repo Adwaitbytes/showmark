@@ -20,7 +20,7 @@ function Who({ address, name }: { address: string; name?: string | null; plain: 
 export function SettlementsTable({ settlements, symbol, plain = false }: { settlements: SponsorSettlement[]; symbol: TokenSymbol; plain?: boolean }) {
   return (
     <>
-      <div className={plain ? "-mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible" : "hidden overflow-x-auto md:block print:block"}>
+      <div className={plain ? "relative -mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible" : "relative hidden overflow-x-auto md:block print:block"}>
         <table className={plain ? "w-full min-w-[46rem] border-collapse text-left text-sm print:min-w-0" : "w-full border-collapse text-left text-sm"}>
           <caption className="sr-only">Payouts, newest first</caption>
           <thead>

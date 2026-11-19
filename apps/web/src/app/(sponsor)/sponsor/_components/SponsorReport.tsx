@@ -149,7 +149,7 @@ export function SponsorReport({ id }: { id: string }) {
         {events.length === 0 ? (
           <p className="text-sm text-ink-soft">No events approved and no payouts yet.</p>
         ) : (
-          <div className="-mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible">
+          <div className="relative -mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0 print:overflow-visible">
           <table className="w-full min-w-[32rem] border-collapse text-left text-sm print:min-w-0">
             <thead>
               <tr className="border-b border-rule text-xs text-ink-soft">
