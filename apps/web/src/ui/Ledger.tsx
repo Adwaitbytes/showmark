@@ -28,9 +28,9 @@ export function LedgerRow({ label, value, note, total = false, className }: Ledg
   return (
     <div className={cn("py-2.5", total && "mt-1 border-t border-ink pt-3.5", className)}>
       <div className="flex items-baseline gap-3">
-        <dt className={cn("text-base text-ink-soft", total && "font-medium text-ink")}>{label}</dt>
+        <dt className={cn("min-w-0 text-base text-ink-soft", total && "font-medium text-ink")}>{label}</dt>
         <span aria-hidden="true" className="leader" />
-        <dd className={cn("text-right font-mono text-base text-ink", total && "text-md font-medium")}>{value}</dd>
+        <dd className={cn("shrink-0 text-right font-mono text-base whitespace-nowrap text-ink", total && "text-md font-medium")}>{value}</dd>
       </div>
       {note ? <p className="mt-0.5 text-sm text-ink-faint">{note}</p> : null}
     </div>

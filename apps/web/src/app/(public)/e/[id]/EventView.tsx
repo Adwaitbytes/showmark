@@ -3,6 +3,7 @@ import { PROOF_MODES } from "@/lib/copy/proof";
 import { AddressChip } from "@/ui/AddressChip";
 import { Amount } from "@/ui/Amount";
 import { Button } from "@/ui/Button";
+import { cn } from "@/ui/cn";
 import { EmptyState } from "@/ui/EmptyState";
 import { formatCount, formatDate, formatEventWindow, formatShortDate, formatTime } from "@/ui/format";
 import { Guilloche } from "@/ui/patterns/guilloche";
@@ -70,7 +71,7 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
           <SheetSection className="flex flex-1 flex-col gap-6 py-8 sm:py-10 lg:pr-10">
             <div className="flex flex-wrap items-center gap-3">
               <StatusMark tone={mark.tone}>{mark.label(event)}</StatusMark>
-              <span className="font-mono text-sm text-ink-faint">Event no. {event.id}</span>
+              <span className="text-sm text-ink-faint">Event no. {event.id}</span>
             </div>
             <h1 id="event-name" className="font-display text-[clamp(2.5rem,6vw,4rem)] leading-[1] tracking-[-0.015em] text-ink">
               {name}
@@ -110,6 +111,41 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
                 Part {event.seriesIndex} of a series. Coming to the next one in a row builds a streak.
               </p>
             ) : null}
+            <section aria-labelledby="paying" className="mt-4 flex flex-col gap-4 border-t border-rule-soft pt-7">
+              <h2 id="paying" className="font-display text-xl text-ink">
+                Who pays for showing up
+              </h2>
+              {event.campaigns.length ? (
+                <ul className={cn("grid grid-cols-1 gap-3", event.campaigns.length > 1 && "xl:grid-cols-2")}>
+                  {event.campaigns.map((campaign) => (
+                    <li key={campaign.id}>
+                      <Sheet tone="inset" className="h-full">
+                        <SheetSection className="flex h-full flex-col gap-3 py-5 sm:py-6">
+                          <div className="flex items-baseline justify-between gap-4">
+                            <p className="font-medium text-ink">{campaign.sponsorName}</p>
+                            <span className="text-sm text-ink-faint">Campaign {campaign.id}</span>
+                          </div>
+                          <p className="text-base text-ink-soft">{campaign.name}</p>
+                          <p className="text-lg text-ink">
+                            <Amount value={campaign.attendeeAmount} symbol={campaign.tokenSymbol} />
+                            <span className="ml-2 text-base text-ink-soft">to each verified attendee</span>
+                          </p>
+                          <p className="mt-auto text-sm text-ink-faint">
+                            Needs {PROOF_MODES[campaign.minProofMode].name.toLowerCase()}
+                            {campaign.requireQieId ? ", and a QIE ID on the wallet you cash out to." : "."}
+                          </p>
+                        </SheetSection>
+                      </Sheet>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="max-w-prose text-base text-ink-soft">
+                  No sponsor is paying for this event yet. Check-ins still earn a stamp, and a sponsor can approve the event
+                  into a campaign at any time.
+                </p>
+              )}
+            </section>
           </SheetSection>
 
           <Perforation orientation="vertical" className="max-lg:hidden" />
@@ -119,7 +155,7 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
             <div className="flex flex-col gap-2">
               <p className="text-sm text-ink-soft">Checked in</p>
               <p className="text-ink">
-                <span className="text-[3.25rem] leading-none font-medium tracking-[-0.03em]">{formatCount(event.checkedIn)}</span>
+                <span className="font-display text-[4rem] leading-[0.85]">{formatCount(event.checkedIn)}</span>
                 <span className="ml-2 text-base text-ink-soft">
                   {capped ? `of ${formatCount(event.capacity)}` : "with no cap"}
                 </span>
@@ -153,42 +189,6 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
         </div>
       </Sheet>
 
-      <section aria-labelledby="paying" className="flex flex-col gap-5">
-        <h2 id="paying" className="font-display text-2xl text-ink">
-          Who pays for showing up
-        </h2>
-        {event.campaigns.length ? (
-          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {event.campaigns.map((campaign) => (
-              <li key={campaign.id}>
-                <Sheet tone="inset" className="h-full">
-                  <SheetSection className="flex h-full flex-col gap-3 py-5 sm:py-6">
-                    <div className="flex items-baseline justify-between gap-4">
-                      <p className="font-medium text-ink">{campaign.sponsorName}</p>
-                      <span className="font-mono text-xs text-ink-faint">Campaign {campaign.id}</span>
-                    </div>
-                    <p className="text-base text-ink-soft">{campaign.name}</p>
-                    <p className="text-lg text-ink">
-                      <Amount value={campaign.attendeeAmount} symbol={campaign.tokenSymbol} />
-                      <span className="ml-2 text-base text-ink-soft">to each verified attendee</span>
-                    </p>
-                    <p className="mt-auto text-sm text-ink-faint">
-                      Needs {PROOF_MODES[campaign.minProofMode].name.toLowerCase()}
-                      {campaign.requireQieId ? ", and a QIE ID on the wallet you cash out to." : "."}
-                    </p>
-                  </SheetSection>
-                </Sheet>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="max-w-prose text-base text-ink-soft">
-            No sponsor is paying for this event yet. Check-ins still earn a stamp, and a sponsor can approve the event
-            into a campaign at any time.
-          </p>
-        )}
-      </section>
-
       <section aria-labelledby="recent" className="flex flex-col gap-5">
         <h2 id="recent" className="font-display text-2xl text-ink">
           Recent check-ins
@@ -198,10 +198,10 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
             {event.recentCheckIns.map((checkIn) => (
               <li
                 key={`${checkIn.attendee}-${checkIn.tx}`}
-                className="flex flex-col gap-2 border-b border-rule-soft py-3 sm:flex-row sm:items-center sm:gap-6"
+                className="flex flex-col items-start gap-2 border-b border-rule-soft py-3 sm:grid sm:grid-cols-[15rem_minmax(0,1fr)_auto] sm:items-center sm:gap-6"
               >
                 <AddressChip address={checkIn.attendee} name={checkIn.name} link="passport" copy={false} />
-                <span className="text-sm text-ink-soft sm:flex-1">
+                <span className="text-sm text-ink-soft">
                   {formatDate(checkIn.at)}, {formatTime(checkIn.at)}, {PROOF_MODES[checkIn.mode].name.toLowerCase()}
                 </span>
                 <TxLink hash={checkIn.tx} />

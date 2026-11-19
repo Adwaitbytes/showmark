@@ -35,7 +35,7 @@ export function AddressChip({ address, name, link = "explorer", copy = true, cla
 
   return (
     <span
-      className={cn("inline-flex max-w-full items-center gap-1 rounded-doc bg-paper-deep py-0.5 pr-0.5 pl-2.5", className)}
+      className={cn("inline-flex max-w-full items-center gap-1 rounded-doc bg-paper-deep py-0.5 pl-2.5", copy ? "pr-0.5" : "pr-2.5", className)}
       title={address}
     >
       {link === "passport" ? (

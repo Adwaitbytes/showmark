@@ -8,6 +8,7 @@ import { BlankStampMark } from "@/ui/EmptyState";
 import { formatCount, formatDate } from "@/ui/format";
 import { Guilloche } from "@/ui/patterns/guilloche";
 import { createRng } from "@/ui/seed";
+import { Perforation } from "@/ui/Perforation";
 import { Sheet } from "@/ui/Sheet";
 import { Stamp } from "@/ui/stamp/Stamp";
 import { stampSpec } from "@/ui/stamp/stampSvg";
@@ -37,11 +38,11 @@ function machineReadableZone(passport: Passport): [string, string] {
   return [line1, line2];
 }
 
-function DataField({ label, children }: { label: string; children: React.ReactNode }) {
+function DataField({ label, figure = false, children }: { label: string; figure?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <dt className="text-xs font-medium text-ink-soft">{label}</dt>
-      <dd className="text-base text-ink">{children}</dd>
+      <dd className={figure ? "font-display text-3xl leading-none text-ink" : "text-base text-ink"}>{children}</dd>
     </div>
   );
 }
@@ -77,8 +78,12 @@ function DataPage({ passport }: { passport: Passport }) {
             </h1>
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
-            <DataField label="Stamps">{formatCount(passport.stamps.length)}</DataField>
-            <DataField label="Cities">{formatCount(cities)}</DataField>
+            <DataField label="Stamps" figure>
+              {formatCount(passport.stamps.length)}
+            </DataField>
+            <DataField label="Cities" figure>
+              {formatCount(cities)}
+            </DataField>
             <DataField label="First stamp">{first ? formatDate(first.at) : "Not yet"}</DataField>
             <DataField label="QIE ID">{passport.holdsQieId ? "Held" : "None yet"}</DataField>
             <div className="col-span-2 flex flex-col gap-1.5">
@@ -109,16 +114,19 @@ function DataPage({ passport }: { passport: Passport }) {
   );
 }
 
+/** A punch card: punched holes show the desk through the ticket, the next one waits as a ring. */
 function Punches({ current, best }: { current: number; best: number }) {
-  const total = Math.max(best, current) + 1;
+  const total = Math.min(Math.max(best, current) + 1, 12);
   return (
-    <span className="flex flex-wrap gap-1.5" aria-hidden="true">
-      {Array.from({ length: Math.min(total, 12) }, (_, i) => (
+    <span className="flex flex-wrap gap-2" aria-hidden="true">
+      {Array.from({ length: total }, (_, i) => (
         <span
           key={i}
           className={cn(
-            "size-4 rounded-pill",
-            i < current ? "bg-ink" : "bg-paper shadow-[inset_0_1px_2px_rgb(var(--shadow-color)/0.25)]",
+            "size-5 rounded-pill",
+            i < current
+              ? "bg-paper shadow-[inset_0_1.5px_3px_rgb(var(--shadow-color)/0.35)]"
+              : "border-[1.5px] border-dashed border-rule",
           )}
         />
       ))}
@@ -133,17 +141,25 @@ function Streaks({ streaks }: { streaks: Passport["streaks"] }) {
       <h2 id="streaks" className="font-display text-2xl text-ink">
         Streaks
       </h2>
-      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {streaks.map((streak) => (
           <li key={streak.seriesId}>
-            <Sheet tone="inset" className="flex flex-col gap-3 px-5 py-5">
-              <p className="font-medium text-ink">{streak.seriesName}</p>
-              <Punches current={streak.current} best={streak.best} />
-              <p className="text-sm text-ink-soft">
-                {streak.current > 0
-                  ? `${formatCount(streak.current)} in a row now. Best run ${formatCount(streak.best)}.`
-                  : `Best run ${formatCount(streak.best)}. Come to the next one to start again.`}
-              </p>
+            <Sheet className="flex h-full flex-col sm:flex-row">
+              <div className="flex flex-1 flex-col gap-3 px-5 py-5 sm:px-6">
+                <p className="font-medium text-ink">{streak.seriesName}</p>
+                <Punches current={streak.current} best={streak.best} />
+                <p className="text-sm text-ink-soft">
+                  {streak.current > 0
+                    ? `${formatCount(streak.current)} in a row now. Best run ${formatCount(streak.best)}.`
+                    : `Best run ${formatCount(streak.best)}. Come to the next one to start again.`}
+                </p>
+              </div>
+              <Perforation orientation="vertical" className="max-sm:hidden" />
+              <Perforation className="sm:hidden" />
+              <div className="flex items-center gap-3 px-5 py-4 sm:w-28 sm:flex-col sm:justify-center sm:gap-1 sm:px-4">
+                <span className="font-display text-4xl leading-none text-ink">{formatCount(streak.current)}</span>
+                <span className="text-sm text-ink-soft">in a row</span>
+              </div>
             </Sheet>
           </li>
         ))}
@@ -202,11 +218,11 @@ function StampPage({
           </Link>
         );
       })}
-      {stamps.length === 0 ? (
+      {stamps.length === 0 && pageNumber === 1 ? (
         <div className="absolute inset-0 grid place-items-center p-8 text-center">
           <div className="flex flex-col items-center gap-3">
             <BlankStampMark className="size-24" />
-            <p className="max-w-56 text-sm text-ink-soft">The next stamp lands on this page.</p>
+            <p className="max-w-56 text-sm text-ink-soft">The first stamp lands on this page.</p>
           </div>
         </div>
       ) : null}
@@ -234,7 +250,7 @@ function Booklet({ passport }: { passport: Passport }) {
         <h2 id="stamps" className="font-display text-2xl text-ink">
           Stamps
         </h2>
-        <p className="text-sm text-ink-soft">Oldest first. Each stamp opens its event.</p>
+        {ordered.length ? <p className="text-sm text-ink-soft">Oldest first. Each stamp opens its event.</p> : null}
       </div>
       <div className="flex flex-col gap-8">
         {spreads.map(([left, right], spreadIndex) => (
@@ -297,18 +313,15 @@ export function PassportView({ passport }: { passport: Passport }) {
   return (
     <div className="flex flex-col gap-12 sm:gap-14">
       <DataPage passport={passport} />
+      <Streaks streaks={passport.streaks} />
+      <Booklet passport={passport} />
       {passport.stamps.length === 0 ? (
-        <div className="flex flex-col items-start gap-4">
-          <p className="max-w-prose text-md text-ink-soft">
-            No stamps yet. A stamp lands here the moment this pass checks in at a Showmark event.
-          </p>
+        <div>
           <Button href="/docs/check-in" variant="secondary">
             How check-in works
           </Button>
         </div>
       ) : null}
-      <Streaks streaks={passport.streaks} />
-      <Booklet passport={passport} />
       <Register stamps={passport.stamps} />
     </div>
   );
