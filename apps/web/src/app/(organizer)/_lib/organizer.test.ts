@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { getAddress } from "viem";
 import { byteLength, DEFAULT_PASS_AGE, encodeMetadata, parseLocalDateTime, toLocalDateTimeValue, validateEventForm, type EventFormValues } from "./event-form";
 import { attendeesCsv } from "./csv";
 import { formatQie } from "./tx";
