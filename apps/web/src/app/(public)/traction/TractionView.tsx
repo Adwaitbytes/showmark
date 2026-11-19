@@ -53,7 +53,7 @@ export function Definitions() {
       <h2 id="definitions" className="font-display text-2xl text-ink">
         How each number is counted
       </h2>
-      <dl className="grid gap-x-12 border-t border-ink md:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-x-12 border-t border-ink md:grid-cols-2">
         {DEFINITIONS.map(([term, meaning]) => (
           <div key={term} className="flex flex-col gap-1 border-b border-rule-soft py-4">
             <dt className="font-medium text-ink">{term}</dt>
@@ -111,7 +111,7 @@ export function TractionView({ traction }: { traction: Traction }) {
       </div>
       <ExplorerLinks />
 
-      <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
         <Sheet as="section" aria-labelledby="people">
           <SheetSection>
             <h2 id="people" className="mb-3 font-display text-xl text-ink">

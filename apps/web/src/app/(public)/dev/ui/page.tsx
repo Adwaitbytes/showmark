@@ -135,7 +135,7 @@ export default async function UiGallery() {
         </Section>
 
         <Section id="fields" title="Fields">
-          <div className="grid max-w-3xl gap-6 sm:grid-cols-2">
+          <div className="grid grid-cols-1 max-w-3xl gap-6 sm:grid-cols-2">
             <TextField id="g-name" label="Event name" hint="People see this on their stamp." placeholder="Campus builders meetup" />
             <TextField
               id="g-amount"
@@ -154,7 +154,7 @@ export default async function UiGallery() {
         </Section>
 
         <Section id="sheets" title="Sheets, perforation and stubs">
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
             <Sheet>
               <SheetSection>
                 <p className="font-display text-xl">A document</p>
@@ -240,10 +240,10 @@ export default async function UiGallery() {
           </div>
           <Ledger label="Example payout" className="mt-8 max-w-md">
             <LedgerRow label="Per verified person" value="2.00 QUSDC" />
-            <LedgerRow label="Protocol fee, 2%" value="0.04 QUSDC" note="Capped at 5% in the contract." />
+            <LedgerRow label="Protocol fee, 2.5%" value="0.05 QUSDC" note="Capped at 5% in the contract." />
             <LedgerRow label="To the attendee, 60%" value="1.17 QUSDC" />
-            <LedgerRow label="To the organizer" value="0.79 QUSDC" />
-            <LedgerRow label="Settled" value="1.96 QUSDC" total />
+            <LedgerRow label="To the organizer" value="0.78 QUSDC" />
+            <LedgerRow label="Settled" value="2.00 QUSDC" total />
           </Ledger>
         </Section>
 
@@ -265,7 +265,7 @@ export default async function UiGallery() {
         </Section>
 
         <Section id="states" title="Loading, empty and error">
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
             <Sheet>
               <SheetSection>
                 <LoadingRegion label="Loading the event">

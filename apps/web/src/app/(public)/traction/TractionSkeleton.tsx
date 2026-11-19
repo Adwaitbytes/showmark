@@ -8,7 +8,7 @@ export function TractionSkeleton() {
         <Skeleton className="h-24 w-48" />
         <SkeletonText lines={2} className="w-full max-w-md" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
         {[0, 1].map((i) => (
           <Sheet key={i}>
             <SheetSection className="flex flex-col gap-4">

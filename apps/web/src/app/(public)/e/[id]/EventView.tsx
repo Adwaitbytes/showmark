@@ -75,7 +75,7 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
             <h1 id="event-name" className="font-display text-[clamp(2.5rem,6vw,4rem)] leading-[1] tracking-[-0.015em] text-ink">
               {name}
             </h1>
-            <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
               <div className="flex flex-col gap-0.5">
                 <dt className="text-sm text-ink-soft">When</dt>
                 <dd className="text-base text-ink">{formatEventWindow(event.startsAt, event.endsAt)}</dd>
@@ -158,7 +158,7 @@ export function EventView({ event, now }: { event: EventDetail; now: number }) {
           Who pays for showing up
         </h2>
         {event.campaigns.length ? (
-          <ul className="grid gap-4 md:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {event.campaigns.map((campaign) => (
               <li key={campaign.id}>
                 <Sheet tone="inset" className="h-full">

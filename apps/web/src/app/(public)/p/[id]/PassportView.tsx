@@ -55,7 +55,7 @@ function DataPage({ passport }: { passport: Passport }) {
   return (
     <Sheet as="section" aria-labelledby="holder" className="overflow-hidden">
       <Guilloche seed={seed} variant="band" className="h-10 w-full" detail={160} />
-      <div className="relative grid gap-8 px-5 py-7 sm:grid-cols-[auto_1fr] sm:gap-10 sm:px-9 sm:py-9">
+      <div className="relative grid grid-cols-1 gap-8 px-5 py-7 sm:grid-cols-[auto_1fr] sm:gap-10 sm:px-9 sm:py-9">
         <Guilloche
           seed={`${seed}:watermark`}
           className="pointer-events-none absolute -right-24 -bottom-28 size-[26rem] opacity-[0.16]"
@@ -133,7 +133,7 @@ function Streaks({ streaks }: { streaks: Passport["streaks"] }) {
       <h2 id="streaks" className="font-display text-2xl text-ink">
         Streaks
       </h2>
-      <ul className="grid gap-4 md:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {streaks.map((streak) => (
           <li key={streak.seriesId}>
             <Sheet tone="inset" className="flex flex-col gap-3 px-5 py-5">
@@ -240,7 +240,7 @@ function Booklet({ passport }: { passport: Passport }) {
         {spreads.map(([left, right], spreadIndex) => (
           <div
             key={spreadIndex}
-            className="relative grid gap-4 md:grid-cols-2 md:gap-0 md:rounded-doc md:shadow-lift"
+            className="relative grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-0 md:rounded-doc md:shadow-lift"
           >
             <div className="shadow-sheet md:shadow-none">
               <StampPage stamps={left} pageNumber={spreadIndex * 2 + 1} holder={holder} side="left" />
@@ -272,7 +272,7 @@ function Register({ stamps }: { stamps: StampRecord[] }) {
         {ordered.map((stamp) => (
           <li
             key={`${stamp.eventId}-${stamp.tx}`}
-            className="grid gap-1 border-b border-rule-soft py-3.5 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-6"
+            className="grid grid-cols-1 gap-1 border-b border-rule-soft py-3.5 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-6"
           >
             <Link href={`/e/${stamp.eventId}`} className="font-medium text-ink underline decoration-transparent underline-offset-4 hover:decoration-current">
               {stamp.eventName}

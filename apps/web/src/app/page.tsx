@@ -110,7 +110,7 @@ function SectionHeading({ id, title, children }: { id: string; title: string; ch
 
 function Hero() {
   return (
-    <Container className="grid items-center gap-14 pt-12 pb-16 sm:pt-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-16 lg:pt-24 lg:pb-24">
+    <Container className="grid grid-cols-1 items-center gap-14 pt-12 pb-16 sm:pt-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-16 lg:pt-24 lg:pb-24">
       <div className="flex flex-col gap-7">
         <h1 className="max-w-[13ch] font-display text-[clamp(3rem,7.4vw,5.5rem)] leading-[0.95] tracking-[-0.02em] text-ink">
           Sponsors pay only for people who actually show up.
@@ -156,15 +156,15 @@ function Hero() {
               }}
             />
             <Ledger label="Where one person's 2 QUSDC goes, in QUSDC" className="text-sm">
-              <LedgerRow label="To you" value="1.20" className="py-1.5" />
-              <LedgerRow label="Organizer" value="0.76" className="py-1.5" />
-              <LedgerRow label="Fee" value="0.04" className="py-1.5" />
+              <LedgerRow label="To you" value="1.17" className="py-1.5" />
+              <LedgerRow label="Organizer" value="0.78" className="py-1.5" />
+              <LedgerRow label="Fee" value="0.05" className="py-1.5" />
               <LedgerRow label="Per person" value="2.00" total className="py-1.5" />
             </Ledger>
           </SheetSection>
         </Sheet>
         <figcaption className="mt-4 text-sm text-ink-faint">
-          A specimen, not real data. Sponsor sets 2 QUSDC per person, 60% to the attendee, 2% fee.
+          A specimen, not real data: 2 QUSDC per person, a 2.5% fee, and 60% of the rest to the attendee.
         </figcaption>
       </figure>
     </Container>
@@ -291,7 +291,7 @@ function Integrations() {
         <SectionHeading id="integrations" title="Built on QIE, with each part doing a job">
           Six pieces of the QIE ecosystem, each one there because the product needs it.
         </SectionHeading>
-        <dl className="grid border-t border-ink md:grid-cols-2 md:gap-x-12">
+        <dl className="grid grid-cols-1 border-t border-ink md:grid-cols-2 md:gap-x-12">
           {integrations.map((item) => (
             <div key={item.name} className="flex flex-col gap-2 border-b border-rule-soft py-6 sm:py-7">
               <dt className="font-display text-xl text-ink">{item.name}</dt>
@@ -312,7 +312,7 @@ function Honesty() {
         <SectionHeading id="honesty" title="What the chain enforces, and what it cannot">
           Sponsors are trusting us with money, so here is exactly where the guarantees stop.
         </SectionHeading>
-        <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
           <div className="flex flex-col gap-5">
             <h3 className="text-lg font-medium text-ink">Enforced by the contracts</h3>
             <ul className="flex flex-col gap-4">

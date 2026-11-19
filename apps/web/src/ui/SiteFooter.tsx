@@ -60,7 +60,7 @@ export function SiteFooter() {
 
   return (
     <footer className="mt-24 border-t border-rule-soft sm:mt-32">
-      <Container className="grid gap-12 py-14 md:grid-cols-[1.3fr_2fr] md:gap-16 md:py-16">
+      <Container className="grid grid-cols-1 gap-12 py-14 md:grid-cols-[1.3fr_2fr] md:gap-16 md:py-16">
         <div className="flex max-w-sm flex-col gap-4">
           <Link href="/" className="inline-flex w-fit min-h-11 items-center text-[1.75rem]" aria-label="Showmark, home">
             <Wordmark />
