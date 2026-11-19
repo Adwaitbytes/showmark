@@ -263,7 +263,7 @@ All bodies validated with zod. Errors return `{ error: { code: string, message: 
 | Route | Method | Body / query | Returns |
 |---|---|---|---|
 | `/api/relay/check-in` | POST | `CheckInData` (hex strings, bigint as decimal string) | `{ txHash, status: "submitted" }` after simulation passes; `422` with status code mapped to copy if simulation fails |
-| `/api/relay/check-in/batch` | POST | `{ items: CheckInData[] }` max 50 (door-scans-you offline queue) | `{ txHash, accepted: number }` |
+| `/api/relay/check-in/batch` | POST | `{ items: CheckInData[] }` max 50 (door-scans-you offline queue) | `{ txHash: Hex \| null, accepted: number, rejected: {index, code, message, action}[] }` (txHash null when nothing new needed sending) |
 | `/api/relay/link-wallet` | POST | `{ pass, wallet, deadline, passSig, walletSig, relocateEventIds }` | `{ txHash }` |
 | `/api/relay/withdraw` | POST | `{ token, account }` | `{ txHash }` |
 | `/api/tx/[hash]` | GET | | `{ status: "pending" | "success" | "reverted", blockNumber? }` |
