@@ -7,7 +7,20 @@ import { createState, installMocks, REGISTRY, sampleEvent } from "./mocks";
 // The door screen against a mocked chain: it must sign codes with its own door key, rotate them every 15 seconds,
 // and show the live count from the registry.
 
-const doorPassTypes = { DoorPass: [{ name: "eventId", type: "uint256" }, { name: "issuedAt", type: "uint64" }] } as const;
+const doorPassTypes = {
+  DoorPass: [
+    { name: "eventId", type: "uint256" },
+    { name: "issuedAt", type: "uint64" },
+    { name: "ticket", type: "address" },
+  ],
+} as const;
+const checkInTypes = {
+  CheckIn: [
+    { name: "eventId", type: "uint256" },
+    { name: "attendee", type: "address" },
+    { name: "mode", type: "uint8" },
+  ],
+} as const;
 const domain = { name: "Showmark", version: "1", chainId: 1983, verifyingContract: REGISTRY } as const;
 
 async function storedDoorKey(page: import("@playwright/test").Page): Promise<string> {
@@ -31,7 +44,7 @@ test("shows a signed code that rotates every 15 seconds and the live count", asy
 
   const qr = page.getByTestId("door-qr");
   // The first code appears straight away, not at the next rotation.
-  await expect(qr).toHaveAttribute("data-url", /\/c\/1\.\d+\.[A-Za-z0-9_-]{87}$/, { timeout: 4_000 });
+  await expect(qr).toHaveAttribute("data-url", /\/c\/1\.\d+\.[A-Za-z0-9_-]{87}\.[A-Za-z0-9_-]{43}$/, { timeout: 4_000 });
   const firstUrl = (await qr.getAttribute("data-url")) ?? "";
   const first = decodeDoorPass(firstUrl);
   expect(first).not.toBeNull();
@@ -39,7 +52,7 @@ test("shows a signed code that rotates every 15 seconds and the live count", asy
 
   // The code is signed by the key this browser stored, under the registry's EIP-712 domain.
   const doorKey = await storedDoorKey(page);
-  const signer = await recoverTypedDataAddress({ domain, types: doorPassTypes, primaryType: "DoorPass", message: { eventId: 1n, issuedAt: first.issuedAt }, signature: first.doorSig });
+  const signer = await recoverTypedDataAddress({ domain, types: doorPassTypes, primaryType: "DoorPass", message: { eventId: 1n, issuedAt: first.issuedAt, ticket: privateKeyToAccount(first.ticketKey).address }, signature: first.doorSig });
   expect(getAddress(signer)).toBe(getAddress(doorKey));
   expect(Math.abs(Number(first.issuedAt) - Date.now() / 1000)).toBeLessThan(20);
 
@@ -47,6 +60,8 @@ test("shows a signed code that rotates every 15 seconds and the live count", asy
   await expect(qr).not.toHaveAttribute("data-url", firstUrl, { timeout: 17_000 });
   const second = decodeDoorPass((await qr.getAttribute("data-url")) ?? "");
   expect(second).not.toBeNull();
+  // Every rotation carries its own ticket key.
+  expect(second!.ticketKey).not.toBe(first.ticketKey);
   const gap = Number(second!.issuedAt - first.issuedAt);
   expect(gap).toBeGreaterThanOrEqual(1);
   expect(gap).toBeLessThanOrEqual(16);
@@ -98,24 +113,30 @@ test("door scans you: signs an attestation for a scanned code and queues it when
   const attendee = privateKeyToAccount(generatePrivateKey());
   const attendeeSig = await attendee.signTypedData({
     domain,
-    types: { CheckIn: [{ name: "eventId", type: "uint256" }, { name: "attendee", type: "address" }] },
+    types: checkInTypes,
     primaryType: "CheckIn",
-    message: { eventId: 1n, attendee: attendee.address },
+    message: { eventId: 1n, attendee: attendee.address, mode: 2 },
   });
   await page.getByLabel("Or type a code").fill(encodeAttendeeCode({ eventId: 1n, attendee: attendee.address, attendeeSig }));
   await page.getByRole("button", { name: "Check in", exact: true }).click();
   await expect(page.getByTestId("scan-result")).toHaveAttribute("data-tone", "success");
   expect(state.checkInsPosted).toHaveLength(1);
-  expect(state.checkInsPosted[0]).toMatchObject({ eventId: "1", attendee: attendee.address, mode: 2 });
+  expect(state.checkInsPosted[0]).toMatchObject({
+    eventId: "1",
+    attendee: attendee.address,
+    mode: 2,
+    ticket: "0x0000000000000000000000000000000000000000",
+    ticketSig: "0x",
+  });
 
   // Offline: the next scan is saved on the device and sent in a batch when the connection returns.
   await context.setOffline(true);
   const second = privateKeyToAccount(generatePrivateKey());
   const secondSig = await second.signTypedData({
     domain,
-    types: { CheckIn: [{ name: "eventId", type: "uint256" }, { name: "attendee", type: "address" }] },
+    types: checkInTypes,
     primaryType: "CheckIn",
-    message: { eventId: 1n, attendee: second.address },
+    message: { eventId: 1n, attendee: second.address, mode: 2 },
   });
   await page.getByLabel("Or type a code").fill(encodeAttendeeCode({ eventId: 1n, attendee: second.address, attendeeSig: secondSig }));
   await page.getByRole("button", { name: "Check in", exact: true }).click();

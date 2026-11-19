@@ -49,7 +49,9 @@ export function RotatingCode({ doorKey, eventId, registry, clock, className }: P
         const issuedAt = issuedAtFor(now);
         const pass = await signDoorPass(doorKey, eventId, issuedAt, registry);
         const url = doorPassUrl(window.location.origin, pass);
-        // Low error correction keeps the modules large, which is what matters for a camera at the back of a hall.
+        // Low error correction keeps the modules large, which is what matters for a camera at the back of a hall. With
+        // the ticket key the link is about 170 characters, a version 8 code (49 modules); on a 1080p projector that is
+        // still about 13 pixels per module, and the code decodes from a quarter-size capture of the screen.
         const svg = await QRCode.toString(url, { type: "svg", margin: 0, errorCorrectionLevel: "L", color: { dark: "#141311", light: "#00000000" } });
         if (!cancelled) {
           setCode({ slot, svg, url, issuedAt });

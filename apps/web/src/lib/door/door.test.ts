@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { getAddress, recoverTypedDataAddress, type Address, type Hex } from "viem";
+import { getAddress, recoverTypedDataAddress, zeroAddress, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { checkInTypes, doorAttestTypes, doorPassTypes, registryDomain } from "@/lib/chain/eip712";
+import { checkInTypes, doorAttestTypes, doorPassTypes, registryDomain, ticketTypes } from "@/lib/chain/eip712";
 import { activeChainId } from "@/lib/chain/chains";
 import { decodeAttendeeCode, decodeDoorPass, doorPassUrl, encodeAttendeeCode } from "@/lib/qr/payload";
 import { ChainClock, describeSkew } from "./clock";
@@ -92,36 +92,73 @@ describe("door keys", () => {
 describe("door signatures", () => {
   const doorKey = privateKeyToAccount(generatePrivateKey());
 
-  it("signs a DoorPass that recovers to the door key under the registry domain", async () => {
+  const ticketOf = (pass: { ticketKey: Hex }) => privateKeyToAccount(pass.ticketKey).address;
+
+  it("signs a DoorPass over a fresh ticket that recovers to the door key under the registry domain", async () => {
     const pass = await signDoorPass(doorKey, 12n, 1_764_245_000n, REGISTRY);
     const recovered = await recoverTypedDataAddress({
       domain: registryDomain(REGISTRY),
       types: doorPassTypes,
       primaryType: "DoorPass",
-      message: { eventId: 12n, issuedAt: 1_764_245_000n },
+      message: { eventId: 12n, issuedAt: 1_764_245_000n, ticket: ticketOf(pass) },
       signature: pass.doorSig,
     });
     expect(recovered).toBe(doorKey.address);
   });
 
-  it("does not recover to the door key under another registry or event", async () => {
+  it("uses a new ticket key for every rotation", async () => {
+    const a = await signDoorPass(doorKey, 12n, 1_764_245_000n, REGISTRY);
+    const b = await signDoorPass(doorKey, 12n, 1_764_245_015n, REGISTRY);
+    expect(a.ticketKey).not.toBe(b.ticketKey);
+    expect(ticketOf(a)).not.toBe(doorKey.address);
+  });
+
+  it("lets whoever holds the ticket key sign a Ticket for their own address", async () => {
     const pass = await signDoorPass(doorKey, 12n, 1_764_245_000n, REGISTRY);
+    const attendee = privateKeyToAccount(generatePrivateKey()).address;
+    const ticketSig = await privateKeyToAccount(pass.ticketKey).signTypedData({
+      domain: registryDomain(REGISTRY),
+      types: ticketTypes,
+      primaryType: "Ticket",
+      message: { eventId: 12n, attendee },
+    });
+    const signer = await recoverTypedDataAddress({
+      domain: registryDomain(REGISTRY),
+      types: ticketTypes,
+      primaryType: "Ticket",
+      message: { eventId: 12n, attendee },
+      signature: ticketSig,
+    });
+    expect(signer).toBe(ticketOf(pass));
+  });
+
+  it("does not recover to the door key under another registry, event or ticket", async () => {
+    const pass = await signDoorPass(doorKey, 12n, 1_764_245_000n, REGISTRY);
+    const message = { eventId: 12n, issuedAt: 1_764_245_000n, ticket: ticketOf(pass) };
     const otherContract = await recoverTypedDataAddress({
       domain: registryDomain(OTHER_REGISTRY),
       types: doorPassTypes,
       primaryType: "DoorPass",
-      message: { eventId: 12n, issuedAt: 1_764_245_000n },
+      message,
       signature: pass.doorSig,
     });
     const otherEvent = await recoverTypedDataAddress({
       domain: registryDomain(REGISTRY),
       types: doorPassTypes,
       primaryType: "DoorPass",
-      message: { eventId: 13n, issuedAt: 1_764_245_000n },
+      message: { ...message, eventId: 13n },
+      signature: pass.doorSig,
+    });
+    const otherTicket = await recoverTypedDataAddress({
+      domain: registryDomain(REGISTRY),
+      types: doorPassTypes,
+      primaryType: "DoorPass",
+      message: { ...message, ticket: privateKeyToAccount(generatePrivateKey()).address },
       signature: pass.doorSig,
     });
     expect(otherContract).not.toBe(doorKey.address);
     expect(otherEvent).not.toBe(doorKey.address);
+    expect(otherTicket).not.toBe(doorKey.address);
   });
 
   it("round-trips the door pass through the QR url", async () => {
@@ -137,14 +174,14 @@ describe("door signatures", () => {
       domain: registryDomain(REGISTRY),
       types: checkInTypes,
       primaryType: "CheckIn",
-      message: { eventId: 12n, attendee: attendee.address },
+      message: { eventId: 12n, attendee: attendee.address, mode: 2 },
     });
     const code = decodeAttendeeCode(encodeAttendeeCode({ eventId: 12n, attendee: attendee.address, attendeeSig }));
     expect(code).not.toBeNull();
     if (!code) return;
 
     const signed = await signDoorAttest(doorKey, code, 1_764_245_100n, REGISTRY);
-    expect(signed).toMatchObject({ eventId: "12", attendee: attendee.address, mode: 2, doorTime: "1764245100", attendeeSig });
+    expect(signed).toMatchObject({ eventId: "12", attendee: attendee.address, mode: 2, doorTime: "1764245100", attendeeSig, ticket: zeroAddress, ticketSig: "0x" });
 
     const recovered = await recoverTypedDataAddress({
       domain: registryDomain(REGISTRY),
@@ -231,7 +268,16 @@ describe("chain clock", () => {
 
 function attestation(n: number, eventId = "12"): SignedAttestation {
   const attendee = getAddress(`0x${n.toString(16).padStart(40, "0")}`);
-  return { eventId, attendee, mode: 2, doorTime: "1764245100", attendeeSig: `0x${"11".repeat(65)}`, doorSig: `0x${"22".repeat(65)}` };
+  return {
+    eventId,
+    attendee,
+    mode: 2,
+    doorTime: "1764245100",
+    ticket: zeroAddress,
+    attendeeSig: `0x${"11".repeat(65)}`,
+    doorSig: `0x${"22".repeat(65)}`,
+    ticketSig: "0x",
+  };
 }
 
 describe("offline queue", () => {
