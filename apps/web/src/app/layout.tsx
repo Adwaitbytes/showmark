@@ -4,6 +4,7 @@ import { ViewTransition } from "react";
 import { SITE } from "@/lib/copy/site";
 import { THEME_STORAGE_KEY } from "@/ui/theme";
 import "./globals.css";
+import { SkipLink } from "@/ui/SkipLink";
 
 const display = Instrument_Serif({
   weight: "400",
@@ -59,12 +60,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: restoreTheme }} />
       </head>
       <body className="flex min-h-dvh flex-col">
-        <a
-          href="#main"
-          className="fixed top-3 left-3 z-50 -translate-y-24 rounded-doc bg-ink px-4 py-3 text-base font-medium text-paper transition-transform focus-visible:translate-y-0"
-        >
-          Skip to content
-        </a>
+        <SkipLink />
         <ViewTransition>{children}</ViewTransition>
       </body>
     </html>
