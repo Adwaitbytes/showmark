@@ -34,6 +34,8 @@ export interface StampParams {
   rotate?: boolean;
   /** Prefix for filter ids. Must be unique per page when the same stamp appears twice. */
   idPrefix?: string;
+  /** Printed after "NO." on the stamp. Defaults to the event id; null prints no number (previews). */
+  serial?: string | null;
 }
 
 export interface StampSpec {
@@ -103,6 +105,12 @@ function fitText(
   return { text: `${text.slice(0, maxChars - 1).trimEnd()}…`, size: minSize };
 }
 
+function serialTspan(p: StampParams, size: number): string {
+  const serial = p.serial === undefined ? p.eventId : p.serial;
+  if (serial === null || clean(serial) === "") return "";
+  return `<tspan dx="${r1(size * 0.9)}">NO. ${escapeXml(clean(serial))}</tspan>`;
+}
+
 function star(cx: number, cy: number, outer: number): string {
   const inner = outer * 0.42;
   const points: string[] = [];
@@ -165,7 +173,7 @@ function roundBody(p: StampParams, paint: Painted, id: string): string {
     star(c - 76, c + 1, 5),
     star(c + 76, c + 1, 5),
     `<text font-size="${top.size}" letter-spacing="${r1(top.size * 0.14)}"><textPath href="#${id}-top" startOffset="50%">${escapeXml(top.text)}</textPath></text>`,
-    `<text font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.18)}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}<tspan dx="${r1(bottom.size * 0.9)}">NO. ${escapeXml(clean(p.eventId))}</tspan></textPath></text>`,
+    `<text font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.18)}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</textPath></text>`,
     `<text x="${c}" y="${c - 22}" font-size="8.5" letter-spacing="2">PRESENT</text>`,
     `<text x="${c}" y="${c + 9}" font-size="22" letter-spacing="0.5">${escapeXml(`${day} ${month}`)}</text>`,
     `<text x="${c}" y="${c + 30}" font-size="10" letter-spacing="2.4">${escapeXml(year)}</text>`,
@@ -196,7 +204,7 @@ function ovalBody(p: StampParams, paint: Painted, id: string): string {
     star(cx - 98, cy + 1, 4.5),
     star(cx + 98, cy + 1, 4.5),
     `<text font-size="${top.size}" letter-spacing="${r1(top.size * 0.14)}"><textPath href="#${id}-top" startOffset="50%">${escapeXml(top.text)}</textPath></text>`,
-    `<text font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.18)}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}<tspan dx="${r1(bottom.size * 0.9)}">NO. ${escapeXml(clean(p.eventId))}</tspan></textPath></text>`,
+    `<text font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.18)}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</textPath></text>`,
     `<text x="${cx}" y="${cy - 8}" font-size="8" letter-spacing="2">PRESENT</text>`,
     `<text x="${cx}" y="${cy + 14}" font-size="18" letter-spacing="0.6">${escapeXml(`${day} ${month} ${year}`)}</text>`,
     `</g>`,
@@ -222,7 +230,7 @@ function boxBody(p: StampParams, paint: Painted): string {
     `<text x="${cx}" y="62" font-size="${name.size}" letter-spacing="${r1(name.size * 0.12)}">${escapeXml(name.text)}</text>`,
     `<text x="${cx}" y="94" font-size="8.5" letter-spacing="2.2">PRESENT</text>`,
     `<text x="${cx}" y="123" font-size="24" letter-spacing="0.6">${escapeXml(`${day} ${month} ${year}`)}</text>`,
-    `<text x="${cx}" y="154" font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.16)}">${escapeXml(bottom.text)}<tspan dx="${r1(bottom.size * 0.9)}">NO. ${escapeXml(clean(p.eventId))}</tspan></text>`,
+    `<text x="${cx}" y="154" font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.16)}">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</text>`,
     `</g>`,
   ].join("");
 }
@@ -238,10 +246,10 @@ function inkBleedFilter(id: string, seed: number, width: number, height: number)
     `<feDisplacementMap in="SourceGraphic" in2="grit" scale="2.2" xChannelSelector="R" yChannelSelector="G" result="rough"/>`,
     `<feGaussianBlur in="rough" stdDeviation="0.28" result="bleed"/>`,
     `<feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="${(seed >>> 3) % 991}" result="blot"/>`,
-    `<feColorMatrix in="blot" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.4 2.05" result="coverage"/>`,
+    `<feColorMatrix in="blot" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.1 2.05" result="coverage"/>`,
     `<feComposite in="bleed" in2="coverage" operator="in" result="inked"/>`,
     `<feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" seed="${(seed >>> 7) % 983}" result="speck"/>`,
-    `<feColorMatrix in="speck" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -7 4.6" result="holes"/>`,
+    `<feColorMatrix in="speck" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -9 6.7" result="holes"/>`,
     `<feComposite in="inked" in2="holes" operator="in"/>`,
     `</filter>`,
   ].join("");

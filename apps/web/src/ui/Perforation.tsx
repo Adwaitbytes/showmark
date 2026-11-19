@@ -8,14 +8,14 @@ export interface PerforationProps {
 }
 
 /**
- * A tear line: a row of punched holes with a bite at each end, as on a ticket stub. The holes
- * show the surface beneath the sheet, which is the page (--paper) unless the parent sets
- * --perf-hole. Place it as a direct child of <Sheet> between two <SheetSection>s.
+ * A tear line: a row of punched holes with a bite at each end, as on a ticket stub. The bites
+ * show the surface beneath the sheet, which is the page (--paper) unless a parent sets --notch.
+ * Place it as a direct child of <Sheet> between two <SheetSection>s.
  */
 export function Perforation({ orientation = "horizontal", notches = true, className }: PerforationProps) {
   const horizontal = orientation === "horizontal";
   const notch =
-    "pointer-events-none absolute size-4 rounded-pill bg-[var(--perf-hole,var(--paper))] shadow-[inset_0_1px_2px_rgb(var(--shadow-color)/0.18)]";
+    "pointer-events-none absolute size-4 rounded-pill bg-[var(--notch,var(--paper))] shadow-[inset_0_1px_2px_rgb(var(--shadow-color)/0.2)]";
   return (
     <div
       role="separator"
