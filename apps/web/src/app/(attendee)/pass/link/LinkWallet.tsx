@@ -185,7 +185,7 @@ export function LinkWallet() {
               ) : (
                 <div className="flex flex-col gap-3 sm:pl-10">
                   <Button
-                    variant="primary"
+                    variant={wallet.error?.code === "no-wallet" ? "secondary" : "primary"}
                     size="lg"
                     pending={wallet.status === "connecting" || wallet.status === "discovering"}
                     onClick={() => void connect()}
@@ -199,7 +199,7 @@ export function LinkWallet() {
                       title={walletError.message}
                       action={
                         wallet.error?.code === "no-wallet" ? (
-                          <Button href={QIE_WALLET_URL} external variant="quiet">
+                          <Button href={QIE_WALLET_URL} external variant="primary">
                             {t.link.getWallet}
                           </Button>
                         ) : null
@@ -240,15 +240,13 @@ export function LinkWallet() {
                     {t.link.checkFailed.action}
                   </Notice>
                 ) : null}
-                <Button
-                  variant={connected ? "primary" : "quiet"}
-                  size="lg"
-                  disabled={!connected || check !== "free"}
-                  pending={busy}
-                  onClick={() => void link()}
-                >
-                  {step.kind === "signing" ? t.link.signing : step.kind === "submitting" || step.kind === "confirming" ? t.link.submitting : t.link.sign}
-                </Button>
+                {connected ? (
+                  <Button variant="primary" size="lg" disabled={check !== "free"} pending={busy || check === "checking"} onClick={() => void link()}>
+                    {step.kind === "signing" ? t.link.signing : step.kind === "submitting" || step.kind === "confirming" ? t.link.submitting : t.link.sign}
+                  </Button>
+                ) : (
+                  <p className="text-sm text-ink-faint">{t.link.connectFirst}</p>
+                )}
                 {step.kind === "error" ? (
                   <Notice
                     tone="danger"

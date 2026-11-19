@@ -128,47 +128,58 @@ export function Withdraw() {
     }));
   }
 
+  const remaining = owed.filter((c) => {
+    const kind = rows[c.token]?.kind;
+    return kind !== "done" && kind !== "sending" && kind !== "confirming";
+  });
+  const busy = owed.some((c) => rows[c.token]?.kind === "sending" || rows[c.token]?.kind === "confirming");
+
+  async function withdrawAll() {
+    if (!pass) return;
+    // One at a time: the relayer serializes its nonce anyway, and each result shows as it lands.
+    for (const c of remaining) await withdraw(c.token, pass);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2 text-base text-ink-soft">
         <span>{t.withdraw.sendsTo}</span>
         <AddressChip address={wallet} name={load.passport.qieName} />
       </div>
-      <ul className="flex flex-col gap-4">
-        {owed.map((c) => {
-          const row = rows[c.token] ?? { kind: "idle" };
-          return (
-            <li key={c.token}>
-              <Sheet>
-                <SheetSection className="flex flex-col gap-4">
-                  <Amount value={c.amount} symbol={c.symbol} className="text-2xl text-ink" />
-                  {row.kind === "done" ? (
-                    <Notice tone="success" title={t.withdraw.done} action={<TxLink hash={row.txHash}>{t.common.explorer}</TxLink>}>
-                      <AddressChip address={wallet} name={load.passport.qieName} copy={false} />
-                    </Notice>
-                  ) : (
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      block
-                      pending={row.kind === "sending" || row.kind === "confirming"}
-                      onClick={() => void withdraw(c.token, pass)}
-                    >
-                      {row.kind === "sending" ? t.withdraw.sending : row.kind === "confirming" ? t.withdraw.confirming : t.withdraw.submit(c.symbol)}
-                    </Button>
-                  )}
-                  {row.kind === "confirming" ? <TxLink hash={row.txHash}>{t.common.explorer}</TxLink> : null}
+      <Sheet>
+        <SheetSection className="flex flex-col gap-5">
+          <ul className="flex flex-col divide-y divide-rule-soft">
+            {owed.map((c) => {
+              const row = rows[c.token] ?? { kind: "idle" };
+              return (
+                <li key={c.token} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <Amount value={c.amount} symbol={c.symbol} className={row.kind === "done" ? "text-xl text-ink-soft" : "text-xl text-ink"} />
+                    <span className="text-sm text-ink-soft" aria-live="polite">
+                      {row.kind === "done" ? t.withdraw.done : row.kind === "sending" ? t.withdraw.sending : row.kind === "confirming" ? t.withdraw.confirming : ""}
+                    </span>
+                  </div>
+                  {row.kind === "done" || row.kind === "confirming" ? <TxLink hash={row.txHash}>{t.common.explorer}</TxLink> : null}
                   {row.kind === "error" ? (
                     <Notice tone="danger" title={row.copy.message} action={row.txHash ? <TxLink hash={row.txHash}>{t.common.explorer}</TxLink> : null}>
                       {row.copy.action}
                     </Notice>
                   ) : null}
-                </SheetSection>
-              </Sheet>
-            </li>
-          );
-        })}
-      </ul>
+                </li>
+              );
+            })}
+          </ul>
+          {remaining.length > 0 || busy ? (
+            <Button variant="primary" size="lg" block pending={busy} onClick={() => void withdrawAll()}>
+              {remaining.length === 1 ? t.withdraw.submit(remaining[0].symbol) : t.withdraw.submitAll}
+            </Button>
+          ) : (
+            <Button href="/pass" variant="secondary" size="lg" block>
+              {t.common.backToPassport}
+            </Button>
+          )}
+        </SheetSection>
+      </Sheet>
     </div>
   );
 }

@@ -166,7 +166,6 @@ function Cover({ pass, wallet, qieName, count, loading }: { pass: Address | null
         <Guilloche seed={pass} variant="rosette" detail={180} label={t.pass.guillocheLabel} className="pointer-events-none absolute -top-20 -right-28 size-72 opacity-45 sm:-top-16 sm:-right-12 sm:size-80 sm:opacity-60" />
       ) : null}
       <SheetSection className="relative flex flex-col gap-2 pb-6 sm:pb-8">
-        <p className="text-sm font-medium tracking-[0.08em] text-ink-soft uppercase">Showmark</p>
         <h1 className="font-display text-3xl text-ink sm:text-4xl">{t.pass.title}</h1>
         <p className="max-w-[26rem] text-base text-ink-soft">{t.pass.subtitle}</p>
       </SheetSection>

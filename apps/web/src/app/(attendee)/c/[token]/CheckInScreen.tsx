@@ -228,10 +228,10 @@ export function CheckInScreen() {
             <SheetSection className="flex flex-col items-center gap-5 pt-8 text-center sm:pt-10">
               <StampStage phase={phase} pass={pass} eventId={eventId ?? "0"} eventName={eventName} city={loadedEvent?.metadata.city ?? ""} prior={priorStamp} startsAt={loadedEvent?.startsAt ?? null} />
               <div role="status" aria-live="polite" className="flex max-w-[24rem] flex-col items-center gap-2">
-                <h1 id="check-in-status" className="font-display text-2xl text-ink">
+                <h1 id="check-in-status" className="font-display text-3xl text-ink sm:text-4xl">
                   {headline(phase, t)}
                 </h1>
-                <p className="text-base text-ink-soft">{hint(phase, t, errors, now)}</p>
+                <p className="max-w-[22rem] text-base text-ink-soft">{hint(phase, t, errors, now)}</p>
               </div>
               {phase.kind === "waiting" ? (
                 <Button variant="quiet" onClick={() => waiter.wake()} leading={<RetryIcon className="size-4" />}>
@@ -246,11 +246,13 @@ export function CheckInScreen() {
             </SheetSection>
             <Perforation />
             <SheetSection>
-              <Receipt phase={phase} prior={priorStamp} eventName={eventName} />
+              <Receipt phase={phase} prior={priorStamp} />
             </SheetSection>
           </>
         )}
       </Sheet>
+
+      {phase.kind !== "invalid" ? <Rewards event={event} /> : null}
 
       {done && showLinkPrompt ? (
         <Notice
@@ -258,7 +260,7 @@ export function CheckInScreen() {
           title={t.checkIn.linkPromptTitle}
           action={
             <div className="flex flex-wrap gap-3">
-              <Button href="/pass/link" variant="primary">
+              <Button href="/pass/link" variant="secondary">
                 {t.checkIn.linkNow}
               </Button>
               <Button
@@ -277,7 +279,6 @@ export function CheckInScreen() {
         </Notice>
       ) : null}
 
-      {phase.kind !== "invalid" ? <Rewards event={event} /> : null}
 
       <p className="text-sm text-ink-soft">{t.checkIn.noWalletNeeded}</p>
     </div>
@@ -367,7 +368,7 @@ function hint(phase: ScreenPhase, t: Dictionary, errors: ErrorTables | null, now
     case "waiting": {
       const copy = problemCopy(phase.problem, t, errors);
       const countdown = phase.retryAt === null ? "" : ` ${t.errors.retryIn(Math.max(1, Math.ceil((phase.retryAt - now) / 1000)))}`;
-      return `${copy.message} ${copy.action}${countdown}`;
+      return `${copy.message} ${copy.action}${countdown}`.trim();
     }
     case "confirming":
       return t.checkIn.confirmingHint;
@@ -385,7 +386,7 @@ function EventHeading({ event, eventName, done, hidden }: { event: EventState; e
   if (hidden) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-sm font-medium tracking-[0.08em] text-ink-soft uppercase">{done ? t.checkIn.eyebrowDone : t.checkIn.eyebrow}</p>
+      <p className="text-sm font-medium tracking-[0.08em] text-ink-soft uppercase [:lang(hi)_&]:tracking-normal">{done ? t.checkIn.eyebrowDone : t.checkIn.eyebrow}</p>
       {event.status === "loading" ? (
         <div className="flex flex-col gap-2.5 pt-1" aria-hidden="true">
           <Skeleton className="h-9 w-4/5" />
@@ -393,7 +394,7 @@ function EventHeading({ event, eventName, done, hidden }: { event: EventState; e
         </div>
       ) : (
         <>
-          <p className="font-display text-2xl text-ink sm:text-3xl">{eventName}</p>
+          <p className="font-display text-xl text-ink sm:text-2xl">{eventName}</p>
           {event.status === "ready" ? (
             <p className="text-base text-ink-soft">
               {[event.event.metadata.venue, event.event.metadata.city].filter(Boolean).join(", ")}
@@ -423,7 +424,7 @@ interface StampStageProps {
 function StampStage({ phase, pass, eventId, eventName, city, prior, startsAt }: StampStageProps) {
   const { t } = useLocale();
   const [openedAt] = useState(() => new Date().toISOString());
-  const base = { eventId, eventName, city, mode: 1 as const, holder: pass ?? undefined, className: "w-48 sm:w-52" };
+  const base = { eventId, eventName, city, mode: 1 as const, holder: pass ?? undefined, className: "w-60 sm:w-64" };
 
   let content: React.ReactNode;
   if (phase.kind === "stamped") {
@@ -444,20 +445,20 @@ function StampStage({ phase, pass, eventId, eventName, city, prior, startsAt }: 
       </>
     );
   } else {
-    content = <SkeletonStamp className="w-48 sm:w-52" />;
+    content = <SkeletonStamp className="w-60 sm:w-64" />;
   }
 
-  return <div className="grid min-h-52 place-items-center sm:min-h-56">{content}</div>;
+  return <div className="grid min-h-64 place-items-center sm:min-h-72">{content}</div>;
 }
 
-function Receipt({ phase, prior, eventName }: { phase: ScreenPhase; prior: PriorStamp | null; eventName: string }) {
+function Receipt({ phase, prior }: { phase: ScreenPhase; prior: PriorStamp | null }) {
   const { t } = useLocale();
   const at = phase.kind === "stamped" ? new Date(phase.at).toISOString() : phase.kind === "already" ? (prior?.at ?? null) : null;
   const tx = phase.kind === "stamped" || phase.kind === "confirming" ? phase.txHash : phase.kind === "already" ? (prior?.tx ?? null) : null;
+  if (phase.kind === "already" && !at && !tx) return null;
   const waitingWord = phase.kind === "confirming" ? t.checkIn.receiptPending : phase.kind === "already" ? t.checkIn.receiptEarlier : t.checkIn.receiptNotSent;
   return (
     <Ledger label={t.checkIn.receiptLabel}>
-      <LedgerRow label={t.checkIn.receiptEvent} value={<span className="font-sans">{eventName}</span>} />
       <LedgerRow
         label={t.checkIn.receiptTime}
         value={at ? `${formatDate(at)}, ${formatTime(at)}` : <span className="font-sans text-ink-soft">{waitingWord}</span>}

@@ -138,10 +138,10 @@ const shots: Shot[] = [
   } },
   { name: "link--no-pass", url: async () => "/pass/link", ready: async (page) => void (await page.getByText("There is no pass on this phone yet.").waitFor()) },
 
-  { name: "withdraw--ready", url: async () => "/pass/withdraw", pass: true, mock: { passport: "linked" }, ready: async (page) => void (await page.getByRole("button", { name: "Withdraw QIE" }).waitFor()) },
+  { name: "withdraw--ready", url: async () => "/pass/withdraw", pass: true, mock: { passport: "linked" }, ready: async (page) => void (await page.getByRole("button", { name: "Withdraw everything" }).waitFor()) },
   { name: "withdraw--done", url: async () => "/pass/withdraw", pass: true, mock: { passport: "linked", tx: ["success"] }, ready: async (page) => {
-    await page.getByRole("button", { name: "Withdraw QIE" }).click();
-    await page.getByText("Withdrawn to your wallet").waitFor();
+    await page.getByRole("button", { name: "Withdraw everything" }).click();
+    await page.getByRole("link", { name: "Back to passport" }).last().waitFor();
   } },
   { name: "withdraw--needs-link", url: async () => "/pass/withdraw", pass: true, mock: { passport: "full" }, ready: async (page) => void (await page.getByText("Link QIE Wallet before you withdraw.").waitFor()) },
 ];

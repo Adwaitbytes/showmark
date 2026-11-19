@@ -27,7 +27,6 @@ export function StampBooklet({ entries, holder }: { entries: readonly BookletEnt
         <h2 id="stamps-title" className="font-display text-xl text-ink">
           {t.pass.stampsTitle}
         </h2>
-        {entries.length > 0 ? <span className="font-mono text-sm text-ink-soft">{t.common.stampCount(entries.length)}</span> : null}
       </div>
 
       {entries.length === 0 ? (
@@ -45,9 +44,9 @@ export function StampBooklet({ entries, holder }: { entries: readonly BookletEnt
           </EmptyState>
         </div>
       ) : (
-        <ol className="grid grid-cols-2 overflow-hidden rounded-doc bg-sheet grain shadow-sheet sm:grid-cols-3 xl:grid-cols-4">
+        <ol className="grid grid-cols-2 gap-x-2 gap-y-6 rounded-doc bg-sheet grain px-2 py-4 shadow-sheet sm:grid-cols-3 xl:grid-cols-4">
           {entries.map(({ stamp, indexed }) => (
-            <li key={stamp.eventId} className="flex flex-col items-center gap-3 px-3 pt-6 pb-4 text-center shadow-[0_0_0_0.5px_var(--rule-soft)]">
+            <li key={stamp.eventId} className="flex flex-col items-center gap-3 px-2 pt-4 text-center">
               <Stamp
                 eventId={stamp.eventId}
                 eventName={stamp.eventName}
@@ -61,7 +60,7 @@ export function StampBooklet({ entries, holder }: { entries: readonly BookletEnt
               <div className="flex w-full min-w-0 flex-col items-center gap-0.5">
                 <p className="line-clamp-2 text-sm font-medium text-ink">{stamp.eventName}</p>
                 <p className="font-mono text-xs text-ink-soft">{formatDate(stamp.at)}</p>
-                <TxLink hash={stamp.tx} className="min-h-11 text-xs" />
+                <TxLink hash={stamp.tx} className="min-h-11 text-xs text-ink-soft! decoration-transparent! hover:decoration-current!" />
                 {indexed ? null : <p className="text-xs text-ink-faint">{t.pass.localStampNote}</p>}
               </div>
             </li>
