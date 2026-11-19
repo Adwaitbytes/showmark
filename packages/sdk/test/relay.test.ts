@@ -18,7 +18,8 @@ import {
 const txHash: Hex = `0x${"ab".repeat(32)}`;
 const sig: Hex = `0x${"11".repeat(64)}1b`;
 const alice: Address = "0x5555555555555555555555555555555555555555";
-const data: CheckInData = { eventId: 42n, attendee: alice, mode: 1, doorTime: 1795073006n, attendeeSig: sig, doorSig: sig };
+const ticket: Address = "0x7777777777777777777777777777777777777777";
+const data: CheckInData = { eventId: 42n, attendee: alice, mode: 1, doorTime: 1795073006n, ticket, attendeeSig: sig, doorSig: sig, ticketSig: sig };
 
 function fetchReturning(...responses: Response[]) {
   const queue = [...responses];
@@ -41,8 +42,10 @@ describe("relay requests", () => {
       attendee: alice,
       mode: 1,
       doorTime: "1795073006",
+      ticket,
       attendeeSig: sig,
       doorSig: sig,
+      ticketSig: sig,
     });
   });
 

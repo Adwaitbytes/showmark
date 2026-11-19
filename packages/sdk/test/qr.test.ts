@@ -15,6 +15,9 @@ import {
 } from "@showmark/sdk";
 
 const sig: Hex = `0x${"ab".repeat(64)}1b`;
+const ticketKey: Hex = `0x${"cd".repeat(32)}`;
+const goodSig = toBase64Url(new Uint8Array(65));
+const goodKey = toBase64Url(new Uint8Array(32).fill(7));
 
 interface CodecModule {
   toBase64Url(bytes: Uint8Array): string;
@@ -48,7 +51,7 @@ function randomBytes(next: () => number, length: number): Uint8Array {
 
 describe("door pass codec", () => {
   it("round-trips through the bare token and the full URL", () => {
-    const p = { eventId: 42n, issuedAt: 1795073006n, doorSig: sig };
+    const p = { eventId: 42n, issuedAt: 1795073006n, doorSig: sig, ticketKey };
     expect(decodeDoorPass(encodeDoorPass(p))).toEqual(p);
     expect(decodeDoorPass(doorPassUrl("https://showmark.example/", p))).toEqual(p);
     expect(decodeDoorPass(`${doorPassUrl("https://showmark.example", p)}?utm=poster#top`)).toEqual(p);
@@ -56,31 +59,35 @@ describe("door pass codec", () => {
   });
 
   it("keeps the token short enough for a readable QR", () => {
-    expect(encodeDoorPass({ eventId: 42n, issuedAt: 1795073006n, doorSig: sig })).toHaveLength(2 + 1 + 10 + 1 + 87);
+    expect(encodeDoorPass({ eventId: 42n, issuedAt: 1795073006n, doorSig: sig, ticketKey })).toHaveLength(2 + 1 + 10 + 1 + 87 + 1 + 43);
   });
 
   it("rejects malformed input instead of throwing", () => {
     const bad = [
       "",
       "1.2",
-      "x.2.abc",
-      "1.2.!!!",
-      `1.2.${"A".repeat(10)}`,
+      "x.2.abc.def",
+      `1.2.!!!.${goodKey}`,
+      `1.2.${"A".repeat(10)}.${goodKey}`,
       "https://x/c/1.2",
-      `1.2.${toBase64Url(new Uint8Array(64))}`,
-      `1.2.${toBase64Url(new Uint8Array(66))}`,
-      `-1.2.${toBase64Url(new Uint8Array(65))}`,
-      `1.2.3.${toBase64Url(new Uint8Array(65))}`,
-      `123456789012345678901.2.${toBase64Url(new Uint8Array(65))}`,
-      `1.2.${toBase64Url(new Uint8Array(65))}=`,
-      `1.2.${"A".repeat(86)}`,
+      `1.2.${goodSig}`,
+      `1.2.${toBase64Url(new Uint8Array(64))}.${goodKey}`,
+      `1.2.${toBase64Url(new Uint8Array(66))}.${goodKey}`,
+      `1.2.${goodSig}.${toBase64Url(new Uint8Array(31).fill(7))}`,
+      `1.2.${goodSig}.${toBase64Url(new Uint8Array(33).fill(7))}`,
+      `1.2.${goodSig}.${toBase64Url(new Uint8Array(32))}`,
+      `-1.2.${goodSig}.${goodKey}`,
+      `1.2.3.${goodSig}.${goodKey}`,
+      `123456789012345678901.2.${goodSig}.${goodKey}`,
+      `1.2.${goodSig}.${goodKey}=`,
     ];
     for (const input of bad) expect(decodeDoorPass(input), input).toBeNull();
   });
 
   it("throws a typed error when asked to encode a signature that is not 65 bytes", () => {
-    expect(() => encodeDoorPass({ eventId: 1n, issuedAt: 1n, doorSig: "0x1234" })).toThrow(ShowmarkInputError);
-    expect(() => encodeDoorPass({ eventId: 1n, issuedAt: 1n, doorSig: "0xzz" as Hex })).toThrow(ShowmarkInputError);
+    expect(() => encodeDoorPass({ eventId: 1n, issuedAt: 1n, doorSig: "0x1234", ticketKey })).toThrow(ShowmarkInputError);
+    expect(() => encodeDoorPass({ eventId: 1n, issuedAt: 1n, doorSig: "0xzz" as Hex, ticketKey })).toThrow(ShowmarkInputError);
+    expect(() => encodeDoorPass({ eventId: 1n, issuedAt: 1n, doorSig: sig, ticketKey: "0x1234" })).toThrow(ShowmarkInputError);
   });
 });
 
@@ -113,7 +120,9 @@ describe("parity with apps/web/src/lib/qr/payload.ts", () => {
       const eventId = BigInt(Math.floor(next() * 2 ** 40));
       const issuedAt = BigInt(Math.floor(next() * 2 ** 33));
       const attendee = getAddress(bytesToHex(randomBytes(next, 20)));
-      const pass = { eventId, issuedAt, doorSig };
+      const key = randomBytes(next, 32);
+      key[0] = (key[0] ?? 0) | 1;
+      const pass = { eventId, issuedAt, doorSig, ticketKey: bytesToHex(key) };
       const code = { eventId, attendee, attendeeSig: doorSig };
 
       const token = sdk.encodeDoorPass(pass);
@@ -128,7 +137,7 @@ describe("parity with apps/web/src/lib/qr/payload.ts", () => {
   it("agrees on 2,000 mutated and random strings, including every rejection", () => {
     const alphabet = "0123456789abcdefABCDEF.-_/:?#=+ SMx";
     const seeds = [
-      sdk.encodeDoorPass({ eventId: 42n, issuedAt: 1795073006n, doorSig: sig }),
+      sdk.encodeDoorPass({ eventId: 42n, issuedAt: 1795073006n, doorSig: sig, ticketKey }),
       sdk.encodeAttendeeCode({ eventId: 7n, attendee: "0xA8C849C243BA940102d2deB99971e4c713411926", attendeeSig: sig }),
     ];
     for (let i = 0; i < 2000; i++) {

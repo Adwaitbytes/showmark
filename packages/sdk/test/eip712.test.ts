@@ -22,10 +22,12 @@ import {
   hashDoorAttest,
   hashDoorPass,
   hashLinkWallet,
+  hashTicket,
   signCheckIn,
   signDoorAttest,
   signDoorPass,
   signLinkWallet,
+  signTicket,
 } from "@showmark/sdk";
 import fixture from "./fixtures/eip712-digests.json";
 
@@ -34,10 +36,12 @@ import fixture from "./fixtures/eip712-digests.json";
 const attendeeAccount = privateKeyToAccount(keccak256(toBytes("showmark sdk fixture attendee")));
 const doorAccount = privateKeyToAccount(keccak256(toBytes("showmark sdk fixture door")));
 const walletAccount = privateKeyToAccount(keccak256(toBytes("showmark sdk fixture wallet")));
+const ticketKey = keccak256(toBytes("showmark sdk fixture ticket"));
+const ticketAccount = privateKeyToAccount(ticketKey);
 const registry = fixture.verifyingContract as Address;
 
 function accountFor(address: string) {
-  for (const a of [attendeeAccount, doorAccount, walletAccount]) if (a.address === address) return a;
+  for (const a of [attendeeAccount, doorAccount, walletAccount, ticketAccount]) if (a.address === address) return a;
   throw new Error(`No fixture key for ${address}`);
 }
 
@@ -60,24 +64,35 @@ const manual = {
   digest(chainId: number, structHash: Hex): Hex {
     return keccak256(concat(["0x1901", manual.domainSeparator(chainId, registry), structHash]));
   },
-  checkIn(chainId: number, eventId: bigint, attendee: Address): Hex {
+  checkIn(chainId: number, eventId: bigint, attendee: Address, mode: number): Hex {
+    return manual.digest(
+      chainId,
+      keccak256(
+        encodeAbiParameters(
+          [{ type: "bytes32" }, { type: "uint256" }, { type: "address" }, { type: "uint8" }],
+          [keccak256(toBytes("CheckIn(uint256 eventId,address attendee,uint8 mode)")), eventId, attendee, mode],
+        ),
+      ),
+    );
+  },
+  doorPass(chainId: number, eventId: bigint, issuedAt: bigint, ticket: Address): Hex {
+    return manual.digest(
+      chainId,
+      keccak256(
+        encodeAbiParameters(
+          [{ type: "bytes32" }, { type: "uint256" }, { type: "uint64" }, { type: "address" }],
+          [keccak256(toBytes("DoorPass(uint256 eventId,uint64 issuedAt,address ticket)")), eventId, issuedAt, ticket],
+        ),
+      ),
+    );
+  },
+  ticket(chainId: number, eventId: bigint, attendee: Address): Hex {
     return manual.digest(
       chainId,
       keccak256(
         encodeAbiParameters(
           [{ type: "bytes32" }, { type: "uint256" }, { type: "address" }],
-          [keccak256(toBytes("CheckIn(uint256 eventId,address attendee)")), eventId, attendee],
-        ),
-      ),
-    );
-  },
-  doorPass(chainId: number, eventId: bigint, issuedAt: bigint): Hex {
-    return manual.digest(
-      chainId,
-      keccak256(
-        encodeAbiParameters(
-          [{ type: "bytes32" }, { type: "uint256" }, { type: "uint64" }],
-          [keccak256(toBytes("DoorPass(uint256 eventId,uint64 issuedAt)")), eventId, issuedAt],
+          [keccak256(toBytes("Ticket(uint256 eventId,address attendee)")), eventId, attendee],
         ),
       ),
     );
@@ -113,26 +128,47 @@ describe.each(fixture.chains)("EIP-712 on chain $chainId matches the Solidity ha
     expect(attendeeAccount.address).toBe(chain.attendee);
     expect(doorAccount.address).toBe(chain.door);
     expect(walletAccount.address).toBe(chain.wallet);
+    expect(ticketAccount.address).toBe(chain.ticketAddress);
   });
 
   it("has the same domain separator in the manual implementation", () => {
     expect(manual.domainSeparator(chain.chainId, registry)).toBe(chain.domainSeparator);
   });
 
-  it.each(chain.checkIn)("CheckIn($eventId, $attendee)", async (c) => {
-    const message = { eventId: BigInt(c.eventId), attendee: c.attendee as Address };
-    expect(hashCheckIn(domain, message)).toBe(c.digest);
-    expect(manual.checkIn(chain.chainId, message.eventId, message.attendee)).toBe(c.digest);
-    if (c.signature) {
-      expect(await signCheckIn({ ...domain, signer: attendeeAccount, eventId: message.eventId })).toBe(c.signature);
+  it.each(chain.checkIn)("CheckIn($eventId, $attendee, $mode)", async (c) => {
+    const eventId = BigInt(c.eventId);
+    const attendee = c.attendee as Address;
+    expect(manual.checkIn(chain.chainId, eventId, attendee, c.mode)).toBe(c.digest);
+    if (c.mode !== 1 && c.mode !== 2) {
+      // The contract hashes any uint8; the SDK refuses to sign a mode the registry would reject.
+      expect(() => hashCheckIn(domain, { eventId, attendee, mode: c.mode as 1 })).toThrow(ShowmarkInputError);
+      return;
     }
+    const mode = c.mode;
+    expect(hashCheckIn(domain, { eventId, attendee, mode })).toBe(c.digest);
+    if (c.signature) expect(await signCheckIn({ ...domain, signer: attendeeAccount, eventId, mode })).toBe(c.signature);
   });
 
-  it.each(chain.doorPass)("DoorPass($eventId, $issuedAt)", async (c) => {
-    const message = { eventId: BigInt(c.eventId), issuedAt: BigInt(c.issuedAt) };
+  it.each(chain.doorPass)("DoorPass($eventId, $issuedAt, $ticket)", async (c) => {
+    const message = { eventId: BigInt(c.eventId), issuedAt: BigInt(c.issuedAt), ticket: c.ticket as Address };
     expect(hashDoorPass(domain, message)).toBe(c.digest);
-    expect(manual.doorPass(chain.chainId, message.eventId, message.issuedAt)).toBe(c.digest);
+    expect(manual.doorPass(chain.chainId, message.eventId, message.issuedAt, message.ticket)).toBe(c.digest);
     if (c.signature) expect(await signDoorPass({ ...domain, ...message, signer: doorAccount })).toBe(c.signature);
+  });
+
+  it.each(chain.ticket)("Ticket($eventId, $attendee)", async (c) => {
+    const message = { eventId: BigInt(c.eventId), attendee: c.attendee as Address };
+    expect(hashTicket(domain, message)).toBe(c.digest);
+    expect(manual.ticket(chain.chainId, message.eventId, message.attendee)).toBe(c.digest);
+    if (c.signature) expect(await signTicket({ ...domain, ...message, signer: ticketAccount })).toBe(c.signature);
+  });
+
+  it("signs the fixture door pass through createDoorPass with the fixture ticket key", async () => {
+    const c = chain.doorPass[0];
+    if (!c?.signature) throw new Error("fixture lost its signed door pass");
+    const pass = await createDoorPass({ ...domain, signer: doorAccount, eventId: 42n, issuedAt: BigInt(c.issuedAt), ticketKey });
+    expect(pass.doorSig).toBe(c.signature);
+    expect(pass.ticketKey).toBe(ticketKey);
   });
 
   it.each(chain.doorAttest)("DoorAttest($eventId, $attendee, $attestedAt)", async (c) => {
@@ -160,15 +196,15 @@ describe("signers", () => {
         async request({ method, params }: { method: string; params?: unknown }) {
           if (method !== "eth_signTypedData_v4") throw new Error(`unexpected ${method}`);
           const [, json] = params as [string, string];
-          const typed = JSON.parse(json) as { message: { eventId: string; attendee: Address } };
+          const typed = JSON.parse(json) as { message: { eventId: string; attendee: Address; mode: number } };
           return attendeeAccount.signTypedData(
-            checkInTypedData(domain, { eventId: BigInt(typed.message.eventId), attendee: typed.message.attendee }),
+            checkInTypedData(domain, { eventId: BigInt(typed.message.eventId), attendee: typed.message.attendee, mode: typed.message.mode as 1 }),
           );
         },
       }),
     });
-    const viaWallet = await signCheckIn({ ...domain, signer: wallet, eventId: 7n });
-    const direct = await signCheckIn({ ...domain, signer: attendeeAccount, eventId: 7n });
+    const viaWallet = await signCheckIn({ ...domain, signer: wallet, eventId: 7n, mode: 1 });
+    const direct = await signCheckIn({ ...domain, signer: attendeeAccount, eventId: 7n, mode: 1 });
     expect(viaWallet).toBe(direct);
   });
 
@@ -181,16 +217,19 @@ describe("signers", () => {
         },
       }),
     });
-    await expect(signCheckIn({ ...domain, signer: wallet, eventId: 1n })).rejects.toBeInstanceOf(ShowmarkSigningError);
+    await expect(signCheckIn({ ...domain, signer: wallet, eventId: 1n, mode: 1 })).rejects.toBeInstanceOf(ShowmarkSigningError);
   });
 
-  it("creates a door pass the door key provably signed", async () => {
+  it("creates a door pass the door key provably signed, over a fresh ticket key each time", async () => {
     const pass = await createDoorPass({ ...domain, signer: doorAccount, eventId: 42n, issuedAt: 1795073006n });
+    const ticket = privateKeyToAccount(pass.ticketKey).address;
     const signer = await recoverTypedDataAddress({
-      ...doorPassTypedData(domain, pass),
+      ...doorPassTypedData(domain, { ...pass, ticket }),
       signature: pass.doorSig,
     });
     expect(signer).toBe(doorAccount.address);
+    const next = await createDoorPass({ ...domain, signer: doorAccount, eventId: 42n, issuedAt: 1795073006n });
+    expect(next.ticketKey).not.toBe(pass.ticketKey);
   });
 
   it("defaults issuedAt to the current second", async () => {
@@ -203,7 +242,7 @@ describe("signers", () => {
     const code = await createAttendeeCode({ ...domain, signer: attendeeAccount, eventId: 9n });
     expect(code.attendee).toBe(attendeeAccount.address);
     const signer = await recoverTypedDataAddress({
-      ...checkInTypedData(domain, code),
+      ...checkInTypedData(domain, { ...code, mode: 2 }),
       signature: code.attendeeSig,
     });
     expect(signer).toBe(attendeeAccount.address);
@@ -214,28 +253,29 @@ describe("input validation", () => {
   const domain = { chainId: 1983, registry };
 
   it("rejects out-of-range integers and bad addresses before signing", () => {
-    expect(() => hashCheckIn(domain, { eventId: -1n, attendee: attendeeAccount.address })).toThrow(ShowmarkInputError);
-    expect(() => hashDoorPass(domain, { eventId: 1n, issuedAt: 2n ** 64n })).toThrow(ShowmarkInputError);
-    expect(() => hashCheckIn(domain, { eventId: 1n, attendee: "0x1234" })).toThrow(ShowmarkInputError);
-    expect(() => hashCheckIn({ chainId: 0, registry }, { eventId: 1n, attendee: attendeeAccount.address })).toThrow(ShowmarkInputError);
-    expect(() => hashCheckIn({ chainId: 1983, registry: "0xnope" }, { eventId: 1n, attendee: attendeeAccount.address })).toThrow(
+    expect(() => hashCheckIn(domain, { eventId: -1n, attendee: attendeeAccount.address, mode: 1 })).toThrow(ShowmarkInputError);
+    expect(() => hashDoorPass(domain, { eventId: 1n, issuedAt: 2n ** 64n, ticket: attendeeAccount.address })).toThrow(ShowmarkInputError);
+    expect(() => hashCheckIn(domain, { eventId: 1n, attendee: "0x1234", mode: 1 })).toThrow(ShowmarkInputError);
+    expect(() => hashCheckIn({ chainId: 0, registry }, { eventId: 1n, attendee: attendeeAccount.address, mode: 1 })).toThrow(ShowmarkInputError);
+    expect(() => hashCheckIn({ chainId: 1983, registry: "0xnope" }, { eventId: 1n, attendee: attendeeAccount.address, mode: 1 })).toThrow(
       ShowmarkInputError,
     );
   });
 
   it("checksums lowercase addresses and rejects a wrong checksum as a typo", async () => {
     const lower = attendeeAccount.address.toLowerCase() as Address;
-    expect(hashCheckIn({ chainId: 1983, registry: registry.toLowerCase() as Address }, { eventId: 1n, attendee: lower })).toBe(
-      hashCheckIn(domain, { eventId: 1n, attendee: attendeeAccount.address }),
+    expect(hashCheckIn({ chainId: 1983, registry: registry.toLowerCase() as Address }, { eventId: 1n, attendee: lower, mode: 1 })).toBe(
+      hashCheckIn(domain, { eventId: 1n, attendee: attendeeAccount.address, mode: 1 }),
     );
     const badChecksum = attendeeAccount.address.replace(/[a-f]/, (c) => c.toUpperCase()) as Address;
-    expect(() => hashCheckIn(domain, { eventId: 1n, attendee: badChecksum })).toThrow(ShowmarkInputError);
-    await expect(signCheckIn({ chainId: 1983, registry: badChecksum, signer: attendeeAccount, eventId: 1n })).rejects.toBeInstanceOf(ShowmarkInputError);
+    expect(() => hashCheckIn(domain, { eventId: 1n, attendee: badChecksum, mode: 1 })).toThrow(ShowmarkInputError);
+    await expect(signCheckIn({ chainId: 1983, registry: badChecksum, signer: attendeeAccount, eventId: 1n, mode: 1 })).rejects.toBeInstanceOf(ShowmarkInputError);
   });
 
   it("binds signatures to the chain and the registry", () => {
-    const message = { eventId: 42n, attendee: attendeeAccount.address };
+    const message = { eventId: 42n, attendee: attendeeAccount.address, mode: 1 as const };
     const base = hashCheckIn(domain, message);
+    expect(hashCheckIn(domain, { ...message, mode: 2 })).not.toBe(base);
     expect(hashCheckIn({ ...domain, chainId: 1990 }, message)).not.toBe(base);
     expect(hashCheckIn({ ...domain, registry: walletAccount.address }, message)).not.toBe(base);
     expect(hashCheckIn(domain, { ...message, eventId: 43n })).not.toBe(base);

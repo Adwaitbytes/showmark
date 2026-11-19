@@ -18,6 +18,7 @@ import {
   ShowmarkContractError,
   ShowmarkNetworkError,
   checkInTypedData,
+  ticketTypedData,
   createDoorPass,
   doorPassUrl,
   presenceAbi,
@@ -285,10 +286,19 @@ describe("ShowmarkClient relay calls", () => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     expect(body).toMatchObject({ eventId: "42", attendee: pass.address, mode: 1, doorTime: "1795073006", doorSig: doorPass.doorSig });
     const signer = await recoverTypedDataAddress({
-      ...checkInTypedData({ chainId: 1983, registry }, { eventId: 42n, attendee: pass.address }),
+      ...checkInTypedData({ chainId: 1983, registry }, { eventId: 42n, attendee: pass.address, mode: 1 }),
       signature: body.attendeeSig as Hex,
     });
     expect(signer).toBe(pass.address);
+    // The ticket proof: the QR's ticket key signed Ticket(eventId, attendee), and the door signed that ticket.
+    const ticket = privateKeyToAccount(doorPass.ticketKey).address;
+    expect(body.ticket).toBe(ticket);
+    const ticketSigner = await recoverTypedDataAddress({
+      ...ticketTypedData({ chainId: 1983, registry }, { eventId: 42n, attendee: pass.address }),
+      signature: body.ticketSig as Hex,
+    });
+    expect(ticketSigner).toBe(ticket);
+    expect(JSON.stringify(body)).not.toContain(doorPass.ticketKey.slice(2));
   });
 
   it("links to the explorer on its chain", () => {

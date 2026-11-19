@@ -190,7 +190,8 @@ describe("DoorQR", () => {
     for (const r of rotations) {
       const decoded = decodeDoorPass(r.url);
       expect(decoded).toEqual(r.pass);
-      const signer = await recoverTypedDataAddress({ ...doorPassTypedData(domain, r.pass), signature: r.pass.doorSig });
+      const ticket = privateKeyToAccount(r.pass.ticketKey).address;
+      const signer = await recoverTypedDataAddress({ ...doorPassTypedData(domain, { ...r.pass, ticket }), signature: r.pass.doorSig });
       expect(signer).toBe(door.address);
     }
   });

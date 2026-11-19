@@ -20,9 +20,12 @@ console.log("door QR      ", url);
 // Attendee phone: the camera opens the URL. Decoding never throws; it returns null for anything malformed.
 const scanned = decodeDoorPass(url);
 if (!scanned) throw new Error("not a Showmark door pass");
-const signer = await recoverTypedDataAddress({ ...doorPassTypedData(domain, scanned), signature: scanned.doorSig });
+// The door signed the address of this rotation's ticket key; the key itself only ever lives in the QR.
+const ticket = privateKeyToAccount(scanned.ticketKey).address;
+const signer = await recoverTypedDataAddress({ ...doorPassTypedData(domain, { ...scanned, ticket }), signature: scanned.doorSig });
 console.log("signed by door", signer === doorKey.address);
 
-// Sign CheckIn with the pass key and pair it with the door signature. This is the body of POST /api/relay/check-in.
+// Sign CheckIn(mode 1) with the pass key and Ticket with the ticket key, then pair both with the door signature.
+// This is the body of POST /api/relay/check-in. It holds the ticket signature, never the ticket key.
 const checkIn = await buildDoorPassCheckIn({ ...domain, doorPass: scanned, signer: passKey });
 console.log("relay body   ", JSON.stringify(checkIn, (_, v: unknown) => (typeof v === "bigint" ? v.toString() : v)));

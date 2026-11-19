@@ -1,5 +1,6 @@
-import type { Address, Hex } from "viem";
-import { nowSeconds, signCheckIn, signDoorAttest, signerAddress, type ShowmarkDomainParams, type ShowmarkSigner } from "./eip712";
+import { zeroAddress, type Address, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { nowSeconds, signCheckIn, signDoorAttest, signTicket, signerAddress, type ShowmarkDomainParams, type ShowmarkSigner } from "./eip712";
 import { ShowmarkInputError } from "./errors";
 import { decodeAttendeeCode, decodeDoorPass, type AttendeeCodePayload, type DoorPassPayload } from "./qr";
 import type { CheckInData } from "./relay";
@@ -14,16 +15,28 @@ function resolveDoorPass(doorPass: DoorPassPayload | string): DoorPassPayload {
 }
 
 /**
- * Mode 1, rotating door QR: the attendee scanned the door screen. Signs CheckIn with the attendee's pass key and
- * pairs it with the door's signature. `doorPass` may be the decoded payload, the bare token or the full URL.
+ * Mode 1, rotating door QR: the attendee scanned the door screen. Signs CheckIn with the attendee's pass key, signs
+ * Ticket for this attendee with the ticket key from the QR, and pairs both with the door's signature.
+ * `doorPass` may be the decoded payload, the bare token or the full URL.
  */
 export async function buildDoorPassCheckIn(
   params: ShowmarkDomainParams & { doorPass: DoorPassPayload | string; signer: ShowmarkSigner },
 ): Promise<CheckInData> {
   const pass = resolveDoorPass(params.doorPass);
   const attendee: Address = signerAddress(params.signer);
-  const attendeeSig: Hex = await signCheckIn({ ...params, eventId: pass.eventId, attendee });
-  return { eventId: pass.eventId, attendee, mode: 1, doorTime: pass.issuedAt, attendeeSig, doorSig: pass.doorSig };
+  const ticket = privateKeyToAccount(pass.ticketKey);
+  const attendeeSig: Hex = await signCheckIn({ ...params, eventId: pass.eventId, attendee, mode: 1 });
+  const ticketSig: Hex = await signTicket({ ...params, signer: ticket, eventId: pass.eventId, attendee });
+  return {
+    eventId: pass.eventId,
+    attendee,
+    mode: 1,
+    doorTime: pass.issuedAt,
+    ticket: ticket.address,
+    attendeeSig,
+    doorSig: pass.doorSig,
+    ticketSig,
+  };
 }
 
 /**
@@ -37,5 +50,14 @@ export async function buildDoorAttestCheckIn(
   if (!code) throw new ShowmarkInputError("This attendee code is not a valid Showmark code");
   const attestedAt = params.attestedAt ?? nowSeconds();
   const doorSig = await signDoorAttest({ ...params, eventId: code.eventId, attendee: code.attendee, attestedAt });
-  return { eventId: code.eventId, attendee: code.attendee, mode: 2, doorTime: attestedAt, attendeeSig: code.attendeeSig, doorSig };
+  return {
+    eventId: code.eventId,
+    attendee: code.attendee,
+    mode: 2,
+    doorTime: attestedAt,
+    ticket: zeroAddress,
+    attendeeSig: code.attendeeSig,
+    doorSig,
+    ticketSig: "0x",
+  };
 }

@@ -17,14 +17,19 @@ export interface RelayOptions {
   timeoutMs?: number;
 }
 
-/** One check-in as the registry receives it. `doorTime` is issuedAt for mode 1 and attestedAt for mode 2. */
+/**
+ * One check-in as the registry receives it. `doorTime` is issuedAt for mode 1 and attestedAt for mode 2.
+ * `ticket` and `ticketSig` carry the mode 1 ticket proof; mode 2 uses the zero address and "0x".
+ */
 export interface CheckInData {
   eventId: bigint;
   attendee: Address;
   mode: ProofMode;
   doorTime: bigint;
+  ticket: Address;
   attendeeSig: Hex;
   doorSig: Hex;
+  ticketSig: Hex;
 }
 
 export interface LinkWalletRequest {
@@ -155,15 +160,20 @@ function malformed(path: string): ShowmarkNetworkError {
 function serializeCheckIn(d: CheckInData): Json {
   if (d.mode !== 1 && d.mode !== 2) throw new ShowmarkInputError(`mode must be 1 or 2, got ${String(d.mode)}`);
   if (!isAddress(d.attendee)) throw new ShowmarkInputError(`attendee is not a valid address or its checksum is wrong: ${d.attendee}`);
-  if (!isHex(d.attendeeSig) || !isHex(d.doorSig)) throw new ShowmarkInputError("attendeeSig and doorSig must be 0x-prefixed hex");
+  if (!isAddress(d.ticket)) throw new ShowmarkInputError(`ticket is not a valid address or its checksum is wrong: ${d.ticket}`);
+  if (!isHex(d.attendeeSig) || !isHex(d.doorSig) || !isHex(d.ticketSig)) {
+    throw new ShowmarkInputError("attendeeSig, doorSig and ticketSig must be 0x-prefixed hex");
+  }
   if (d.eventId < 0n || d.doorTime < 0n) throw new ShowmarkInputError("eventId and doorTime must not be negative");
   return {
     eventId: d.eventId.toString(),
     attendee: d.attendee,
     mode: d.mode,
     doorTime: d.doorTime.toString(),
+    ticket: d.ticket,
     attendeeSig: d.attendeeSig,
     doorSig: d.doorSig,
+    ticketSig: d.ticketSig,
   };
 }
 

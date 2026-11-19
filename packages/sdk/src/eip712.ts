@@ -11,7 +11,9 @@ import {
   type TypedDataDefinition,
   type WalletClient,
 } from "viem";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { ShowmarkInputError, ShowmarkSigningError } from "./errors";
+import type { ProofMode } from "./status";
 import type { AttendeeCodePayload, DoorPassPayload } from "./qr";
 
 // EIP-712 typed data for the Showmark registry (docs/INTERFACES.md section 2.2). The verifying contract is
@@ -20,17 +22,28 @@ import type { AttendeeCodePayload, DoorPassPayload } from "./qr";
 export const EIP712_NAME = "Showmark";
 export const EIP712_VERSION = "1";
 
+// The attendee binds the proof mode, so a mode 2 code shown at the door cannot be replayed as mode 1 (audit M-01).
 export const checkInTypes = {
   CheckIn: [
     { name: "eventId", type: "uint256" },
     { name: "attendee", type: "address" },
+    { name: "mode", type: "uint8" },
   ],
 } as const;
 
+// The door authorizes a throwaway ticket key per rotation; its private key exists only inside the QR (audit C-01).
 export const doorPassTypes = {
   DoorPass: [
     { name: "eventId", type: "uint256" },
     { name: "issuedAt", type: "uint64" },
+    { name: "ticket", type: "address" },
+  ],
+} as const;
+
+export const ticketTypes = {
+  Ticket: [
+    { name: "eventId", type: "uint256" },
+    { name: "attendee", type: "address" },
   ],
 } as const;
 
@@ -82,6 +95,11 @@ function requireUint(name: string, value: bigint, max: bigint): bigint {
 }
 
 // Lowercase addresses are accepted and checksummed; a mixed-case address with a wrong checksum is a typo and fails.
+function requireMode(mode: number): ProofMode {
+  if (mode !== 1 && mode !== 2) throw new ShowmarkInputError(`mode must be 1 or 2, got ${String(mode)}`);
+  return mode;
+}
+
 function requireAddress(name: string, value: string): Address {
   if (!isAddress(value)) throw new ShowmarkInputError(`${name} is not a valid address or its checksum is wrong: ${value}`);
   return getAddress(value);
@@ -94,7 +112,7 @@ export function showmarkDomain({ chainId, registry }: ShowmarkDomainParams): Sho
 
 export function checkInTypedData(
   domain: ShowmarkDomainParams,
-  message: { eventId: bigint; attendee: Address },
+  message: { eventId: bigint; attendee: Address; mode: ProofMode },
 ): TypedDataDefinition<typeof checkInTypes, "CheckIn"> {
   return {
     domain: showmarkDomain(domain),
@@ -103,13 +121,14 @@ export function checkInTypedData(
     message: {
       eventId: requireUint("eventId", message.eventId, MAX_UINT256),
       attendee: requireAddress("attendee", message.attendee),
+      mode: requireMode(message.mode),
     },
   };
 }
 
 export function doorPassTypedData(
   domain: ShowmarkDomainParams,
-  message: { eventId: bigint; issuedAt: bigint },
+  message: { eventId: bigint; issuedAt: bigint; ticket: Address },
 ): TypedDataDefinition<typeof doorPassTypes, "DoorPass"> {
   return {
     domain: showmarkDomain(domain),
@@ -118,6 +137,22 @@ export function doorPassTypedData(
     message: {
       eventId: requireUint("eventId", message.eventId, MAX_UINT256),
       issuedAt: requireUint("issuedAt", message.issuedAt, MAX_UINT64),
+      ticket: requireAddress("ticket", message.ticket),
+    },
+  };
+}
+
+export function ticketTypedData(
+  domain: ShowmarkDomainParams,
+  message: { eventId: bigint; attendee: Address },
+): TypedDataDefinition<typeof ticketTypes, "Ticket"> {
+  return {
+    domain: showmarkDomain(domain),
+    types: ticketTypes,
+    primaryType: "Ticket",
+    message: {
+      eventId: requireUint("eventId", message.eventId, MAX_UINT256),
+      attendee: requireAddress("attendee", message.attendee),
     },
   };
 }
@@ -155,12 +190,16 @@ export function linkWalletTypedData(
 }
 
 /** The 32-byte EIP-712 digest the registry recovers a CheckIn signature against. */
-export function hashCheckIn(domain: ShowmarkDomainParams, message: { eventId: bigint; attendee: Address }): Hex {
+export function hashCheckIn(domain: ShowmarkDomainParams, message: { eventId: bigint; attendee: Address; mode: ProofMode }): Hex {
   return hashTypedData(checkInTypedData(domain, message));
 }
 
-export function hashDoorPass(domain: ShowmarkDomainParams, message: { eventId: bigint; issuedAt: bigint }): Hex {
+export function hashDoorPass(domain: ShowmarkDomainParams, message: { eventId: bigint; issuedAt: bigint; ticket: Address }): Hex {
   return hashTypedData(doorPassTypedData(domain, message));
+}
+
+export function hashTicket(domain: ShowmarkDomainParams, message: { eventId: bigint; attendee: Address }): Hex {
+  return hashTypedData(ticketTypedData(domain, message));
 }
 
 export function hashDoorAttest(domain: ShowmarkDomainParams, message: { eventId: bigint; attendee: Address; attestedAt: bigint }): Hex {
@@ -191,15 +230,26 @@ async function sign<const types extends Record<string, readonly { name: string; 
   }
 }
 
-/** Attendee signature over CheckIn(eventId, attendee). The attendee defaults to the signer's address. */
-export async function signCheckIn(params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint; attendee?: Address }): Promise<Hex> {
+/** Attendee signature over CheckIn(eventId, attendee, mode). The attendee defaults to the signer's address. */
+export async function signCheckIn(
+  params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint; mode: ProofMode; attendee?: Address },
+): Promise<Hex> {
   const attendee = params.attendee ?? signerAddress(params.signer);
-  return sign(params.signer, checkInTypedData(params, { eventId: params.eventId, attendee }));
+  return sign(params.signer, checkInTypedData(params, { eventId: params.eventId, attendee, mode: params.mode }));
 }
 
-/** Door key signature over DoorPass(eventId, issuedAt) for mode 1, the rotating door QR. */
-export async function signDoorPass(params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint; issuedAt: bigint }): Promise<Hex> {
+/** Door key signature over DoorPass(eventId, issuedAt, ticket) for mode 1, the rotating door QR. */
+export async function signDoorPass(
+  params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint; issuedAt: bigint; ticket: Address },
+): Promise<Hex> {
   return sign(params.signer, doorPassTypedData(params, params));
+}
+
+/** Ticket key signature over Ticket(eventId, attendee): proves the attendee saw this rotation's QR. */
+export async function signTicket(
+  params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint; attendee: Address },
+): Promise<Hex> {
+  return sign(params.signer, ticketTypedData(params, params));
 }
 
 /** Door key signature over DoorAttest(eventId, attendee, attestedAt) for mode 2, door scans you. */
@@ -220,13 +270,18 @@ export function nowSeconds(): bigint {
   return BigInt(Math.floor(Date.now() / 1000));
 }
 
-/** Signs a fresh door pass, ready for `doorPassUrl`. `issuedAt` defaults to the current time in seconds. */
+/**
+ * Signs a fresh door pass, ready for `doorPassUrl`. Generates this rotation's throwaway ticket key and signs its
+ * address inside DoorPass; the private key travels only in the QR. `issuedAt` defaults to now in seconds.
+ */
 export async function createDoorPass(
-  params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint; issuedAt?: bigint },
+  params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint; issuedAt?: bigint; ticketKey?: Hex },
 ): Promise<DoorPassPayload> {
   const issuedAt = params.issuedAt ?? nowSeconds();
-  const doorSig = await signDoorPass({ ...params, issuedAt });
-  return { eventId: params.eventId, issuedAt, doorSig };
+  const ticketKey = params.ticketKey ?? generatePrivateKey();
+  const ticket = privateKeyToAccount(ticketKey).address;
+  const doorSig = await signDoorPass({ ...params, issuedAt, ticket });
+  return { eventId: params.eventId, issuedAt, doorSig, ticketKey };
 }
 
 /** Signs the attendee's CheckIn for mode 2 and returns the payload for `encodeAttendeeCode`. */
@@ -234,6 +289,6 @@ export async function createAttendeeCode(
   params: ShowmarkDomainParams & { signer: ShowmarkSigner; eventId: bigint },
 ): Promise<AttendeeCodePayload> {
   const attendee = signerAddress(params.signer);
-  const attendeeSig = await signCheckIn({ ...params, attendee });
+  const attendeeSig = await signCheckIn({ ...params, attendee, mode: 2 });
   return { eventId: params.eventId, attendee, attendeeSig };
 }

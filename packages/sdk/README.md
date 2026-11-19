@@ -35,11 +35,12 @@ await showmark.quote(7n);                   // what one presence pays right now
 import { createDoorPass, doorPassUrl, signCheckIn, signLinkWallet } from "@showmark/sdk";
 
 const domain = { chainId: 1983, registry };
+// Each pass carries a throwaway ticket key, so a door signature copied from the chain admits nobody else
 const url = doorPassUrl("https://showmark.app", await createDoorPass({ ...domain, signer: doorKey, eventId: 42n }));
-const sig = await signCheckIn({ ...domain, signer: passKey, eventId: 42n });
+const sig = await signCheckIn({ ...domain, signer: passKey, eventId: 42n, mode: 1 });
 ```
 
-`CheckIn`, `DoorPass`, `DoorAttest` and `LinkWallet` are each covered by a typed-data builder, a hash helper and a signer. The digests and signatures are tested against a Solidity implementation run by Foundry, and the real `ShowmarkRegistry` accepts them on anvil.
+`CheckIn`, `DoorPass`, `Ticket`, `DoorAttest` and `LinkWallet` are each covered by a typed-data builder, a hash helper and a signer. The digests and signatures are tested against a Solidity implementation run by Foundry, and the real `ShowmarkRegistry` accepts them on anvil.
 
 ## React
 

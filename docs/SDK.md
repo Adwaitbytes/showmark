@@ -22,7 +22,7 @@ The packages are not on npm yet. Inside this monorepo, depend on them with `"@sh
 
 ## Check in from a scanned door pass
 
-The door screen shows a QR that opens `https://<site>/c/{eventId}.{issuedAt}.{doorSig}`. The attendee's pass key signs `CheckIn`, and the relayer pays the gas.
+The door screen shows a QR that opens `https://<site>/c/{eventId}.{issuedAt}.{doorSig}.{ticketKey}`. The attendee's pass key signs `CheckIn`, the ticket key from the QR signs `Ticket` for that attendee, and the relayer pays the gas.
 
 ```ts
 import { ShowmarkClient } from "@showmark/sdk";
@@ -108,8 +108,9 @@ Domain: name `Showmark`, version `1`, the chain id and the `ShowmarkRegistry` ad
 
 | Type | Signed by | Helper |
 |---|---|---|
-| `CheckIn(uint256 eventId,address attendee)` | the attendee's pass key | `signCheckIn` |
-| `DoorPass(uint256 eventId,uint64 issuedAt)` | a door key (mode 1) | `signDoorPass`, `createDoorPass` |
+| `CheckIn(uint256 eventId,address attendee,uint8 mode)` | the attendee's pass key | `signCheckIn` |
+| `DoorPass(uint256 eventId,uint64 issuedAt,address ticket)` | a door key (mode 1) | `signDoorPass`, `createDoorPass` |
+| `Ticket(uint256 eventId,address attendee)` | this rotation's ticket key, read from the QR (mode 1) | `signTicket` |
 | `DoorAttest(uint256 eventId,address attendee,uint64 attestedAt)` | a door key (mode 2) | `signDoorAttest` |
 | `LinkWallet(address pass,address wallet,uint64 deadline)` | both the pass key and the wallet | `signLinkWallet` |
 
@@ -119,7 +120,7 @@ A signer is any viem local account (`privateKeyToAccount`, `mnemonicToAccount`, 
 import { createDoorPass, doorPassUrl, nowSeconds, signLinkWallet } from "@showmark/sdk";
 
 const domain = { chainId: 1983, registry };
-const pass = await createDoorPass({ ...domain, signer: doorKey, eventId: 42n }); // issuedAt = now
+const pass = await createDoorPass({ ...domain, signer: doorKey, eventId: 42n }); // issuedAt = now, fresh ticket key
 const url = doorPassUrl("https://showmark.app", pass);
 
 const link = { pass: passKey.address, wallet: walletAddress, deadline: nowSeconds() + 600n };
@@ -127,7 +128,11 @@ const passSig = await signLinkWallet({ ...domain, ...link, signer: passKey });
 const walletSig = await signLinkWallet({ ...domain, ...link, signer: walletClient });
 ```
 
-`checkInTypedData`, `doorPassTypedData`, `doorAttestTypedData` and `linkWalletTypedData` return the full typed data for viem's `signTypedData`, `hashTypedData` or `recoverTypedDataAddress`. `hashCheckIn` and its siblings return the 32-byte digest the registry recovers against. Runnable: `examples/door-pass.ts`, `examples/link-wallet.ts`.
+`checkInTypedData`, `doorPassTypedData`, `ticketTypedData`, `doorAttestTypedData` and `linkWalletTypedData` return the full typed data for viem's `signTypedData`, `hashTypedData` or `recoverTypedDataAddress`. `hashCheckIn` and its siblings return the 32-byte digest the registry recovers against. `CheckIn` binds the proof mode, so a mode 2 code shown at a door cannot be replayed as a mode 1 check-in. Runnable: `examples/door-pass.ts`, `examples/link-wallet.ts`.
+
+#### Why ticket keys
+
+A rotating door pass used to be a door signature over `(eventId, issuedAt)`. Once one attendee checked in, that signature sat in public calldata, and anyone watching the chain could pair it with their own pass and check in from home for the rest of the pass window. Now every 15 second rotation, `createDoorPass` generates a throwaway ticket key, the door signs its address inside `DoorPass`, and the private key travels only inside the QR. A mode 1 check-in must also carry a `Ticket` signature from that key over the specific attendee. The chain only ever sees the ticket's address and signatures, never its key, so a pass read from calldata admits nobody else. Seeing the QR is still enough, which is why streaming the door screen remains the documented residual risk and campaigns that need more can require mode 2. Treat `DoorPassPayload.ticketKey` like the QR itself: show it, never log or store it.
 
 ### QR codes
 
@@ -136,20 +141,20 @@ Byte-for-byte the same codec the Showmark app uses.
 ```ts
 import { decodeDoorPass, encodeAttendeeCode, decodeAttendeeCode } from "@showmark/sdk";
 
-decodeDoorPass("https://showmark.app/c/42.1795073006.q8vL...");
-// { eventId: 42n, issuedAt: 1795073006n, doorSig: "0x..." }, or null for anything malformed
+decodeDoorPass("https://showmark.app/c/42.1795073006.q8vL....zX3a...");
+// { eventId: 42n, issuedAt: 1795073006n, doorSig: "0x...", ticketKey: "0x..." }, or null for anything malformed
 
 encodeAttendeeCode({ eventId: 42n, attendee, attendeeSig }); // "SM2.42.0xA8C8....{sig}"
 ```
 
-Decoders never throw. Encoders throw `ShowmarkInputError` for a signature that is not 65 bytes.
+Decoders never throw. Encoders throw `ShowmarkInputError` for a signature that is not 65 bytes or a ticket key that is not 32 bytes.
 
 ### Building check-ins
 
 ```ts
 import { buildDoorPassCheckIn, buildDoorAttestCheckIn, createAttendeeCode } from "@showmark/sdk";
 
-// Mode 1, the attendee scanned the door screen
+// Mode 1, the attendee scanned the door screen: signs CheckIn and Ticket, fills ticket and ticketSig
 const data = await buildDoorPassCheckIn({ ...domain, doorPass: url, signer: passKey });
 
 // Mode 2, the door scanned the attendee's SM2 code; works offline
@@ -216,7 +221,7 @@ The components ship no styles. Each takes `className` and the usual HTML attribu
 | `PresenceBadge` | `loading`, `attended`, `absent`, `error` | `aria-busy` while loading; text labels by default, override with `labels` or a render function |
 | `DoorQR` | `loading`, `ready`, `error` | a `figure` with an `img` whose `alt` says what the code is and how often it changes |
 
-`CheckInButton` accepts the bare token or the full `/c/` URL, starts over when a new door pass arrives, and stops polling when it unmounts. `DoorQR` re-signs every 15 seconds by default (`intervalMs`) and never lets a slow signature replace a newer code. The React entry carries a `"use client"` directive, so it drops into the Next.js App Router. All three are in `examples/react-components.tsx`.
+`CheckInButton` accepts the bare token or the full `/c/` URL, starts over when a new door pass arrives, and stops polling when it unmounts. `DoorQR` generates a fresh ticket key and re-signs every 15 seconds by default (`intervalMs`), and never lets a slow signature replace a newer code. The React entry carries a `"use client"` directive, so it drops into the Next.js App Router. All three are in `examples/react-components.tsx`.
 
 ## Gate a contract on real-world presence
 
@@ -319,7 +324,7 @@ Every variable is optional, and a tool that needs a missing one answers with wha
 
 ## How this is verified
 
-- Typed data and signatures. `test/foundry/script/Digests.s.sol` computes the EIP-712 digests in Solidity, with `abi.encode` and `keccak256`, for fixed inputs on both chain ids, including zero and maximum values, and signs them with Foundry's `vm.sign`. The vitest suite checks that viem produces the same digests and the same 65-byte signatures, and checks both against a third implementation built from `keccak256` and `encodeAbiParameters`. Then `test/anvil.test.ts` deploys the real `ShowmarkRegistry` to anvil and records presences in both proof modes and a wallet link from SDK signatures, so the contract itself accepts what the SDK signs.
+- Typed data and signatures, for all five types including `Ticket`. `test/foundry/script/Digests.s.sol` computes the EIP-712 digests in Solidity, with `abi.encode` and `keccak256`, for fixed inputs on both chain ids, including zero and maximum values, and signs them with Foundry's `vm.sign`. The vitest suite checks that viem produces the same digests and the same 65-byte signatures, and checks both against a third implementation built from `keccak256` and `encodeAbiParameters`. Then `test/anvil.test.ts` deploys the real `ShowmarkRegistry` to anvil and records presences in both proof modes and a wallet link from SDK signatures, so the contract itself accepts what the SDK signs.
 - QR codec. The tests run the SDK codec and `apps/web/src/lib/qr/payload.ts` side by side on 500 random payloads and 2,000 mutated strings and require identical output, including every rejection.
 - Client reads decode real ABI-encoded results through a mocked viem transport; reverts, empty data and transport failures map to the documented errors.
 - ABIs come from the contracts. `pnpm --filter @showmark/sdk sync-abi` regenerates `src/abi/*.ts` from `packages/contracts/abi/*.json` when the contracts workstream exports them, and otherwise from a fresh `forge build` of `packages/contracts`. It moves from `ICampaignVault` and `IPresence` to `CampaignVault` and `PresenceLens` as those contracts land.

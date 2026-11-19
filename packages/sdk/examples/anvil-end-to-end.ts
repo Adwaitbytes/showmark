@@ -85,8 +85,10 @@ function startLocalRelayer(rpcUrl: string, registry: Address, relayerKey: Hex): 
         attendee: body.attendee as Address,
         mode: Number(body.mode),
         doorTime: BigInt(String(body.doorTime)),
+        ticket: body.ticket as Address,
         attendeeSig: body.attendeeSig as Hex,
         doorSig: body.doorSig as Hex,
+        ticketSig: body.ticketSig as Hex,
       };
       const { request } = await reader.simulateContract({ account, address: registry, abi: registryAbi, functionName: "checkIn", args: [d] });
       return wallet.writeContract(request);
@@ -214,7 +216,8 @@ export async function runEndToEnd(): Promise<EndToEndResult> {
     const showmark = new ShowmarkClient({ chain: foundry, rpcUrls: [anvil.rpcUrl], addresses: { registry, lens }, relayUrl: local.url });
     const domain = { chainId: foundry.id, registry };
 
-    // 2. Mode 1: the door screen shows a signed pass, the attendee's phone opens the URL and checks in.
+    // 2. Mode 1: the door screen shows a signed pass with this rotation's ticket key, the attendee's phone opens the
+    //    URL, signs CheckIn with the pass key and Ticket with the ticket key, and checks in.
     const attendeeA = privateKeyToAccount(generatePrivateKey());
     const url = doorPassUrl("https://showmark.example", await createDoorPass({ ...domain, signer: door, eventId }));
     const first = await showmark.checkIn({ doorPass: url, signer: attendeeA });

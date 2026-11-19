@@ -5,7 +5,9 @@ import { ShowmarkInputError } from "./errors";
 // apps/web/src/lib/qr/payload.ts exactly; test/qr.test.ts runs both on the same inputs to prove it.
 //
 // Door pass (mode 1), shown on the door screen and opened by any phone camera:
-//   {origin}/c/{eventId}.{issuedAt}.{doorSig base64url}
+//   {origin}/c/{eventId}.{issuedAt}.{doorSig base64url}.{ticketKey base64url}
+// The ticket key is a throwaway private key for one 15 second rotation. Only people who see the QR hold it, and
+// the chain only ever sees its signatures, so a door pass read from calldata cannot admit anyone else.
 // Attendee code (mode 2, door scans you), shown on the attendee's phone and scanned by the door app:
 //   SM2.{eventId}.{attendee}.{attendeeSig base64url}
 
@@ -13,6 +15,8 @@ export interface DoorPassPayload {
   eventId: bigint;
   issuedAt: bigint;
   doorSig: Hex;
+  /** 32-byte private key of this rotation's ticket key. Treat it like the QR itself: show it, never log it. */
+  ticketKey: Hex;
 }
 
 export interface AttendeeCodePayload {
@@ -22,6 +26,7 @@ export interface AttendeeCodePayload {
 }
 
 const SIG_BYTES = 65;
+const KEY_BYTES = 32;
 const DECIMAL = /^[0-9]{1,20}$/;
 
 export function toBase64Url(bytes: Uint8Array): string {
@@ -56,9 +61,22 @@ function decodeSig(text: string): Hex | null {
   return bytes && bytes.length === SIG_BYTES ? bytesToHex(bytes) : null;
 }
 
-/** The token part of a door pass: `{eventId}.{issuedAt}.{doorSig base64url}`. Throws ShowmarkInputError for a bad signature. */
+function encodeKey(key: Hex): string {
+  if (!isHex(key)) throw new ShowmarkInputError("Ticket key must be a 0x-prefixed hex string");
+  const bytes = hexToBytes(key);
+  if (bytes.length !== KEY_BYTES) throw new ShowmarkInputError(`Ticket key must be ${KEY_BYTES} bytes, got ${bytes.length}`);
+  return toBase64Url(bytes);
+}
+
+function decodeKey(text: string): Hex | null {
+  const bytes = fromBase64Url(text);
+  if (!bytes || bytes.length !== KEY_BYTES || bytes.every((b) => b === 0)) return null;
+  return bytesToHex(bytes);
+}
+
+/** The token part of a door pass: `{eventId}.{issuedAt}.{doorSig}.{ticketKey}`. Throws ShowmarkInputError for bad bytes. */
 export function encodeDoorPass(p: DoorPassPayload): string {
-  return `${p.eventId}.${p.issuedAt}.${encodeSig(p.doorSig)}`;
+  return `${p.eventId}.${p.issuedAt}.${encodeSig(p.doorSig)}.${encodeKey(p.ticketKey)}`;
 }
 
 /** The full URL a phone camera opens: `{origin}/c/{token}`. */
@@ -72,12 +90,13 @@ export function decodeDoorPass(input: string): DoorPassPayload | null {
   const token = trimmed.includes("/c/") ? trimmed.slice(trimmed.lastIndexOf("/c/") + 3).split(/[?#]/)[0] : trimmed;
   if (token === undefined) return null;
   const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [eventId, issuedAt, sig] = parts as [string, string, string];
+  if (parts.length !== 4) return null;
+  const [eventId, issuedAt, sig, key] = parts as [string, string, string, string];
   if (!DECIMAL.test(eventId) || !DECIMAL.test(issuedAt)) return null;
   const doorSig = decodeSig(sig);
-  if (!doorSig) return null;
-  return { eventId: BigInt(eventId), issuedAt: BigInt(issuedAt), doorSig };
+  const ticketKey = decodeKey(key);
+  if (!doorSig || !ticketKey) return null;
+  return { eventId: BigInt(eventId), issuedAt: BigInt(issuedAt), doorSig, ticketKey };
 }
 
 /** `SM2.{eventId}.{attendee}.{attendeeSig base64url}`. Throws ShowmarkInputError for a bad signature. */

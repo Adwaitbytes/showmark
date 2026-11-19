@@ -8,8 +8,9 @@ pragma solidity ^0.8.24;
 contract DigestHarness {
     bytes32 public constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-    bytes32 public constant CHECK_IN_TYPEHASH = keccak256("CheckIn(uint256 eventId,address attendee)");
-    bytes32 public constant DOOR_PASS_TYPEHASH = keccak256("DoorPass(uint256 eventId,uint64 issuedAt)");
+    bytes32 public constant CHECK_IN_TYPEHASH = keccak256("CheckIn(uint256 eventId,address attendee,uint8 mode)");
+    bytes32 public constant DOOR_PASS_TYPEHASH = keccak256("DoorPass(uint256 eventId,uint64 issuedAt,address ticket)");
+    bytes32 public constant TICKET_TYPEHASH = keccak256("Ticket(uint256 eventId,address attendee)");
     bytes32 public constant DOOR_ATTEST_TYPEHASH = keccak256("DoorAttest(uint256 eventId,address attendee,uint64 attestedAt)");
     bytes32 public constant LINK_WALLET_TYPEHASH = keccak256("LinkWallet(address pass,address wallet,uint64 deadline)");
 
@@ -21,12 +22,16 @@ contract DigestHarness {
         return keccak256(abi.encodePacked("\x19\x01", domainSeparator(), structHash));
     }
 
-    function hashCheckIn(uint256 eventId, address attendee) external view returns (bytes32) {
-        return _digest(keccak256(abi.encode(CHECK_IN_TYPEHASH, eventId, attendee)));
+    function hashCheckIn(uint256 eventId, address attendee, uint8 mode) external view returns (bytes32) {
+        return _digest(keccak256(abi.encode(CHECK_IN_TYPEHASH, eventId, attendee, mode)));
     }
 
-    function hashDoorPass(uint256 eventId, uint64 issuedAt) external view returns (bytes32) {
-        return _digest(keccak256(abi.encode(DOOR_PASS_TYPEHASH, eventId, issuedAt)));
+    function hashDoorPass(uint256 eventId, uint64 issuedAt, address ticket) external view returns (bytes32) {
+        return _digest(keccak256(abi.encode(DOOR_PASS_TYPEHASH, eventId, issuedAt, ticket)));
+    }
+
+    function hashTicket(uint256 eventId, address attendee) external view returns (bytes32) {
+        return _digest(keccak256(abi.encode(TICKET_TYPEHASH, eventId, attendee)));
     }
 
     function hashDoorAttest(uint256 eventId, address attendee, uint64 attestedAt) external view returns (bytes32) {
