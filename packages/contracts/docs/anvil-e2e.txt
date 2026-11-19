@@ -19,40 +19,40 @@ ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
    registry.pendingOwner = 0x14dC79964da2C08b23698B3D3cc7Ca32193d9955  vault.pendingOwner = 0x14dC79964da2C08b23698B3D3cc7Ca32193d9955
 
 == organizer creates event 1 and authorizes door key 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
-   tx 0x7f232d88daf82ae08797c50396b7bcba1c4e6ae9042e3b79eec9a83ec7cba138 status=0x1 gas=82021
-   tx 0x412dc5658aeffc8b6b3e8ab67cc29ce4c341d3099e93e26452628ecca8033328 status=0x1 gas=51015
+   tx 0xe7383d3b5540b05655d8dfe23102eb4b66af3ccb8370186e277519e1ff20aba6 status=0x1 gas=82021
+   tx 0xbe1cae3c0803d4b7f7a6ae6daa336d016cb4b78562ddb67ca41c0b80baa895ae status=0x1 gas=51015
 
 == sponsor creates campaign 1: 1 QIE per presence, 60% to the attendee, 5 QIE budget, fee snapshot 1%
-   tx 0xc63f91976dfed05caeb8fedcf765e52c04c3d95512602a535e9faece521a0f31 status=0x1 gas=160329
-   tx 0x43716ed1d530317e544108bf60fac604cb34ba1028900d166d574ec7bfb111aa status=0x1 gas=58525
+   tx 0x3a63e957a4b3eb06b3bf62fcbece6d320373b2cee00d80296ab3cdc623c5f787 status=0x1 gas=160329
+   tx 0x4d4221728544314f7d25520854f636164185f280e3f891fe5b91f50c0df06297 status=0x1 gas=58525
 
 == door rotation: fresh ticket key, door signs DoorPass naming it; the QR holds the ticket key
-   ticket key address 0x238a31889e48F679BEB980c017d1766BDfb92F2B (private key never leaves the QR)
+   ticket key address 0xe14BC8Af198C38Fdf39dee07084bEdDa6f07Fb4a (private key never leaves the QR)
 
 == attendee pass 0x90F79bf6EB2c4f870365E785982E1f101E93b906 signs CheckIn(mode 1) and, with the scanned ticket key, Ticket; relayer submits checkIn
-   tx 0xf98c5aa8617fca3caefab992bdf0960406d6058d8666f4e4b3066a04d0500c78 status=0x1 gas=115488
-   presenceOf(event, pass) = (1, 1795084222 [1.795e9])
+   tx 0xbd39e665c977dfcba7cb025e5ab4c9fa4faebe013d79d1b5a8177b45cf07e276 status=0x1 gas=115464
+   presenceOf(event, pass) = (1, 1795085579 [1.795e9])
    stamp balance of pass = 1, uri = "http://localhost:3000/api/stamp/1"
    pass native balance = 10000.000000000000000000 QIE (the relayer paid the gas)
 
 == relayer settles the presence
-   tx 0x270fc4d5793744f8b4ea4a96a633c76085cdd942675a86f81cfa4a8f3943474e status=0x1 gas=217276
+   tx 0xc327609b151b4629e469a616bc74bfc83fb17a97b7ee363a69153cd024888503 status=0x1 gas=217276
    claimable attendee = 0.594000000000000000 QIE
    claimable organizer = 0.396000000000000000 QIE
    claimable fee recipient = 0.010000000000000000 QIE
    campaign balance left = 4.000000000000000000 QIE
 
 == organizer withdraws its share
-   tx 0x028debc04b31ef040fd01ddb0b052d3db5f70e3ee3e09e956ddd73628bc18fc7 status=0x1 gas=45239
-   organizer balance change = 0.395995925603751800 QIE (0.396 minus gas)
+   tx 0x500b76207b0bfddb16dc2786982296a5ffed12139115d2614874a615cc45beaa status=0x1 gas=45239
+   organizer balance change = 0.395995925182214798 QIE (0.396 minus gas)
 
 == pass links wallet 0x976EA74026E726554dB657fA54763abd0C3a0aa9 (both sign LinkWallet), relayer submits and relocates the stamp
-   tx 0xc088bffb9932c8fe41fe4556534479b88aa071027883725ad6182472f4e51ff7 status=0x1 gas=120824
+   tx 0x9835c47b3216fd3d32d849df8b29e19eaecf1bf462099a397d78300bcc6fb05b status=0x1 gas=120824
    walletOf(pass) = 0x976EA74026E726554dB657fA54763abd0C3a0aa9
    stamp now on wallet = 1, hasAttended(wallet) = true
 
 == relayer withdraws the attendee reward to the linked wallet (gasless for the attendee)
-   tx 0xfec23236d8244bc993f052f6d5bf83c09745625cb1ac1e4df7d5957d560c9881 status=0x1 gas=47718
+   tx 0x5dd2c973de3c00b02dfa6dfe0f73cda4cc027bf4f0983bbeeea3ac1d3092e38f status=0x1 gas=47718
    wallet balance change = 0.594000000000000000 QIE
 
 == solvency
