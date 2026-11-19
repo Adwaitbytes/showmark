@@ -68,11 +68,12 @@ async function nextBlock(deps: SyncDeps): Promise<bigint> {
   const ours = new Set([ctx.registry.toLowerCase(), ctx.vault.toLowerCase()]);
   const foreign = rows.filter((r) => !ours.has(r.contract));
   if (foreign.length > 0) {
-    log.error("indexer.contract_mismatch", { chainId: ctx.chainId, indexed: foreign.map((r) => r.contract), configured: [...ours] });
+    // Operators clear the old deployment's rows with resetIndex() below, then the indexer starts from deployBlock.
+    log.error("indexer.contract_mismatch", { chainId: ctx.chainId, indexed: foreign.map((r) => r.contract), configured: [...ours], fix: "resetIndex" });
     throw new AppError(503, {
       code: "index_mismatch",
-      message: "The database holds data from a different Showmark deployment.",
-      action: "An operator must reset the index with scripts/reset-index.ts before pages can update.",
+      message: "Showmark is switching to new contracts and its records are being rebuilt.",
+      action: "Try again in a few minutes.",
     });
   }
   const mine = rows.filter((r) => ours.has(r.contract));
