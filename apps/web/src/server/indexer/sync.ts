@@ -83,7 +83,8 @@ async function nextBlock(deps: SyncDeps): Promise<bigint> {
 export async function syncOnce(options: SyncOptions, deps: SyncDeps = defaultDeps()): Promise<SyncResult> {
   const { ctx, database, team } = deps;
   const started = Date.now();
-  const head = await ctx.client.getBlockNumber();
+  // viem caches the block number for the client's polling interval; the indexer needs the real head.
+  const head = await ctx.client.getBlockNumber({ cacheTime: 0 });
   let from = await nextBlock(deps);
   const firstFrom = from;
   let chunks = 0;
