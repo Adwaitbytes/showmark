@@ -226,6 +226,11 @@ export function buildStatements(db: Db, logs: ShowmarkLog[], blockTimes: Readonl
       case "DoorKeyRevoked":
       case "CheckInRejected":
       case "FeeChanged":
+      case "EIP712DomainChanged":
+      case "OwnershipTransferStarted":
+      case "OwnershipTransferred":
+      case "Paused":
+      case "Unpaused":
         // Counted as Showmark transactions; nothing else is stored.
         break;
       default: {

@@ -33,9 +33,9 @@ describe("decodeShowmarkLogs", () => {
   });
 
   it("drops logs from other addresses and events outside the Showmark ABI", () => {
-    const ownable = parseAbi(["event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)"]);
+    const erc20 = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
     const foreign = encodeLog(registryAbi, "WalletLinked", { pass, wallet }, { address: "0x3000000000000000000000000000000000000003", block: 1n, logIndex: 0 });
-    const notOurs = encodeLog(ownable, "OwnershipTransferred", { previousOwner: zeroAddress, newOwner: organizer }, { address: registry, block: 1n, logIndex: 1 });
+    const notOurs = encodeLog(erc20, "Transfer", { from: zeroAddress, to: organizer, value: 1n }, { address: registry, block: 1n, logIndex: 1 });
     // A registry event emitted by the vault address must not decode as a vault event.
     const wrongContract = encodeLog(registryAbi, "WalletLinked", { pass, wallet }, { address: vault, block: 1n, logIndex: 2 });
     expect(decodeShowmarkLogs([foreign, notOurs, wrongContract], { registry, vault })).toEqual([]);
