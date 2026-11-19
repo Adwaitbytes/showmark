@@ -57,16 +57,16 @@ Deployment pending. Addresses will be listed here with explorer links.
 
 | Contract | Address |
 |---|---|
-| ShowmarkRegistry | [0xd03B9d6691296761216b02053f00d77FD0f2802A](https://testnet.qie.digital/address/0xd03B9d6691296761216b02053f00d77FD0f2802A) |
-| PresenceStamp | [0xAceE5A7EdA63af6952429c97a693ca690024559E](https://testnet.qie.digital/address/0xAceE5A7EdA63af6952429c97a693ca690024559E) |
-| CampaignVault | [0xFAA5c9159F5dfB4b9fbB104E10c7280a1fe6FCDe](https://testnet.qie.digital/address/0xFAA5c9159F5dfB4b9fbB104E10c7280a1fe6FCDe) |
-| OrganizerBond | [0xd9737Ca433D58496d46d947138e97c28E19fA722](https://testnet.qie.digital/address/0xd9737Ca433D58496d46d947138e97c28E19fA722) |
-| PresenceLens | [0x28dB120c102c743d6846254E90bA9ef85f3b2145](https://testnet.qie.digital/address/0x28dB120c102c743d6846254E90bA9ef85f3b2145) |
+| ShowmarkRegistry | [0xb97517a6Ab3E097a894949793Cf478c7C2485032](https://testnet.qie.digital/address/0xb97517a6Ab3E097a894949793Cf478c7C2485032) |
+| PresenceStamp | [0x5104d466fbeFcA6062672C8Fd61AA45c48635818](https://testnet.qie.digital/address/0x5104d466fbeFcA6062672C8Fd61AA45c48635818) |
+| CampaignVault | [0xb772A3786AD2b65eB648cE2eEf205Dc4F4Dc18b1](https://testnet.qie.digital/address/0xb772A3786AD2b65eB648cE2eEf205Dc4F4Dc18b1) |
+| OrganizerBond | [0xC741Fd300f72b340BeE933b9BD09F68E589f56f5](https://testnet.qie.digital/address/0xC741Fd300f72b340BeE933b9BD09F68E589f56f5) |
+| PresenceLens | [0x496c7D21B1Ec6A303e822Ca486D602Cb352D8050](https://testnet.qie.digital/address/0x496c7D21B1Ec6A303e822Ca486D602Cb352D8050) |
 
 ## Security
 
-- 218 Foundry tests with 100 percent line and branch coverage, including fuzz tests and a handler-based invariant suite that proves escrow solvency, one presence per person per event, and that refunds and withdrawals always work, even while paused.
-- An independent review by a separate agent that did not write the contracts, over three rounds. Every finding and its fix is in [packages/contracts/docs/AUDIT.md](packages/contracts/docs/AUDIT.md), and each exploit is kept as a regression test.
+- 238 Foundry tests with 100 percent line and branch coverage, including fuzz tests and a handler-based invariant suite that proves escrow solvency, one presence per person per event, and that refunds and withdrawals always work, even while paused.
+- An independent review by a separate agent that did not write the contracts, over four rounds. Every finding and its fix is in [packages/contracts/docs/AUDIT.md](packages/contracts/docs/AUDIT.md), and each exploit is kept as a regression test.
 - Slither results with a justification for each in [packages/contracts/docs/slither.md](packages/contracts/docs/slither.md).
 
 ## For builders

@@ -4,21 +4,20 @@ Proof for every claim we make, newest at the bottom of each section. Explorer li
 
 ## Contracts
 
-### Testnet (chain 1983), audited code after all fixes through re-review N-01 and N-02
+### Testnet (chain 1983), final audited code (fourth re-review: go)
 
-Deployed 19 Nov 2026 from deployer `0xA8C849C243BA940102d2deB99971e4c713411926`, deploy block 9859857. Every contract is source-verified on https://testnet.qie.digital.
+Deployed 19 Nov 2026 from deployer `0xA8C849C243BA940102d2deB99971e4c713411926`, deploy block 9860279. Source-verified on https://testnet.qie.digital (PresenceStamp verification is retried after the explorer indexes it; see note).
 
 | Contract | Address |
 |---|---|
-| ShowmarkRegistry | [0xd03B9d6691296761216b02053f00d77FD0f2802A](https://testnet.qie.digital/address/0xd03B9d6691296761216b02053f00d77FD0f2802A) |
-| PresenceStamp | [0xAceE5A7EdA63af6952429c97a693ca690024559E](https://testnet.qie.digital/address/0xAceE5A7EdA63af6952429c97a693ca690024559E) |
-| CampaignVault | [0xFAA5c9159F5dfB4b9fbB104E10c7280a1fe6FCDe](https://testnet.qie.digital/address/0xFAA5c9159F5dfB4b9fbB104E10c7280a1fe6FCDe) |
-| OrganizerBond | [0xd9737Ca433D58496d46d947138e97c28E19fA722](https://testnet.qie.digital/address/0xd9737Ca433D58496d46d947138e97c28E19fA722) |
-| PresenceLens | [0x28dB120c102c743d6846254E90bA9ef85f3b2145](https://testnet.qie.digital/address/0x28dB120c102c743d6846254E90bA9ef85f3b2145) |
-| QieIdCheck | [0x5BC38FC820dee09FE8Cb2E573ebA31769987F5a3](https://testnet.qie.digital/address/0x5BC38FC820dee09FE8Cb2E573ebA31769987F5a3) |
-| Testnet QUSDC, name registry, price feed | stand-ins listed in `packages/contracts/deployments/1983.json` |
+| ShowmarkRegistry | [0xb97517a6Ab3E097a894949793Cf478c7C2485032](https://testnet.qie.digital/address/0xb97517a6Ab3E097a894949793Cf478c7C2485032) |
+| PresenceStamp | [0x5104d466fbeFcA6062672C8Fd61AA45c48635818](https://testnet.qie.digital/address/0x5104d466fbeFcA6062672C8Fd61AA45c48635818) |
+| CampaignVault | [0xb772A3786AD2b65eB648cE2eEf205Dc4F4Dc18b1](https://testnet.qie.digital/address/0xb772A3786AD2b65eB648cE2eEf205Dc4F4Dc18b1) |
+| OrganizerBond | [0xC741Fd300f72b340BeE933b9BD09F68E589f56f5](https://testnet.qie.digital/address/0xC741Fd300f72b340BeE933b9BD09F68E589f56f5) |
+| PresenceLens | [0x496c7D21B1Ec6A303e822Ca486D602Cb352D8050](https://testnet.qie.digital/address/0x496c7D21B1Ec6A303e822Ca486D602Cb352D8050) |
+| QieIdCheck | [0xAb19A9469e4ed5f1F4531FB1D378f509CE17aB7a](https://testnet.qie.digital/address/0xAb19A9469e4ed5f1F4531FB1D378f509CE17aB7a) |
 
-Note: the testnet explorer only recognised PresenceStamp (created inside the registry constructor) after a direct transaction to it ([setBaseURI](https://testnet.qie.digital/tx/0x70ba8fad18a9616311bddbb054efb3dbc534e97b3be607c8d76610980c150e71)); the mainnet explorer already recognises factory-created contracts.
+Note: the testnet explorer does not index contracts created inside another constructor until a transaction touches them directly, so PresenceStamp gets a `setBaseURI` poke before verification. The mainnet explorer recognises such contracts already. Earlier testnet deployments from the same day (pre-audit-fix) are superseded and no longer used by the app.
 
 ### Mainnet (chain 1990)
 
@@ -28,7 +27,7 @@ Pending: needs mainnet QIE and the protocol Safe (see NEEDS_FROM_YATHU.md).
 
 | Suite | Result | Run |
 |---|---|---|
-| Foundry (unit, fuzz, invariant, audit regressions) | 218 passed, 0 failed, 1 skipped (opt-in mainnet fork) | 19 Nov, workstream A, rerun by lead |
+| Foundry (unit, fuzz, invariant, audit regressions) | 238 passed, 0 failed, 1 skipped (opt-in mainnet fork) | 19 Nov, rerun by lead on the final code |
 | Foundry invariants | 256 runs x 128 calls, 0 handler reverts, also under fail-on-revert | 19 Nov |
 | Coverage of `packages/contracts/src` | 100% lines, statements, branches, functions | 19 Nov |
 | Web (vitest) | 228 passed, 9 skipped (opt-in live network tests) | 19 Nov, lead |
@@ -50,3 +49,10 @@ Independent security review: `packages/contracts/docs/AUDIT.md` (three rounds).
 - Presence recorded on chain: [CheckedIn 0x18bb7928…2b81](https://testnet.qie.digital/tx/0x18bb7928e05da0f450f9e271888f26be3928b6ec1848710396e24adb2ab92b81), attendee pass `0x7135b35892cec6640a693bbbf71b831ddf67f4e9`
 - Escrow settled for that presence in a separate transaction: [Settled 0x8e0e48f1…f8f1](https://testnet.qie.digital/tx/0x8e0e48f18db6c34bed159714b6fda4d6198e1b305c08a55b4bf37199aa38f8f1)
 - The ticket key fragment was removed from the address bar after load.
+
+### 2. Attendee check-in on the final audited contracts (19 Nov 2026, 16:38 IST)
+
+- Event 1 created [0x217f375a…9cea](https://testnet.qie.digital/tx/0x217f375a81ab781d996375b03e6dc1a51e938863169b69d42c89e424291e9cea), door key authorized [0x7d36e6ab…7737](https://testnet.qie.digital/tx/0x7d36e6ab467d5a9af873756e9bae5cd045238006e2f9bde27ebf21b67d4a7737), campaign 1 funded with 0.2 QIE [0xa87c2ec8…695a](https://testnet.qie.digital/tx/0xa87c2ec8ea3af1658fce64bb1ac0d7035f3afd66ec5a32ab4db2d5b22991695a), event approved [0xf55a7afe…70ac](https://testnet.qie.digital/tx/0xf55a7afe297b36b0a6025ff4f9914104703e8aee54150c61aced7c36888d70ac).
+- Measured in Chrome on https://showmark.vercel.app: 7.4 seconds from navigation start to "You are checked in" (presence confirmed on chain). Desktop on broadband; the mid-range Android measurement on mobile data is still to be done at a real event.
+- Presence: [CheckedIn 0x3c5e8c6b…9369](https://testnet.qie.digital/tx/0x3c5e8c6b3087eea69b124d86df676eb0bb35385527e7438f9821453c759a9369). Payout: [Settled 0xe061ed0d…7e48](https://testnet.qie.digital/tx/0xe061ed0d897d7f1b0da1f2833766c589545216f2955f648b7eb2686d2d787e48).
+- "Open my passport" showed the stamp and 0.006 QIE claimable immediately (the stuck-passport bug from journey 1 is fixed by commit b754c91).
