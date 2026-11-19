@@ -40,6 +40,7 @@ const english = {
     signing: "Checking you in",
     sending: "Checking you in",
     sendingHint: "Sending your signed check-in to Showmark.",
+    queuedHint: "Showmark has your check-in and is sending it to QIE. Keep this screen open.",
     confirming: "Recording your stamp on QIE",
     confirmingHint: "This usually takes about 4 seconds.",
     stamped: "You are checked in",

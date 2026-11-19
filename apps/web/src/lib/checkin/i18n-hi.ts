@@ -29,6 +29,7 @@ export const hi: Dictionary = {
     signing: "आपका चेक इन हो रहा है",
     sending: "आपका चेक इन हो रहा है",
     sendingHint: "आपका साइन किया हुआ चेक इन Showmark को भेजा जा रहा है।",
+    queuedHint: "आपका चेक इन Showmark के पास है और QIE पर भेजा जा रहा है। यह स्क्रीन खुली रखें।",
     confirming: "आपका स्टैम्प QIE पर दर्ज हो रहा है",
     confirmingHint: "आमतौर पर इसमें लगभग 4 सेकंड लगते हैं।",
     stamped: "आपका चेक इन हो गया",

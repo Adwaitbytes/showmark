@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Hex } from "viem";
-import type { ApiFailure, ApiResult, Submitted, TxState } from "./api";
+import type { ApiFailure, ApiResult, RelayAnswer, Submitted, TxState } from "./api";
 import { classifyFailure, retryDelayMs } from "./errors";
 import { createWaiter, runCheckIn, type CheckInDeps, type CheckInPhase } from "./machine";
 import type { CheckInRequest } from "./sign";
@@ -21,6 +21,8 @@ const request: CheckInRequest = {
 const fail = (failure: ApiFailure): ApiResult<never> => ({ ok: false, failure });
 const apiError = (status: number, code: string): ApiFailure => ({ kind: "api", status, code, message: `${code} message`, action: `${code} action` });
 const submitted: ApiResult<Submitted> = { ok: true, data: { txHash: TX, status: "submitted" } };
+const QUEUE_ID = "0123456789abcdef01234567";
+const queuedAnswer: ApiResult<RelayAnswer> = { ok: true, data: { id: QUEUE_ID, status: "queued" } };
 const tx = (status: TxState["status"]): ApiResult<TxState> => ({ ok: true, data: { status, blockNumber: "10" } });
 
 interface Harness {
@@ -30,12 +32,13 @@ interface Harness {
   outbox: { saved: number; removed: number };
 }
 
-function harness(posts: ApiResult<Submitted>[], statuses: ApiResult<TxState>[] = [tx("success")], online = true): Harness {
+function harness(posts: ApiResult<RelayAnswer>[], statuses: ApiResult<TxState>[] = [tx("success")], online = true, queued: ApiResult<RelayAnswer>[] = []): Harness {
   let clock = 1_000_000;
   const waits: (number | null)[] = [];
   const outbox = { saved: 0, removed: 0 };
   const deps: CheckInDeps = {
     postCheckIn: vi.fn(async () => posts.shift() ?? fail({ kind: "network", code: "network" })),
+    queuedStatus: vi.fn(async () => queued.shift() ?? { ok: true as const, data: { id: QUEUE_ID, status: "queued" as const } }),
     txStatus: vi.fn(async () => statuses.shift() ?? tx("pending")),
     now: () => clock,
     isOnline: () => online,
@@ -141,6 +144,36 @@ describe("runCheckIn", () => {
   });
 });
 
+describe("runCheckIn with a queued relay answer", () => {
+  it("treats 202 as progress and follows the queue to the hash and the stamp", async () => {
+    const h = harness([queuedAnswer], [tx("success")], true, [queuedAnswer, submitted]);
+    const final = await run(h);
+    expect(h.phases.map((p) => p.kind)).toEqual(["sending", "queued", "confirming", "stamped"]);
+    expect(final).toMatchObject({ kind: "stamped", txHash: TX });
+    // Queued means the relay holds it: never sent again, and not left in the outbox for a resend.
+    expect(h.deps.postCheckIn).toHaveBeenCalledTimes(1);
+    expect(h.outbox).toEqual({ saved: 1, removed: 1 });
+  });
+
+  it("keeps polling through a failed read of the queue", async () => {
+    const h = harness([queuedAnswer], [tx("success")], true, [fail({ kind: "network", code: "network" }), submitted]);
+    expect((await run(h))?.kind).toBe("stamped");
+  });
+
+  it("ends with the API's words when the queued check-in is rejected", async () => {
+    const h = harness([queuedAnswer], [], true, [fail(apiError(422, "stale"))]);
+    expect(await run(h)).toMatchObject({ kind: "failed", problem: { kind: "stale" } });
+    const already = harness([queuedAnswer], [], true, [fail(apiError(422, "already_present"))]);
+    expect(await run(already)).toEqual({ kind: "already" });
+  });
+
+  it("does not show a stamp for an item the mined batch rejected", async () => {
+    const rejected: ApiResult<TxState> = { ok: true, data: { status: "reverted", checkIn: { recorded: false, error: { code: "stale", message: "m", action: "a" } } } };
+    const h = harness([submitted], [rejected]);
+    expect(await run(h)).toMatchObject({ kind: "failed", problem: { kind: "stale", retryable: false }, txHash: TX });
+  });
+});
+
 describe("classifyFailure", () => {
   it("splits temporary trouble from final answers", () => {
     expect(classifyFailure(apiError(429, "rate_limited"), true).kind).toBe("rate");
@@ -183,7 +216,8 @@ describe("runCheckIn with the chain watched in parallel", () => {
     const waiter = createWaiter();
     const deps = {
       removed: 0,
-      postCheckIn: () => new Promise<ApiResult<Submitted>>(() => undefined),
+      postCheckIn: () => new Promise<ApiResult<RelayAnswer>>(() => undefined),
+      queuedStatus: async () => queuedAnswer,
       txStatus: async () => tx("pending"),
       now: Date.now,
       isOnline: () => true,
@@ -217,7 +251,7 @@ describe("runCheckIn with the chain watched in parallel", () => {
   });
 
   it("emits nothing from the relay once the chain has decided", async () => {
-    let release: (value: ApiResult<Submitted>) => void = () => undefined;
+    let release: (value: ApiResult<RelayAnswer>) => void = () => undefined;
     const deps = liveDeps({ postCheckIn: () => new Promise((resolve) => (release = resolve)), presence: async () => true });
     const phases: CheckInPhase[] = [];
     await runCheckIn(request, deps, (p) => phases.push(p), new AbortController().signal, fast);

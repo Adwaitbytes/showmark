@@ -131,6 +131,8 @@ export interface MockOptions {
   chainWallet?: "linked" | "unlinked" | "down";
   /** registry.presenceOf turns true this long after the first check-in POST. Unset: never. */
   presenceAfterMs?: number;
+  /** GET /api/relay/check-in/{id} answers 200 with the hash this long after the first POST. Unset: stays 202. */
+  queuedHashAfterMs?: number;
 }
 
 export interface MockResponse {
@@ -139,6 +141,9 @@ export interface MockResponse {
 }
 
 export const submitted: MockResponse = { status: 200, body: { txHash: TX_CHECK_IN, status: "submitted" } };
+export const QUEUE_ID = "0123456789abcdef01234567";
+/** The relay's answer when it had no hash within its 3 s budget. */
+export const queued: MockResponse = { status: 202, body: { id: QUEUE_ID, status: "queued" } };
 
 export function apiError(status: number, code: string, message: string, action: string): MockResponse {
   return { status, body: { error: { code, message, action } } };
@@ -156,9 +161,16 @@ export const ERRORS = {
 const json = (route: Route, response: MockResponse) =>
   route.fulfill({ status: response.status, contentType: "application/json", body: JSON.stringify(response.body) });
 
+/** What the app revealed about its chain config through its RPC calls (registry address, chain). */
+export interface SeenChain {
+  registry: Address | null;
+  chainId: number | null;
+}
+
 /** Routes every /api call the attendee screens make. Returns the check-in bodies the app sent. */
-export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ checkIns: unknown[] }> {
+export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ checkIns: unknown[]; seen: SeenChain }> {
   const checkIns: unknown[] = [];
+  const seen: SeenChain = { registry: null, chainId: null };
   const checkInQueue = [...(options.checkIn ?? [submitted])];
   const txQueue = [...(options.tx ?? ["pending", "success"])];
 
@@ -177,7 +189,11 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
     if (next === "hang" || !next) return; // never answers: the screen stays in "sending"
     return json(route, next);
   });
-  await page.route(/\/api\/tx\/0x[0-9a-fA-F]+$/, (route) => {
+  await page.route(/\/api\/relay\/check-in\/[0-9a-f]{24}$/, (route) => {
+    const ready = options.queuedHashAfterMs !== undefined && firstPostAt !== null && Date.now() - firstPostAt >= options.queuedHashAfterMs;
+    return json(route, ready ? submitted : queued);
+  });
+  await page.route(/\/api\/tx\/0x[0-9a-fA-F]+(\?.*)?$/, (route) => {
     const next = txQueue.length > 1 ? txQueue.shift() : txQueue[0];
     return json(route, { status: 200, body: next === "pending" ? { status: "pending" } : { status: next, blockNumber: "4410021" } });
   });
@@ -196,6 +212,11 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
     const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-allow-methods": "POST" };
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     const body: unknown = route.request().postDataJSON();
+    seen.chainId = route.request().url().includes("testnet") ? 1983 : 1990;
+    for (const call of Array.isArray(body) ? body : [body]) {
+      const to = (call as RpcCall).method === "eth_call" ? ((call as RpcCall).params?.[0] as { to?: string } | undefined)?.to : undefined;
+      if (to) seen.registry = getAddress(to);
+    }
     const present = options.presenceAfterMs !== undefined && firstPostAt !== null && Date.now() - firstPostAt >= options.presenceAfterMs;
     const answer = (call: RpcCall) => ({ jsonrpc: "2.0", id: call.id, result: rpcResult(call, { chainWallet, present }) });
     const reply = Array.isArray(body) ? body.map(answer) : answer(body as RpcCall);
@@ -203,7 +224,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
   });
   await page.route("**/api/relay/link-wallet", (route) => json(route, { status: 200, body: { txHash: TX_LINK } }));
   await page.route("**/api/relay/withdraw", (route) => json(route, { status: 200, body: { txHash: TX_WITHDRAW } }));
-  return { checkIns };
+  return { checkIns, seen };
 }
 
 interface RpcCall {

@@ -1,4 +1,4 @@
-import { postCheckIn, type ApiResult, type Submitted } from "./api";
+import { postCheckIn, type ApiResult, type RelayAnswer } from "./api";
 import { classifyDoorCode, doorTokenFromPath } from "./door-fragment";
 import { saveToOutbox } from "./local-records";
 import { passAndSign, type SignResult } from "./pass-signer";
@@ -16,7 +16,7 @@ export interface EarlyCheckIn {
   code: string;
   signed: Promise<SignResult>;
   /** The first POST, or null when signing failed. Adopted at most once by a screen that stays mounted. */
-  post: Promise<ApiResult<Submitted> | null>;
+  post: Promise<ApiResult<RelayAnswer> | null>;
   adopted: boolean;
 }
 

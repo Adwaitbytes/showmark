@@ -107,30 +107,57 @@ export interface Submitted {
   status: "submitted";
 }
 
+/** The relay accepted the check-in but had no hash within its 3 s budget (202). Poll by id. */
+export interface Queued {
+  id: string;
+  status: "queued";
+}
+
+export type RelayAnswer = Submitted | Queued;
+
 export const parseSubmitted: Parser<Submitted> = (body) =>
   isRecord(body) && isHex(body.txHash) && body.txHash.length === 66 && body.status === "submitted" ? { txHash: body.txHash, status: "submitted" } : null;
 
-export function postCheckIn(request: CheckInRequest, options?: RequestOptions): Promise<ApiResult<Submitted>> {
+export const parseRelayAnswer: Parser<RelayAnswer> = (body) => {
+  if (isRecord(body) && body.status === "queued" && isString(body.id) && /^[0-9a-f]{24}$/.test(body.id)) return { id: body.id, status: "queued" };
+  return parseSubmitted(body);
+};
+
+export function postCheckIn(request: CheckInRequest, options?: RequestOptions): Promise<ApiResult<RelayAnswer>> {
   // keepalive: a check-in already signed should still reach the relay if the person locks the phone.
   // 6 s: the chain is watched in parallel, so a lost response is retried rather than waited out.
-  return apiRequest("/api/relay/check-in", postJson(request), parseSubmitted, { keepalive: true, timeoutMs: 6_000, ...options });
+  return apiRequest("/api/relay/check-in", postJson(request), parseRelayAnswer, { keepalive: true, timeoutMs: 6_000, ...options });
+}
+
+/** Where a queued check-in is: still queued (202), broadcast (200), or rejected (422 with the usual copy). */
+export function getQueuedCheckIn(id: string, options?: RequestOptions): Promise<ApiResult<RelayAnswer>> {
+  return apiRequest(`/api/relay/check-in/${encodeURIComponent(id)}`, { method: "GET", cache: "no-store" }, parseRelayAnswer, { timeoutMs: 6_000, ...options });
 }
 
 export interface TxState {
   status: "pending" | "success" | "reverted";
   blockNumber?: string;
+  /** This attendee's own result inside a mined batch, when the API was asked about them. */
+  checkIn?: { recorded: boolean; error?: { code: string; message: string; action: string } };
 }
 
 export const parseTxState: Parser<TxState> = (body) => {
   if (!isRecord(body)) return null;
-  const { status, blockNumber } = body;
+  const { status, blockNumber, checkIn } = body;
   if (status !== "pending" && status !== "success" && status !== "reverted") return null;
   if (blockNumber !== undefined && !isDigits(blockNumber)) return null;
-  return blockNumber === undefined ? { status } : { status, blockNumber };
+  const state: TxState = blockNumber === undefined ? { status } : { status, blockNumber };
+  if (isRecord(checkIn) && typeof checkIn.recorded === "boolean") {
+    const error = parseApiError({ error: checkIn.error });
+    state.checkIn = error ? { recorded: checkIn.recorded, error } : { recorded: checkIn.recorded };
+  }
+  return state;
 };
 
-export function getTxStatus(hash: Hex, options?: RequestOptions): Promise<ApiResult<TxState>> {
-  return apiRequest(`/api/tx/${hash}`, { method: "GET", cache: "no-store" }, parseTxState, { timeoutMs: 8_000, ...options });
+/** Receipt status. With `who`, the API also says whether this attendee's item in the batch was recorded. */
+export function getTxStatus(hash: Hex, options?: RequestOptions, who?: { eventId: string; attendee: string }): Promise<ApiResult<TxState>> {
+  const query = who ? `?event=${encodeURIComponent(who.eventId)}&attendee=${encodeURIComponent(who.attendee)}` : "";
+  return apiRequest(`/api/tx/${hash}${query}`, { method: "GET", cache: "no-store" }, parseTxState, { timeoutMs: 8_000, ...options });
 }
 
 // ------------------------------------------------------------------------------------------- event

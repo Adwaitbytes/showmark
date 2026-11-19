@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
-import { getEvent, getTxStatus, postCheckIn, type CheckInEvent } from "@/lib/checkin/api";
+import { getEvent, getQueuedCheckIn, getTxStatus, postCheckIn, type CheckInEvent } from "@/lib/checkin/api";
 import { problemCopy } from "@/lib/checkin/copy";
 import type { Dictionary, ErrorTables } from "@/lib/checkin/i18n";
 import {
@@ -134,11 +134,23 @@ function CheckInFlow({ code, token, fragment }: { code: DoorCode; token: string 
         }
         return postCheckIn(request, { signal: s });
       },
-      txStatus: (hash, s) =>
-        raceTxStatus(
+      queuedStatus: (id, s) => getQueuedCheckIn(id, { signal: s }),
+      async txStatus(hash, s) {
+        const request = requestRef.current;
+        const who = request ? { eventId: request.eventId, attendee: request.attendee } : undefined;
+        const api = getTxStatus(hash, { signal: s }, who);
+        const result = await raceTxStatus(
           loadChainWatch().then((m) => m.chainReceipt(hash)),
-          getTxStatus(hash, { signal: s }),
-        ),
+          api,
+        );
+        // A mined batch can reject one item. When the chain's receipt answered, confirm this attendee's
+        // presence before stamping; if it is not there, the API says why.
+        if (request && result.ok && result.data.status === "success" && result.data.checkIn === undefined) {
+          const present = await loadChainWatch().then((m) => m.chainPresence(BigInt(request.eventId), request.attendee));
+          if (present === false) return api;
+        }
+        return result;
+      },
       presence: (request, s) => (s.aborted ? Promise.resolve(null) : loadChainWatch().then((m) => m.chainPresence(BigInt(request.eventId), request.attendee))),
       now: Date.now,
       isOnline: () => navigator.onLine,
@@ -401,6 +413,7 @@ function headline(phase: ScreenPhase, t: Dictionary): string {
   switch (phase.kind) {
     case "starting":
     case "sending":
+    case "queued":
       return t.checkIn.sending;
     case "waiting":
       return t.checkIn.waitingTitle;
@@ -420,6 +433,8 @@ function hint(phase: ScreenPhase, t: Dictionary, errors: ErrorTables | null, now
     case "starting":
     case "sending":
       return t.checkIn.sendingHint;
+    case "queued":
+      return t.checkIn.queuedHint;
     case "waiting": {
       const copy = problemCopy(phase.problem, t, errors);
       const countdown = phase.retryAt === null || now === 0 ? "" : ` ${t.errors.retryIn(Math.max(1, Math.ceil((phase.retryAt - now) / 1000)))}`;
@@ -515,7 +530,7 @@ function Receipt({ phase, prior, stampTx }: { phase: ScreenPhase; prior: PriorSt
   const tx = phase.kind === "stamped" ? stampTx : phase.kind === "confirming" ? phase.txHash : phase.kind === "already" ? (prior?.tx ?? null) : null;
   if (phase.kind === "already" && !at && !tx) return null;
   const waitingWord =
-    phase.kind === "confirming"
+    phase.kind === "confirming" || phase.kind === "queued"
       ? t.checkIn.receiptPending
       : phase.kind === "stamped"
         ? t.checkIn.receiptTxLoading

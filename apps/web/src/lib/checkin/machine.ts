@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import type { ApiResult, Submitted, TxState } from "./api";
+import type { ApiResult, RelayAnswer, TxState } from "./api";
 import { classifyFailure, retryDelayMs, type CheckInProblem } from "./errors";
 import type { CheckInRequest } from "./sign";
 
@@ -27,13 +27,17 @@ export type CheckInPhase =
       /** When the next attempt starts (ms since epoch), or null while waiting to come back online. */
       retryAt: number | null;
     }
+  /** The relay accepted it but is still sending (202). Not a failure: the stamp stays pending. */
+  | { kind: "queued"; id: string; since: number }
   | { kind: "confirming"; txHash: Hex; since: number }
   | { kind: "stamped"; txHash: Hex | null; at: number; blockNumber?: string }
   | { kind: "already" }
   | { kind: "failed"; problem: CheckInProblem; txHash?: Hex };
 
 export interface CheckInDeps {
-  postCheckIn(request: CheckInRequest, signal: AbortSignal): Promise<ApiResult<Submitted>>;
+  postCheckIn(request: CheckInRequest, signal: AbortSignal): Promise<ApiResult<RelayAnswer>>;
+  /** GET /api/relay/check-in/{id} for a queued check-in. */
+  queuedStatus(id: string, signal: AbortSignal): Promise<ApiResult<RelayAnswer>>;
   txStatus(hash: Hex, signal: AbortSignal): Promise<ApiResult<TxState>>;
   now(): number;
   isOnline(): boolean;
@@ -121,7 +125,7 @@ async function runThroughRelay(
   };
 
   deps.outbox?.save(request);
-  let submitted: Submitted | null = null;
+  let submitted: RelayAnswer | null = null;
 
   for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
     if (signal.aborted) return null;
@@ -153,9 +157,42 @@ async function runThroughRelay(
   }
 
   if (!submitted) return null;
-  // The relayer holds it now; a resend would only come back as "already present".
+  // The relayer holds it now, queued or sent; it is never sent again from this phone.
   deps.outbox?.remove(request);
+  if (submitted.status === "queued") return followQueue(submitted.id, deps, finish, emit, signal, options);
   return confirm(submitted.txHash, deps, finish, emit, signal, options);
+}
+
+/**
+ * Polls a queued check-in until the relay has broadcast it, then confirms the transaction. A failed
+ * read is retried; a rejection ends it with the API's words. The chain watch runs alongside.
+ */
+async function followQueue(
+  id: string,
+  deps: CheckInDeps,
+  finish: (phase: CheckInPhase) => CheckInPhase | null,
+  emit: (phase: CheckInPhase) => void,
+  signal: AbortSignal,
+  options: CheckInOptions,
+): Promise<CheckInPhase | null> {
+  const since = deps.now();
+  emit({ kind: "queued", id, since });
+  const deadline = since + options.confirmTimeoutMs;
+  while (deps.now() < deadline) {
+    try {
+      await deps.wait(options.pollMs, signal);
+    } catch {
+      return null;
+    }
+    const result = await deps.queuedStatus(id, signal);
+    if (signal.aborted) return null;
+    if (result.ok && result.data.status === "submitted") return confirm(result.data.txHash, deps, finish, emit, signal, options);
+    if (result.ok) continue;
+    const problem = classifyFailure(result.failure, deps.isOnline());
+    if (problem.kind === "already") return finish({ kind: "already" });
+    if (!problem.retryable) return finish({ kind: "failed", problem });
+  }
+  return finish({ kind: "failed", problem: { kind: "unconfirmed", code: "unconfirmed", retryable: false } });
 }
 
 async function confirm(
@@ -173,6 +210,15 @@ async function confirm(
   while (deps.now() < deadline) {
     const status = await deps.txStatus(txHash, signal);
     if (signal.aborted) return null;
+    // A mined batch can still have rejected this one item; the API says so when asked about the attendee.
+    const item = status.ok ? status.data.checkIn : undefined;
+    if (status.ok && status.data.status !== "pending" && item && !item.recorded) {
+      const problem = item.error
+        ? classifyFailure({ kind: "api", status: 422, ...item.error }, true)
+        : { kind: "reverted" as const, code: "reverted", retryable: false };
+      if (problem.kind === "already") return finish({ kind: "already" });
+      return finish({ kind: "failed", problem: { ...problem, retryable: false }, txHash });
+    }
     // A failed status read is not a failed check-in: keep asking until the deadline.
     if (status.ok && status.data.status === "success") {
       return finish({ kind: "stamped", txHash, at: deps.now(), blockNumber: status.data.blockNumber });

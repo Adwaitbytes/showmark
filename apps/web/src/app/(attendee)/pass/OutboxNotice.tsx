@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getTxStatus, postCheckIn } from "@/lib/checkin/api";
+import { getQueuedCheckIn, getTxStatus, postCheckIn } from "@/lib/checkin/api";
 import { problemCopy } from "@/lib/checkin/copy";
 import { recordLocalStamp, removeFromOutbox, type OutboxEntry } from "@/lib/checkin/local-records";
 import { useLocale } from "@/lib/checkin/locale";
@@ -32,7 +32,8 @@ export function OutboxNotice({ entry, onSettled }: { entry: OutboxEntry; onSettl
       entry.request,
       {
         postCheckIn: (request, signal) => postCheckIn(request, { signal }),
-        txStatus: (hash, signal) => getTxStatus(hash, { signal }),
+        queuedStatus: (id, signal) => getQueuedCheckIn(id, { signal }),
+        txStatus: (hash, signal) => getTxStatus(hash, { signal }, { eventId: entry.request.eventId, attendee: entry.request.attendee }),
         now: Date.now,
         isOnline: () => navigator.onLine,
         wait: waiter.wait,
@@ -57,7 +58,7 @@ export function OutboxNotice({ entry, onSettled }: { entry: OutboxEntry; onSettl
     if (final && final.kind !== "failed") onSettled();
   }
 
-  const busy = phase?.kind === "sending" || phase?.kind === "confirming";
+  const busy = phase?.kind === "sending" || phase?.kind === "queued" || phase?.kind === "confirming";
   const failure = phase?.kind === "failed" ? problemCopy(phase.problem, t, errors) : null;
   const finalFailure = phase?.kind === "failed" && !phase.problem.retryable;
 
