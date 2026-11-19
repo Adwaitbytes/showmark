@@ -53,6 +53,10 @@ export interface MockState {
   desk: "open" | "not-open";
   /** Desk URLs handed out, newest last. */
   deskUrls: string[];
+  /** The organizer's claimable QIE in the vault, in wei. */
+  claimableWei: bigint;
+  /** Never answer /api/events/{id}, as when the indexer stalls. */
+  eventApiStalls: boolean;
 }
 
 export function nowSeconds(): number {
@@ -88,6 +92,8 @@ export function createState(patch: Partial<MockState> = {}): MockState {
     apiDown: false,
     desk: "open",
     deskUrls: [],
+    claimableWei: 0n,
+    eventApiStalls: false,
     ...patch,
   };
 }
@@ -193,7 +199,10 @@ function answerCall(state: MockState, to: string, data: Hex): Hex {
   }
   if (to.toLowerCase() === VAULT.toLowerCase()) {
     const call = decodeFunctionData({ abi: vaultAbi, data });
-    if (call.functionName === "claimable") return encodeFunctionResult({ abi: vaultAbi, functionName: "claimable", result: 0n });
+    if (call.functionName === "claimable") {
+      const [token] = call.args;
+      return encodeFunctionResult({ abi: vaultAbi, functionName: "claimable", result: token === "0x0000000000000000000000000000000000000000" ? state.claimableWei : 0n });
+    }
   }
   throw new Error(`Unmocked eth_call to ${to}`);
 }
@@ -317,6 +326,7 @@ async function handleApi(state: MockState, route: Route) {
   if (path.startsWith("/api/passport/")) return json(route, 200, { qieName: "campusweb3.qie" });
   if (path === "/api/events") return json(route, 200, [...state.events.values()].reverse().map(summary));
   const eventMatch = /^\/api\/events\/(\d+)$/.exec(path);
+  if (eventMatch && state.eventApiStalls) return new Promise<void>(() => undefined);
   if (eventMatch) {
     const e = state.events.get(BigInt(eventMatch[1]));
     return e ? json(route, 200, detail(e)) : json(route, 404, { error: { code: "not_found", message: "Showmark has no record of this.", action: "Check the link and try again." } });
@@ -355,7 +365,7 @@ async function handleApi(state: MockState, route: Route) {
 }
 
 /** A QIE Wallet stand-in announced over EIP-6963. Transactions it "sends" are applied to the mock chain. */
-function walletScript(organizer: string) {
+function walletScript(organizer: string, remember: boolean) {
   return `
     (() => {
       const listeners = {};
@@ -375,13 +385,15 @@ function walletScript(organizer: string) {
       const announce = () => window.dispatchEvent(new CustomEvent("eip6963:announceProvider", { detail: Object.freeze({ info, provider }) }));
       window.addEventListener("eip6963:requestProvider", announce);
       announce();
-      try { localStorage.setItem("showmark.wallet.last", "me.qiewallet"); } catch {}
+      if (${JSON.stringify(remember)}) { try { localStorage.setItem("showmark.wallet.last", "me.qiewallet"); } catch {} }
     })();
   `;
 }
 
 export interface MockOptions {
   wallet?: boolean;
+  /** Pretend this browser connected QIE Wallet before, so it reconnects without a click. Default true. */
+  rememberWallet?: boolean;
 }
 
 /** Installs every mock on a page. Returns the state so a test can change the chain while the page runs. */
@@ -391,6 +403,11 @@ export async function installMocks(page: Page, state: MockState, options: MockOp
   if (options.wallet !== false) {
     await page.exposeFunction("__showmarkSend", (tx: { to: string; data: Hex }) => {
       state.sent.push({ to: tx.to, data: tx.data });
+      if (tx.to.toLowerCase() === VAULT.toLowerCase()) {
+        const vaultCall = decodeFunctionData({ abi: vaultAbi, data: tx.data });
+        if (vaultCall.functionName === "withdraw") state.claimableWei = 0n;
+        return SENT_TX;
+      }
       const call = decodeFunctionData({ abi: registryAbi, data: tx.data });
       if (call.functionName === "authorizeDoorKey") state.doorKeys.set(call.args[1].toLowerCase(), call.args[2]);
       if (call.functionName === "createEvent") {
@@ -401,7 +418,7 @@ export async function installMocks(page: Page, state: MockState, options: MockOp
       }
       return SENT_TX;
     });
-    await page.addInitScript(walletScript(ORGANIZER));
+    await page.addInitScript(walletScript(ORGANIZER, options.rememberWallet !== false));
   }
   return state;
 }

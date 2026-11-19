@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { doorKeyValidUntil } from "@/lib/door/rotation";
 import { connect, useWallet } from "@/lib/wallet/use-wallet";
@@ -11,6 +12,8 @@ import type { RegistryCall } from "../../_lib/tx";
 import type { ChainEvent } from "../../_lib/chain";
 import { GasLine, TxProgress } from "../TxFeedback";
 import { useGasQuote, useRegistryTx } from "../use-registry-tx";
+
+const ARM_DELAY_MS = 1_200;
 
 interface Props {
   eventId: bigint;
@@ -35,6 +38,22 @@ export function AuthorizeDoor({ eventId, event, eventName, doorKey, revoked, pur
   const call: RegistryCall = { functionName: "authorizeDoorKey", args: [eventId, doorKey, validUntil] };
   const quote = useGasQuote(isOrganizer ? `authorize:${eventId}:${doorKey}` : null, call, account);
   const tx = useRegistryTx();
+
+  // The Connect button and the Authorize button sit in the same place. When the wallet connects, the button that was
+  // just tapped would become Authorize under the same finger, so it stays disabled for a moment and until the gas
+  // quote is in: authorizing always takes a second, deliberate tap.
+  const [seenAccount, setSeenAccount] = useState<string | null>(account);
+  const [armed, setArmed] = useState(account !== null);
+  if (account !== seenAccount) {
+    setSeenAccount(account);
+    setArmed(false);
+  }
+  useEffect(() => {
+    if (armed || account === null) return;
+    const id = setTimeout(() => setArmed(true), ARM_DELAY_MS);
+    return () => clearTimeout(id);
+  }, [armed, account]);
+  const ready = armed && quote.kind === "ready" && quote.quote.enough;
 
   async function authorize() {
     if (!account) return;
@@ -79,7 +98,7 @@ export function AuthorizeDoor({ eventId, event, eventName, doorKey, revoked, pur
 
       {account === null ? (
         <div className="flex flex-col gap-3">
-          <Button variant="primary" size="lg" onClick={() => void connect()} pending={wallet.status === "connecting"}>
+          <Button variant="secondary" size="lg" onClick={() => void connect()} pending={wallet.status === "connecting"}>
             Connect the organizer’s QIE Wallet
           </Button>
           {wallet.error ? (
@@ -103,10 +122,16 @@ export function AuthorizeDoor({ eventId, event, eventName, doorKey, revoked, pur
             size="lg"
             onClick={() => void authorize()}
             pending={tx.busy}
-            disabled={quote.kind === "ready" && !quote.quote.enough}
+            disabled={!ready}
+            data-testid="authorize-door"
           >
             {revoked ? "Authorize this device again" : "Authorize this device"}
           </Button>
+          {!armed ? (
+            <p className="text-sm text-ink-soft" aria-live="polite">
+              Wallet connected. Check the details above, then authorize.
+            </p>
+          ) : null}
           {tx.phase.kind === "idle" ? <GasLine quote={quote} account={account} /> : null}
           <TxProgress phase={tx.phase} account={account} doneTitle="This device is now the door" />
         </div>

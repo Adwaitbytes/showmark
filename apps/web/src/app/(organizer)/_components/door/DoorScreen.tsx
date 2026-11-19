@@ -6,7 +6,7 @@ import { addresses } from "@/lib/chain/addresses";
 import { Button } from "@/ui/Button";
 import { cn } from "@/ui/cn";
 import { formatEventWindow } from "@/ui/format";
-import { DoorBar, DoorFrame, DoorSetupView, DoorSignals, DoorWarnings, WindowNotice } from "./DoorChrome";
+import { DoorBar, DoorFrame, DoorSetupView, DoorSignals, DoorWarnings, EventName, WindowNotice } from "./DoorChrome";
 import { DoorSettings } from "./DoorSettings";
 import { LiveCount } from "./LiveCount";
 import { RotatingCode } from "./RotatingCode";
@@ -48,7 +48,7 @@ export function DoorScreen() {
   const idle = useIdle(fullscreen.active);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const name = setup.details?.metadata.name ?? (setup.eventId ? `Event ${setup.eventId}` : "Door");
+  const name = setup.details?.metadata.name ?? null;
   const place = setup.details ? [setup.details.metadata.venue, setup.details.metadata.city].filter(Boolean).join(", ") : null;
 
   const bar = (
@@ -96,9 +96,7 @@ export function DoorScreen() {
         )}
       >
         <div className="flex min-w-0 flex-col gap-[1vmin] landscape:col-start-2 landscape:row-start-1 landscape:self-end">
-          <h1 className="font-display text-[clamp(1.75rem,6vmin,5rem)] leading-[1.02] text-balance text-ink" data-testid="door-event-name">
-            {name}
-          </h1>
+          <EventName name={name} eventId={eventId} testId="door-event-name" className="font-display text-[clamp(1.75rem,6vmin,5rem)] leading-[1.02] text-balance text-ink" />
           <p className="text-[clamp(0.95rem,2vmin,1.5rem)] text-ink-soft">
             {place ? `${place}. ` : ""}
             {formatEventWindow(new Date(Number(event.startsAt) * 1000).toISOString(), new Date(Number(event.endsAt) * 1000).toISOString())}

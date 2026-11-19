@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BaseError, decodeFunctionData, encodeErrorResult, getAddress, parseAbi, zeroAddress } from "viem";
+import { vaultAbi } from "@/lib/chain/abi";
+import { addresses } from "@/lib/chain/addresses";
 import { api } from "./api";
 import { byteLength, DEFAULT_PASS_AGE, encodeMetadata, parseLocalDateTime, toLocalDateTimeValue, validateEventForm, type EventFormValues } from "./event-form";
 import { attendeesCsv } from "./csv";
-import { formatQie } from "./tx";
+import { callTarget, describeTxError, encodeRegistryCall, formatQie } from "./tx";
 
 const NOW = new Date(2026, 10, 20, 10, 0);
 
@@ -141,5 +144,28 @@ describe("session read", () => {
   it("still reports a server failure", async () => {
     respond(503, { error: { code: "upstream_unavailable", message: "Down.", action: "Wait." } });
     await expect(api.session()).rejects.toThrow("Down.");
+  });
+});
+
+describe("vault withdrawal from the organizer wallet", () => {
+  const organizer = getAddress("0x91c4e2b7a3d5f8e1c6a9b0d4e7f2a5c8b1d3e6f9");
+
+  it("encodes withdraw(token, organizer) for the vault", () => {
+    const call = { functionName: "withdraw", args: [zeroAddress, organizer] } as const;
+    expect(callTarget(call)).toBe(addresses.vault);
+    expect(decodeFunctionData({ abi: vaultAbi, data: encodeRegistryCall(call) })).toEqual({ functionName: "withdraw", args: [zeroAddress, organizer] });
+    expect(callTarget({ functionName: "setCapacity", args: [1n, 10] })).toBe(addresses.registry);
+  });
+
+  it("explains the vault's withdraw reverts in plain words", () => {
+    const revert = (name: "WithdrawNotAllowed" | "NothingToPay") => {
+      const data = encodeErrorResult({ abi: parseAbi([`error ${name}()`]), errorName: name });
+      return new BaseError("Execution reverted", { cause: Object.assign(new Error("execution reverted"), { data }) });
+    };
+    expect(describeTxError(revert("WithdrawNotAllowed"), organizer)).toMatchObject({
+      code: "withdraw_not_allowed",
+      message: "Only the wallet that earned these payouts can withdraw them.",
+    });
+    expect(describeTxError(revert("NothingToPay"), organizer).code).toBe("nothing_to_pay");
   });
 });

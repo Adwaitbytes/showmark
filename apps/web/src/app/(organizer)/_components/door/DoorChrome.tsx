@@ -245,3 +245,23 @@ export function WindowNotice({ state, startsAt, endsAt, eventId }: { state: "bef
     </div>
   );
 }
+
+/**
+ * The event name as a heading. Until the API answers, a skeleton holds its place instead of a bare "Event 8", which
+ * reads like a broken screen from across a hall. Screen readers still hear the event number.
+ */
+export function EventName({ name, eventId, className, testId, id }: { name: string | null; eventId: bigint | null; className?: string; testId?: string; id?: string }) {
+  if (name) {
+    return (
+      <h1 id={id} className={className} data-testid={testId}>
+        {name}
+      </h1>
+    );
+  }
+  return (
+    <h1 id={id} className={cn(className, "w-full")} data-testid={testId} aria-busy="true">
+      <span className="sr-only">{eventId === null ? "Door" : `Event ${eventId}`}</span>
+      <Skeleton className="h-[0.9em] w-[min(100%,12ch)]" />
+    </h1>
+  );
+}

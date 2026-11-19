@@ -2,27 +2,30 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { z } from "zod";
-import type { Address, EventSummary, Hex } from "@/lib/api/types";
+import { isAddressEqual } from "viem";
+import type { Address, EventSummary } from "@/lib/api/types";
+import { connect, useWallet } from "@/lib/wallet/use-wallet";
 import { Amount } from "@/ui/Amount";
 import { AddressChip } from "@/ui/AddressChip";
 import { Button } from "@/ui/Button";
 import { Container } from "@/ui/Container";
 import { EmptyState } from "@/ui/EmptyState";
 import { ErrorState } from "@/ui/ErrorState";
-import { formatCount, formatEventWindow } from "@/ui/format";
+import { formatCount, formatEventWindow, formatTokenAmount } from "@/ui/format";
 import { ArrowRightIcon, RetryIcon } from "@/ui/icons";
 import { Ledger, LedgerRow } from "@/ui/Ledger";
 import { Notice } from "@/ui/Notice";
 import { Sheet, SheetSection } from "@/ui/Sheet";
 import { LoadingRegion, Skeleton } from "@/ui/Skeleton";
 import { StatusMark } from "@/ui/StatusMark";
-import { TxLink } from "@/ui/TxLink";
-import { api, errorCopy, requestJson, type ErrorCopy } from "../_lib/api";
+import { api, errorCopy } from "../_lib/api";
 import { readClaimable, type ClaimableBalance } from "../_lib/chain";
+import type { RegistryCall } from "../_lib/tx";
 import { usePoll } from "../_lib/use-poll";
 import { eventStatus } from "./event-status";
 import { SignInGate } from "./SignIn";
+import { GasLine, TxProgress } from "./TxFeedback";
+import { useGasQuote, useRegistryTx } from "./use-registry-tx";
 
 const EVENTS_POLL_MS = 15_000;
 
@@ -80,29 +83,60 @@ function EventsSkeleton() {
   );
 }
 
-const withdrawResponse = z.object({ txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).transform((v) => v as Hex) });
+function WithdrawAction({ balance, account, onDone }: { balance: ClaimableBalance; account: Address; onDone(): void }) {
+  const wallet = useWallet();
+  const walletAccount = wallet.status === "connected" ? wallet.account : null;
+  const isAccount = walletAccount !== null && isAddressEqual(walletAccount, account);
+  const call: RegistryCall = { functionName: "withdraw", args: [balance.token, account] };
+  const [asked, setAsked] = useState(false);
+  const quote = useGasQuote(asked && isAccount ? `withdraw:${balance.token}:${balance.amount}` : null, call, walletAccount);
+  const tx = useRegistryTx();
+
+  async function withdraw() {
+    if (!walletAccount) return;
+    if (await tx.run(call, walletAccount)) onDone();
+  }
+
+  if (!asked && tx.phase.kind === "idle") {
+    return (
+      <Button onClick={() => setAsked(true)} className="self-start">
+        Withdraw {balance.symbol} to your wallet
+      </Button>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3" data-testid={`withdraw-${balance.symbol}`}>
+      {!isAccount ? (
+        walletAccount === null ? (
+          <Button onClick={() => void connect()} pending={wallet.status === "connecting"} className="self-start">
+            Connect QIE Wallet to withdraw
+          </Button>
+        ) : (
+          <Notice tone="warning" title="This is a different wallet">
+            Switch QIE Wallet to the account you signed in with, which ends in <span className="font-mono">{account.slice(-4)}</span>. Only it can withdraw these payouts.
+          </Notice>
+        )
+      ) : tx.phase.kind === "done" ? null : (
+        <>
+          <Button
+            variant="secondary"
+            onClick={() => void withdraw()}
+            pending={tx.busy}
+            disabled={quote.kind === "ready" && !quote.quote.enough}
+            className="self-start"
+          >
+            Confirm withdrawal of {formatTokenAmount(balance.amount.toString(), balance.symbol)} {balance.symbol}
+          </Button>
+          {tx.phase.kind === "idle" ? <GasLine quote={quote} account={walletAccount} /> : null}
+        </>
+      )}
+      <TxProgress phase={tx.phase} account={walletAccount} doneTitle="Withdrawn to your wallet" />
+    </div>
+  );
+}
 
 function Payouts({ account }: { account: Address }) {
   const claimable = usePoll(`claimable:${account}`, () => readClaimable(account), 30_000);
-  const [withdrawing, setWithdrawing] = useState<string | null>(null);
-  const [result, setResult] = useState<{ ok: true; hash: Hex } | { ok: false; error: ErrorCopy } | null>(null);
-
-  async function withdraw(balance: ClaimableBalance) {
-    setWithdrawing(balance.symbol);
-    setResult(null);
-    try {
-      const { txHash } = await requestJson("/api/relay/withdraw", withdrawResponse, {
-        method: "POST",
-        body: JSON.stringify({ token: balance.token, account }),
-      });
-      setResult({ ok: true, hash: txHash });
-      setTimeout(claimable.refresh, 6_000);
-    } catch (error) {
-      setResult({ ok: false, error: errorCopy(error) });
-    } finally {
-      setWithdrawing(null);
-    }
-  }
 
   return (
     <Sheet as="section" aria-labelledby="payouts-title">
@@ -111,7 +145,9 @@ function Payouts({ account }: { account: Address }) {
           <h2 id="payouts-title" className="font-display text-xl text-ink">
             Payouts waiting for you
           </h2>
-          <p className="text-sm text-ink-soft">Your share of every sponsored check-in, held in the Showmark vault until you withdraw it. Read live from the chain.</p>
+          <p className="text-sm text-ink-soft">
+            Your share of every sponsored check-in, held in the Showmark vault until you withdraw it. Read live from the chain. Withdrawing is a small transaction from your own wallet.
+          </p>
         </div>
         {claimable.loading ? (
           <LoadingRegion label="Reading your payouts">
@@ -126,34 +162,19 @@ function Payouts({ account }: { account: Address }) {
             .
           </Notice>
         ) : (
-          <Ledger label="Payouts waiting">
-            {claimable.data.map((b) => (
-              <LedgerRow
-                key={b.symbol}
-                label={b.symbol === "QIE" ? "QIE" : "QUSDC"}
-                value={
-                  <span className="inline-flex items-center gap-3">
-                    <Amount value={b.amount.toString()} symbol={b.symbol} />
-                    {b.amount > 0n ? (
-                      <Button onClick={() => void withdraw(b)} pending={withdrawing === b.symbol} className="min-h-9 px-3 text-sm">
-                        Withdraw
-                      </Button>
-                    ) : null}
-                  </span>
-                }
-              />
-            ))}
-          </Ledger>
+          <>
+            <Ledger label="Payouts waiting">
+              {claimable.data.map((b) => (
+                <LedgerRow key={b.symbol} label={b.symbol} value={<Amount value={b.amount.toString()} symbol={b.symbol} />} />
+              ))}
+            </Ledger>
+            {claimable.data
+              .filter((b) => b.amount > 0n)
+              .map((b) => (
+                <WithdrawAction key={b.symbol} balance={b} account={account} onDone={() => setTimeout(claimable.refresh, 3_000)} />
+              ))}
+          </>
         )}
-        {result?.ok ? (
-          <Notice tone="success" title="Withdrawal sent to your wallet">
-            Showmark paid the gas. <TxLink hash={result.hash}>View on the explorer</TxLink>
-          </Notice>
-        ) : result ? (
-          <Notice tone="danger" title={result.error.message}>
-            {result.error.action}
-          </Notice>
-        ) : null}
       </SheetSection>
     </Sheet>
   );

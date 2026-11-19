@@ -12,7 +12,7 @@ import {
   type Hex,
   type TransactionReceipt,
 } from "viem";
-import { registryAbi } from "@/lib/chain/abi";
+import { registryAbi, vaultAbi } from "@/lib/chain/abi";
 import { addresses } from "@/lib/chain/addresses";
 import { activeChain } from "@/lib/chain/chains";
 import { publicClient } from "@/lib/chain/clients";
@@ -36,6 +36,10 @@ const registryErrorsAbi = parseAbi([
   "error InvalidDoorKey()",
   "error ValidUntilTooLate()",
   "error EnforcedPause()",
+  // CampaignVault.withdraw
+  "error NothingToPay()",
+  "error WithdrawNotAllowed()",
+  "error ReentrancyGuardReentrantCall()",
 ]);
 
 export type RegistryCall =
@@ -44,9 +48,16 @@ export type RegistryCall =
   | { functionName: "updateEventMetadata"; args: readonly [bigint, string] }
   | { functionName: "setCapacity"; args: readonly [bigint, number] }
   | { functionName: "authorizeDoorKey"; args: readonly [bigint, Address, bigint] }
-  | { functionName: "revokeDoorKey"; args: readonly [bigint, Address] };
+  | { functionName: "revokeDoorKey"; args: readonly [bigint, Address] }
+  /** CampaignVault.withdraw(token, account). An unlinked account must send it itself, so organizers sign it. */
+  | { functionName: "withdraw"; args: readonly [Address, Address] };
 
-/** Calldata for one registry call. One branch per function keeps every argument list fully typed. */
+/** Which contract a call goes to. Everything is the registry except the vault withdrawal. */
+export function callTarget(call: RegistryCall): Address {
+  return call.functionName === "withdraw" ? addresses.vault : addresses.registry;
+}
+
+/** Calldata for one organizer call. One branch per function keeps every argument list fully typed. */
 export function encodeRegistryCall(call: RegistryCall): Hex {
   switch (call.functionName) {
     case "createSeries":
@@ -61,6 +72,8 @@ export function encodeRegistryCall(call: RegistryCall): Hex {
       return encodeFunctionData({ abi: registryAbi, functionName: call.functionName, args: call.args });
     case "revokeDoorKey":
       return encodeFunctionData({ abi: registryAbi, functionName: call.functionName, args: call.args });
+    case "withdraw":
+      return encodeFunctionData({ abi: vaultAbi, functionName: call.functionName, args: call.args });
   }
 }
 
@@ -135,6 +148,21 @@ const REVERT_COPY: Record<string, ErrorCopy> = {
     message: "The door key would outlive the event by more than three days.",
     action: "Reload the door screen and authorize again.",
   },
+  NothingToPay: {
+    code: "nothing_to_pay",
+    message: "There is nothing waiting to withdraw in this token.",
+    action: "Payouts appear here a few seconds after a sponsored check-in. Reload to see the latest balance.",
+  },
+  WithdrawNotAllowed: {
+    code: "withdraw_not_allowed",
+    message: "Only the wallet that earned these payouts can withdraw them.",
+    action: "Switch QIE Wallet to the organizer account you signed in with, then try again.",
+  },
+  ReentrancyGuardReentrantCall: {
+    code: "withdraw_busy",
+    message: "The vault was busy with another payment.",
+    action: "Try again in a few seconds.",
+  },
   EnforcedPause: {
     code: "paused",
     message: "Showmark has paused new events and check-ins for safety.",
@@ -168,7 +196,7 @@ export function describeTxError(error: unknown, account: Address | null): TxErro
     const name = revertName(error);
     if (name && REVERT_COPY[name]) return REVERT_COPY[name];
     if (name || error.walk((e) => e instanceof ContractFunctionRevertedError)) {
-      return { code: "reverted", message: "The registry refused this transaction.", action: "Check the details and try again. Nothing was charged." };
+      return { code: "reverted", message: "The contract refused this transaction.", action: "Check the details and try again. Nothing was charged." };
     }
   }
   if (code === 4001) {
@@ -199,7 +227,7 @@ export function formatQie(wei: bigint): string {
 export async function quoteRegistryCall(call: RegistryCall, account: Address): Promise<GasQuote> {
   try {
     const [gas, gasPrice, balance] = await Promise.all([
-      publicClient.estimateGas({ account, to: addresses.registry, data: encodeRegistryCall(call) }),
+      publicClient.estimateGas({ account, to: callTarget(call), data: encodeRegistryCall(call) }),
       publicClient.getGasPrice(),
       publicClient.getBalance({ address: account }),
     ]);
@@ -227,7 +255,7 @@ export async function sendRegistryCall(
     hash = await client.sendTransaction({
       account,
       chain: activeChain,
-      to: addresses.registry,
+      to: callTarget(call),
       data: encodeRegistryCall(call),
       // A quarter on top of the estimate: QIE estimates are exact, but a busy block can shift storage costs.
       gas: (quote.gas * 125n) / 100n,
@@ -247,7 +275,7 @@ export async function sendRegistryCall(
     });
   }
   if (receipt.status !== "success") {
-    throw new TxError({ code: "reverted", message: "The transaction was mined but the registry refused it.", action: "Open it on the explorer, then try again." });
+    throw new TxError({ code: "reverted", message: "The transaction was mined but the contract refused it.", action: "Open it on the explorer, then try again." });
   }
   return receipt;
 }

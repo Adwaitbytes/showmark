@@ -38,6 +38,15 @@ const shots: Shot[] = [
       await expect(page.getByText("Payouts waiting for you")).toBeVisible();
     },
   },
+  {
+    name: "organize-withdraw",
+    path: "/organize",
+    state: () => createState({ claimableWei: 3n * 10n ** 17n }),
+    prepare: async (page) => {
+      await page.getByRole("button", { name: "Withdraw QIE to your wallet" }).click();
+      await expect(page.getByText(/gas fee of about/)).toBeVisible();
+    },
+  },
   { name: "organize-empty", path: "/organize", state: () => createState({ events: new Map() }), prepare: async (page) => void (await expect(page.getByText("No events yet")).toBeVisible()) },
   {
     name: "organize-error",

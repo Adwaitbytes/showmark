@@ -17,7 +17,7 @@ import { CheckIcon, CloseIcon, RetryIcon } from "@/ui/icons";
 import { Notice } from "@/ui/Notice";
 import { TextField } from "@/ui/Field";
 import { TxLink } from "@/ui/TxLink";
-import { DoorBar, DoorFrame, DoorSetupView, DoorSignals, DoorWarnings } from "./DoorChrome";
+import { DoorBar, DoorFrame, DoorSetupView, DoorSignals, DoorWarnings, EventName } from "./DoorChrome";
 import { useDoorSetup, useWakeLock } from "./use-door";
 import { useQrCamera } from "./use-qr-camera";
 
@@ -245,7 +245,7 @@ export function DoorScanner() {
   }
 
   const closed = setup.phase.window === "closed";
-  const name = setup.details?.metadata.name ?? `Event ${setup.eventId}`;
+  const name = setup.details?.metadata.name ?? null;
   const synced = summary.pending === 0;
 
   return (
@@ -255,9 +255,7 @@ export function DoorScanner() {
         <section aria-labelledby="scan-title" className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 id="scan-title" className="font-display text-3xl leading-tight text-ink sm:text-4xl">
-                {name}
-              </h1>
+              <EventName id="scan-title" name={name} eventId={setup.eventId} className="font-display text-3xl leading-tight text-ink sm:text-4xl" />
               <p className="text-base text-ink-soft">Scan each attendee’s passport code. Their check-in is signed by this device and tied to that person.</p>
             </div>
             <p className="text-base text-ink-soft" data-testid="scanner-count">
