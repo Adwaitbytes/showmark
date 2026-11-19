@@ -29,7 +29,7 @@ Demo slot and format: `[[FILL: date, time (with time zone) and whether it is in 
 
 ### The day before
 
-- [ ] The Judges' desk event window covers the whole demo week (check-in only works from one hour before its start to one hour after its end). Event id `[[FILL]]`, ends `[[FILL]]`.
+- [ ] The Judges' desk event window covers the whole demo week (check-in only works from one hour before its start to one hour after its end). Event id `[[FILL: Judges' desk event id]]`, ends `[[FILL: Judges' desk end date and time]]`.
 - [ ] Both door keys (laptop A and laptop B) are authorized and valid until after the last demo slot.
 - [ ] Judges' desk capacity has room for every judge plus spare: `[[FILL: capacity]]`, `[[FILL: current count]]`.
 - [ ] The Judges' desk campaign is funded for at least `[[FILL: number]]` more check-ins, ends after demo week, uses token pricing (not USD, so a stale oracle cannot delay judges' payouts), does not require a QIE ID and pays mode 1.
