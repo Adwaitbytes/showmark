@@ -83,3 +83,13 @@ describe("markSvg", () => {
     expect(markSpec({ seed: "traction", lines: ["A"] }).rotation).toBe(markSpec({ seed: "traction", lines: ["B"] }).rotation);
   });
 });
+
+describe("stamp text fitting", () => {
+  it("fits a long real event name on the ring without truncating it", () => {
+    for (const shape of ["round", "oval", "box"] as const) {
+      const svg = stampSvg({ ...base, shape, eventName: "Showmark testnet walkthrough" });
+      expect(svg).toContain("SHOWMARK TESTNET WALKTHROUGH");
+      expect(svg).not.toContain("…");
+    }
+  });
+});

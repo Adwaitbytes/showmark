@@ -89,20 +89,32 @@ function clean(text: string): string {
     .trim();
 }
 
-function fitText(
-  raw: string,
-  available: number,
-  maxSize: number,
-  minSize: number,
-  trackingEm: number,
-): { text: string; size: number } {
+interface Fitted {
+  text: string;
+  size: number;
+  /** Letter spacing in user units for the chosen size. */
+  spacing: number;
+}
+
+/**
+ * Fits capitals to an arc or line. Shrinks the type first, then tightens the tracking, and only
+ * truncates names that still do not fit at the smallest size (the spoken label always has the
+ * full name).
+ */
+function fitText(raw: string, available: number, maxSize: number, minSize: number, trackingEm: number): Fitted {
   const text = clean(raw).toUpperCase();
-  const perChar = GLYPH_EM + trackingEm;
+  const fits = (size: number, tracking: number) => text.length * size * (GLYPH_EM + tracking) <= available;
   for (let size = maxSize; size >= minSize; size -= 0.5) {
-    if (text.length * size * perChar <= available) return { text, size };
+    if (fits(size, trackingEm)) return { text, size, spacing: r1(size * trackingEm) };
   }
-  const maxChars = Math.max(4, Math.floor(available / (minSize * perChar)));
-  return { text: `${text.slice(0, maxChars - 1).trimEnd()}…`, size: minSize };
+  const floor = Math.max(minSize - 1.5, 6.5);
+  for (const tracking of [trackingEm / 2, 0.02]) {
+    for (let size = minSize; size >= floor; size -= 0.5) {
+      if (fits(size, tracking)) return { text, size, spacing: r1(size * tracking) };
+    }
+  }
+  const maxChars = Math.max(4, Math.floor(available / (floor * (GLYPH_EM + 0.02))));
+  return { text: `${text.slice(0, maxChars - 1).trimEnd()}…`, size: floor, spacing: r1(floor * 0.02) };
 }
 
 function serialTspan(p: StampParams, size: number): string {
@@ -172,8 +184,8 @@ function roundBody(p: StampParams, paint: Painted, id: string): string {
     `<g fill="${paint.inkColor}" font-weight="700" text-anchor="middle">`,
     star(c - 76, c + 1, 5),
     star(c + 76, c + 1, 5),
-    `<text font-size="${top.size}" letter-spacing="${r1(top.size * 0.14)}"><textPath href="#${id}-top" startOffset="50%">${escapeXml(top.text)}</textPath></text>`,
-    `<text font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.18)}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</textPath></text>`,
+    `<text font-size="${top.size}" letter-spacing="${top.spacing}"><textPath href="#${id}-top" startOffset="50%">${escapeXml(top.text)}</textPath></text>`,
+    `<text font-size="${bottom.size}" letter-spacing="${bottom.spacing}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</textPath></text>`,
     `<text x="${c}" y="${c - 22}" font-size="8.5" letter-spacing="2">PRESENT</text>`,
     `<text x="${c}" y="${c + 9}" font-size="22" letter-spacing="0.5">${escapeXml(`${day} ${month}`)}</text>`,
     `<text x="${c}" y="${c + 30}" font-size="10" letter-spacing="2.4">${escapeXml(year)}</text>`,
@@ -203,8 +215,8 @@ function ovalBody(p: StampParams, paint: Painted, id: string): string {
     `<g fill="${paint.inkColor}" font-weight="700" text-anchor="middle">`,
     star(cx - 98, cy + 1, 4.5),
     star(cx + 98, cy + 1, 4.5),
-    `<text font-size="${top.size}" letter-spacing="${r1(top.size * 0.14)}"><textPath href="#${id}-top" startOffset="50%">${escapeXml(top.text)}</textPath></text>`,
-    `<text font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.18)}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</textPath></text>`,
+    `<text font-size="${top.size}" letter-spacing="${top.spacing}"><textPath href="#${id}-top" startOffset="50%">${escapeXml(top.text)}</textPath></text>`,
+    `<text font-size="${bottom.size}" letter-spacing="${bottom.spacing}"><textPath href="#${id}-bot" startOffset="50%">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</textPath></text>`,
     `<text x="${cx}" y="${cy - 8}" font-size="8" letter-spacing="2">PRESENT</text>`,
     `<text x="${cx}" y="${cy + 14}" font-size="18" letter-spacing="0.6">${escapeXml(`${day} ${month} ${year}`)}</text>`,
     `</g>`,
@@ -227,10 +239,10 @@ function boxBody(p: StampParams, paint: Painted): string {
     `<line x1="40" y1="134" x2="240" y2="134" stroke-width="0.9"/>`,
     `</g>`,
     `<g fill="${paint.inkColor}" font-weight="700" text-anchor="middle">`,
-    `<text x="${cx}" y="62" font-size="${name.size}" letter-spacing="${r1(name.size * 0.12)}">${escapeXml(name.text)}</text>`,
+    `<text x="${cx}" y="62" font-size="${name.size}" letter-spacing="${name.spacing}">${escapeXml(name.text)}</text>`,
     `<text x="${cx}" y="94" font-size="8.5" letter-spacing="2.2">PRESENT</text>`,
     `<text x="${cx}" y="123" font-size="24" letter-spacing="0.6">${escapeXml(`${day} ${month} ${year}`)}</text>`,
-    `<text x="${cx}" y="154" font-size="${bottom.size}" letter-spacing="${r1(bottom.size * 0.16)}">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</text>`,
+    `<text x="${cx}" y="154" font-size="${bottom.size}" letter-spacing="${bottom.spacing}">${escapeXml(bottom.text)}${serialTspan(p, bottom.size)}</text>`,
     `</g>`,
   ].join("");
 }
@@ -336,7 +348,7 @@ export function markSvg(params: MarkParams): string {
     `<g fill="currentColor" font-weight="800" text-anchor="middle">`,
     ...lines.map(
       (line) =>
-        `<text x="${width / 2}" y="${line.y}" font-size="${line.size}" letter-spacing="${r1(line.size * 0.06)}">${escapeXml(line.text)}</text>`,
+        `<text x="${width / 2}" y="${line.y}" font-size="${line.size}" letter-spacing="${line.spacing}">${escapeXml(line.text)}</text>`,
     ),
     `</g>`,
   ].join("");
