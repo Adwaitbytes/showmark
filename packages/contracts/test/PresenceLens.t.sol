@@ -21,7 +21,12 @@ contract PresenceLensTest is RegistryFixture {
     function test_constructor() public {
         assertEq(address(lens.registry()), address(registry));
         vm.expectRevert(PresenceLens.ZeroRegistry.selector);
-        new PresenceLens(address(0));
+        this.deployLens(address(0));
+    }
+
+    /// External so a reverting constructor is a call frame expectRevert can match without ending the test.
+    function deployLens(address registry_) external returns (address) {
+        return address(new PresenceLens(registry_));
     }
 
     function test_hasAttended_resolvesWalletToPass() public {

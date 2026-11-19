@@ -67,6 +67,7 @@ contract TestnetMocksTest is Test {
 
     function test_feed_ownerSetsFreshRounds() public {
         assertEq(feed.decimals(), 8);
+        assertEq(feed.description(), "QIE / USD (Showmark testnet)");
         (uint80 roundId, int256 answer,, uint256 updatedAt, uint80 answeredIn) = feed.latestRoundData();
         assertEq(roundId, 1);
         assertEq(answer, 16_500_000);

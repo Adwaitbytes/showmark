@@ -181,6 +181,7 @@ contract OrganizerBondTest is Test {
         vm.prank(sponsor);
         assertEq(bondC.challenge(organizer, CAMPAIGN, "again"), 2);
         assertEq(bondC.openChallenges(organizer), 2);
+        assertEq(bondC.nextChallengeId(), 3);
     }
 
     function test_challenge_guards() public {

@@ -20,9 +20,14 @@ contract QieIdCheckTest is Test {
     function test_constructor() public {
         assertEq(check.nameRegistry(), address(names));
         vm.expectRevert(QieIdCheck.InvalidRegistry.selector);
-        new QieIdCheck(address(0));
+        this.deployCheck(address(0));
         vm.expectRevert(QieIdCheck.InvalidRegistry.selector);
-        new QieIdCheck(makeAddr("eoa"));
+        this.deployCheck(makeAddr("eoa"));
+    }
+
+    /// External so a reverting constructor is a call frame expectRevert can match without ending the test.
+    function deployCheck(address registry) external returns (address) {
+        return address(new QieIdCheck(registry));
     }
 
     function test_nameHolderHasQieId() public view {

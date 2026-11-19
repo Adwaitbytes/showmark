@@ -9,6 +9,7 @@ import {ProtocolFixture} from "./utils/ProtocolFixture.sol";
 import {FeeOnTransferToken} from "./mocks/FeeOnTransferToken.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
 import {MockQieNameRegistry} from "./mocks/MockQieNameRegistry.sol";
+import {RevertingQieIdCheck} from "./mocks/RevertingQieIdCheck.sol";
 
 contract CampaignVaultTest is ProtocolFixture {
     // ---------------------------------------------------------------- constructor and fee
@@ -26,29 +27,48 @@ contract CampaignVaultTest is ProtocolFixture {
         assertEq(vault.SETTLE_GRACE(), 3 days);
     }
 
+    /// Each deployment goes through an external call: in this forge version `new` in a test compiles to a
+    /// deployCode cheatcode, and a reverting cheatcode would end the test at the first expected revert.
     function test_constructor_rejectsBadArgs() public {
         address r = address(registry);
         address z = address(qieIdCheck);
         address o = address(oracle);
         address b = address(bond);
+        address badOracle = address(new MockAggregator(19));
         vm.expectRevert(ICampaignVault.ZeroAddress.selector);
-        new CampaignVault(address(0), z, o, b, 1, owner, feeRecipient, 0);
+        this.deployVault(address(0), z, o, b, 1, owner, feeRecipient, 0);
         vm.expectRevert(ICampaignVault.ZeroAddress.selector);
-        new CampaignVault(r, address(0), o, b, 1, owner, feeRecipient, 0);
+        this.deployVault(r, address(0), o, b, 1, owner, feeRecipient, 0);
         vm.expectRevert(ICampaignVault.ZeroAddress.selector);
-        new CampaignVault(r, z, address(0), b, 1, owner, feeRecipient, 0);
+        this.deployVault(r, z, address(0), b, 1, owner, feeRecipient, 0);
         vm.expectRevert(ICampaignVault.ZeroAddress.selector);
-        new CampaignVault(r, z, o, address(0), 1, owner, feeRecipient, 0);
+        this.deployVault(r, z, o, address(0), 1, owner, feeRecipient, 0);
         vm.expectRevert(ICampaignVault.ZeroAddress.selector);
-        new CampaignVault(r, z, o, b, 1, owner, address(0), 0);
+        this.deployVault(r, z, o, b, 1, owner, address(0), 0);
         vm.expectRevert(ICampaignVault.InvalidOracleAge.selector);
-        new CampaignVault(r, z, o, b, 0, owner, feeRecipient, 0);
+        this.deployVault(r, z, o, b, 0, owner, feeRecipient, 0);
         vm.expectRevert(ICampaignVault.FeeTooHigh.selector);
-        new CampaignVault(r, z, o, b, 1, owner, feeRecipient, 501);
+        this.deployVault(r, z, o, b, 1, owner, feeRecipient, 501);
         vm.expectRevert(ICampaignVault.UnsupportedOracle.selector);
-        new CampaignVault(r, z, address(new MockAggregator(19)), b, 1, owner, feeRecipient, 0);
+        this.deployVault(r, z, badOracle, b, 1, owner, feeRecipient, 0);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
-        new CampaignVault(r, z, o, b, 1, address(0), feeRecipient, 0);
+        this.deployVault(r, z, o, b, 1, address(0), feeRecipient, 0);
+        // and the boundary values deploy
+        CampaignVault ok = CampaignVault(this.deployVault(r, z, o, b, 1, owner, feeRecipient, 500));
+        assertEq(ok.feeBps(), 500);
+    }
+
+    function deployVault(
+        address r,
+        address z,
+        address o,
+        address b,
+        uint256 age,
+        address own,
+        address fees,
+        uint16 bps
+    ) external returns (address) {
+        return address(new CampaignVault(r, z, o, b, age, own, fees, bps));
     }
 
     function test_setFee() public {
@@ -731,6 +751,35 @@ contract CampaignVaultTest is ProtocolFixture {
 
         names.setMode(MockQieNameRegistry.Mode.Normal);
         assertEq(vault.settleBatch(items)[0], 0);
+    }
+
+    function test_settle_revertingQieIdCheckStillDefers() public {
+        CampaignVault strict = new CampaignVault(
+            address(registry),
+            address(new RevertingQieIdCheck()),
+            address(oracle),
+            address(bond),
+            MAX_ORACLE_AGE,
+            owner,
+            feeRecipient,
+            0
+        );
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.requireQieId = true;
+        vm.prank(sponsor);
+        uint256 id = strict.createCampaign{value: 1 ether}(p, 1 ether);
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = eventId;
+        vm.prank(sponsor);
+        strict.approveEvents(id, ids);
+        _checkInNow(eventId, attendeePk);
+        _linkWithQieId(attendeePk, walletPk);
+
+        vm.expectRevert(ICampaignVault.NeedsQieId.selector);
+        strict.settle(id, eventId, attendee);
+        ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](1);
+        items[0] = ICampaignVault.SettleItem(id, eventId, attendee);
+        assertEq(strict.settleBatch(items)[0], 8);
     }
 
     function test_settleBatch_pausedReturns12() public {

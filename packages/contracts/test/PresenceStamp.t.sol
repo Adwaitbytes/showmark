@@ -76,6 +76,11 @@ contract PresenceStampTest is RegistryFixture {
 
     function test_constructor_rejectsZeroRegistry() public {
         vm.expectRevert(PresenceStamp.NotRegistry.selector);
-        new PresenceStamp(address(0), owner, BASE_URI);
+        this.deployStamp(address(0));
+    }
+
+    /// External so a reverting constructor is a call frame expectRevert can match without ending the test.
+    function deployStamp(address registry_) external returns (address) {
+        return address(new PresenceStamp(registry_, owner, BASE_URI));
     }
 }

@@ -31,7 +31,12 @@ contract ShowmarkRegistryTest is RegistryFixture {
 
     function test_constructor_revertsOnZeroOwner() public {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
-        new ShowmarkRegistry(address(0), BASE_URI);
+        this.deployRegistry(address(0));
+    }
+
+    /// External so a reverting constructor is a call frame expectRevert can match without ending the test.
+    function deployRegistry(address owner_) external returns (address) {
+        return address(new ShowmarkRegistry(owner_, BASE_URI));
     }
 
     // ---------------------------------------------------------------- series
@@ -43,6 +48,9 @@ contract ShowmarkRegistryTest is RegistryFixture {
         assertEq(registry.createSeries("s"), 1);
         vm.prank(organizer);
         assertEq(registry.createSeries("t"), 2);
+        assertEq(registry.nextSeriesId(), 3);
+        assertEq(registry.seriesOrganizer(1), organizer);
+        assertEq(registry.seriesOrganizer(3), address(0));
     }
 
     function test_createSeries_revertsOnLongMetadata() public {
