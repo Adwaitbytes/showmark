@@ -29,5 +29,11 @@ if [ "$(jq -r '.testnetMocks // false' "$FILE")" = "true" ]; then
   set_var NEXT_PUBLIC_ORACLE_ADDRESS "$(jq -r .oracle "$FILE")"
   set_var NEXT_PUBLIC_QIE_NAME_REGISTRY_ADDRESS "$(jq -r .nameRegistry "$FILE")"
   set_var QIE_NAME_REGISTRY_ADDRESS "$(jq -r .nameRegistry "$FILE")"
+else
+  # Mainnet uses the real QUSDC, oracle and name registry built into addresses.ts; testnet overrides must go.
+  for name in NEXT_PUBLIC_QUSDC_ADDRESS NEXT_PUBLIC_ORACLE_ADDRESS NEXT_PUBLIC_QIE_NAME_REGISTRY_ADDRESS QIE_NAME_REGISTRY_ADDRESS NEXT_PUBLIC_JUDGES_DESK_EVENT_ID JUDGES_DOOR_KEY; do
+    for env in production preview development; do vercel env rm "$name" "$env" --yes >/dev/null 2>&1 || true; done
+    echo "removed $name"
+  done
 fi
 echo "done; redeploy to apply"
