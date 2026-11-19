@@ -16,3 +16,6 @@ packages/contracts/broadcast/*/31337/
 playwright-report/
 test-results/
 *.tsbuildinfo
+.vercel
+.env*
+!.env.example
