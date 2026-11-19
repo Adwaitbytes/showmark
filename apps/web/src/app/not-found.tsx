@@ -1,5 +1,6 @@
 import { Button } from "@/ui/Button";
 import { Container } from "@/ui/Container";
+import { Eyebrow } from "@/ui/Eyebrow";
 import { PageShell } from "@/ui/PageShell";
 import { Perforation } from "@/ui/Perforation";
 import { Sheet, SheetSection } from "@/ui/Sheet";
@@ -8,11 +9,12 @@ import { RubberMark } from "@/ui/stamp/RubberMark";
 export default function NotFound() {
   return (
     <PageShell>
+      <title>Page not found | Showmark</title>
       <Container className="pt-12 pb-8 sm:pt-20">
         <div className="mx-auto max-w-xl">
           <Sheet edge="stub-bottom">
             <SheetSection className="flex flex-col gap-4 py-8 sm:py-10">
-              <p className="text-sm text-ink-soft">Admit one</p>
+              <Eyebrow>Admit one</Eyebrow>
               <h1 className="font-display text-3xl text-ink sm:text-4xl">There is no page at this address</h1>
               <p className="text-base text-ink-soft">
                 The link may have a typo, or the page may have moved. If you were scanning a door code, scan the code

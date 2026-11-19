@@ -3,11 +3,11 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { HeroStamp } from "@/app/(public)/_components/HeroStamp";
 import { LiveStrip, LiveStripSkeleton } from "@/app/(public)/_components/LiveStrip";
-import { isDeployed } from "@/lib/chain/addresses";
 import { activeChain, activeChainId } from "@/lib/chain/chains";
 import { judgesDeskEventId, SITE } from "@/lib/copy/site";
 import { Button } from "@/ui/Button";
 import { Container } from "@/ui/Container";
+import { Eyebrow } from "@/ui/Eyebrow";
 import { ArrowRightIcon, CheckIcon } from "@/ui/icons";
 import { Ledger, LedgerRow } from "@/ui/Ledger";
 import { PageShell } from "@/ui/PageShell";
@@ -121,7 +121,12 @@ function Hero() {
           organizer and the attendee.
         </p>
         <div className="flex flex-col gap-3 pt-1 sm:flex-row">
-          <Button href="#judges-desk" variant="primary" size="lg" trailing={<ArrowRightIcon className="size-5" />}>
+          <Button
+            href={judgesDeskEventId() ? "/judges" : "#judges-desk"}
+            variant="primary"
+            size="lg"
+            trailing={<ArrowRightIcon className="size-5" />}
+          >
             Check in at the judges&apos; desk
           </Button>
           <Button href="/traction" variant="quiet" size="lg">
@@ -136,7 +141,7 @@ function Hero() {
           <SheetSection className="flex flex-col gap-1 pb-4 sm:pb-5">
             <div className="flex items-baseline justify-between gap-4 text-sm text-ink-soft">
               <span>Check-in receipt</span>
-              <span className="text-vermilion-ink">Specimen</span>
+              <span className="font-medium">Specimen</span>
             </div>
             <p className="font-display text-xl text-ink">Campus builders meetup</p>
             <p className="text-sm text-ink-soft">Bengaluru, rotating door code</p>
@@ -194,7 +199,7 @@ function HowItWorks() {
                     <span className="font-display text-3xl leading-none text-vermilion" aria-hidden="true">
                       {index + 1}
                     </span>
-                    <span className="text-sm font-medium text-ink-soft">{step.role}</span>
+                    <Eyebrow as="span">{step.role}</Eyebrow>
                   </div>
                   <h3 className="text-lg font-medium text-ink">
                     <span className="sr-only">Step {index + 1}: </span>
@@ -214,32 +219,39 @@ function HowItWorks() {
 
 function JudgesDesk() {
   const eventId = judgesDeskEventId();
-  const live = isDeployed() && eventId !== null;
+  const live = eventId !== null;
+  const reward = activeChainId === 1990 ? "a small real reward" : "a small test reward";
   return (
     <section aria-labelledby="judges-desk" className="scroll-mt-24 py-12 sm:py-20">
       <Container>
         <Sheet as="div">
           <div className="flex flex-col lg:flex-row">
             <div className="flex flex-1 flex-col gap-6 px-5 py-8 sm:px-10 sm:py-12">
-              <p className="text-sm font-medium text-ink-soft">Admit one judge</p>
+              <Eyebrow>Admit one judge</Eyebrow>
               <h2 id="judges-desk" className="font-display text-3xl text-ink sm:text-4xl">
                 The judges&apos; desk
               </h2>
               <p className="max-w-[34rem] text-md text-ink-soft">
-                A permanent event on {activeChain.name} with a small {activeChainId === 1990 ? "real" : "test"} reward.
-                Open it on your own phone, scan the door code on the screen, and you will hold a stamp and a payout in
-                under a minute, without a wallet or any gas.
+                A permanent event on {activeChain.name} with {reward}. Open the desk on a laptop or a second screen,
+                scan its door code with your phone camera, and you will hold a stamp and a payout in under a minute,
+                without a wallet or any gas.
               </p>
               <ol className="flex flex-col gap-2 text-base text-ink">
-                {["Open the desk on your phone", "Scan the door code on the screen", "Watch your stamp land, then open it on the explorer"].map(
-                  (line, index) => (
-                    <li key={line} className="flex gap-3">
-                      <span className="w-4 shrink-0 font-mono text-sm leading-[1.6rem] text-ink-faint">{index + 1}</span>
-                      {line}
-                    </li>
-                  ),
-                )}
+                {[
+                  "Open the desk on a laptop or a second screen",
+                  "Scan its door code with your phone camera",
+                  "Watch your stamp land, then open it on the explorer",
+                ].map((line, index) => (
+                  <li key={line} className="flex gap-3">
+                    <span className="w-4 shrink-0 font-mono text-sm leading-[1.6rem] text-ink-faint">{index + 1}</span>
+                    {line}
+                  </li>
+                ))}
               </ol>
+              <p className="max-w-[34rem] text-sm text-ink-faint">
+                The desk is run by the Showmark team, and its reward pool is team-funded. On the traction page it is
+                counted apart from outside sponsors.
+              </p>
               <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center">
                 {live ? (
                   <Button href="/judges" variant="primary" size="lg" trailing={<ArrowRightIcon className="size-5" />}>
@@ -247,8 +259,7 @@ function JudgesDesk() {
                   </Button>
                 ) : (
                   <p className="max-w-md text-base text-ink-soft">
-                    The desk opens here as soon as the contracts are live on {activeChain.name}. Until then, read how a
-                    check-in works.
+                    The desk opens here once it is set up on {activeChain.name}. Until then, read how a check-in works.
                   </p>
                 )}
                 <Button href="/docs/check-in" variant="quiet" size="lg">

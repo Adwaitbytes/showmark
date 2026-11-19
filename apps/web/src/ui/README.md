@@ -8,7 +8,7 @@ No component library is used. Import primitives by path (`@/ui/Button`, `@/ui/st
 
 - Use the role colours only: `paper`, `sheet`, `paper-deep`, `ink`, `ink-soft`, `ink-faint`, `vermilion`, `vermilion-ink`, `on-vermilion`, `stamp-blue`, `ledger-green`, `rule`, `rule-soft`, `focus`, `chart-1`, `chart-2`. Tailwind's default palette is removed, so `bg-zinc-100` does not exist.
 - Never write `dark:` for colour. The night desk theme swaps the values of the same variables, so `bg-paper text-ink` is right in both themes.
-- One vermilion primary action per screen (`<Button variant="primary">`). Vermilion text below 24 px uses `text-vermilion-ink`.
+- One vermilion primary action per screen (`<Button variant="primary">`). Vermilion is otherwise kept for the check-in stamp; labels and eyebrows use `<Eyebrow>` in ink-soft (D-041). Vermilion text below 24 px uses `text-vermilion-ink`.
 - Radius: `rounded-doc` (2 px) for anything that is a document or control, `rounded-pill` only for compact status marks and round things. No other radii.
 - Spacing uses the 4 px scale, steps 1 2 3 4 6 8 12 16 24 32.
 - Mono (`font-mono`) is only for addresses, amounts, hashes and code. Display serif (`font-display`) is only for headings and big names.
@@ -37,7 +37,7 @@ No component library is used. Import primitives by path (`@/ui/Button`, `@/ui/st
 | `--chart-1` / `--chart-2` | #2B4BD9 / #1E7A4C | #7489F2 / #52A77A | Check-ins and settlements; validated for colour-blind separation, and vermilion stays out of charts |
 | `--night` | #12110F | #12110F | Constant |
 
-Type: Instrument Serif (display, `font-display`), Geist (interface, `font-sans`), Geist Mono (`font-mono`), all loaded with `next/font/google` in the root layout.
+Type: Instrument Serif (display, `font-display`), Geist (interface, `font-sans`), Geist Mono (`font-mono`), all loaded with `next/font/google` in the root layout. Hindi falls back to Tiro Devanagari Hindi (display) and Noto Sans Devanagari (interface), loaded only on pages that contain Devanagari.
 
 | Class | Size | Line height | Typical use |
 |---|---|---|---|
@@ -84,7 +84,9 @@ QR codes inside `<QrFrame>` are always #141311 on #FAF7F0 (17.35:1) in both them
 - **`Container`**: page gutters (16, 24, 32 px) and max widths. `width="prose" | "default" | "wide"`.
 - **`Sheet`** and **`SheetSection`**: the document surface. `tone="sheet"` (raised, grain, shadow) or `tone="inset"` (a slip printed into the page). `edge="stub-bottom" | "stub-top" | "stub-both"` cuts a real perforated edge with a CSS mask.
 - **`Perforation`**: a tear line with half-circle bites, horizontal or `orientation="vertical"`. Put it between two `SheetSection`s. Set `--notch` on a parent if the sheet sits on something other than the page.
+- **`CodeBlock`**: a code sample in `Prose`, a focusable labelled region so keyboard users can scroll it. `<CodeBlock label="Install command">pnpm add @showmark/sdk viem</CodeBlock>`
 - **`Prose`**: long-form reading. Write plain `h1`, `p.lead`, `h2`, `ul`, `pre`, `table` inside and it is typeset.
+- **`Eyebrow`**: the small label above a heading or document, sentence case in ink-soft (D-041). Never tracked capitals, never vermilion. `<Eyebrow>Admit one judge</Eyebrow>`
 - **`Wordmark`**, **`ShowmarkSeal`**: the name in Instrument Serif with the vermilion seal.
 
 ### Actions and input
@@ -104,9 +106,9 @@ QR codes inside `<QrFrame>` are always #141311 on #FAF7F0 (17.35:1) in both them
 - **`AddressChip`**: a `.qie` name when there is one, the short mono address, copy, and a link. `link="explorer" | "passport" | "none"`. `<AddressChip address={organizer} name={organizerName} />`
 - **`Amount`**: token base units (decimal string) to a readable mono figure with its symbol. Truncates, never rounds up. QUSDC always shows cents. `<Amount value={campaign.attendeeAmount} symbol="QUSDC" usd={1.2} />`
 - **`TxLink`**: a transaction on the QIE explorer, short hash plus icon. `<TxLink hash={tx} />` or `<TxLink hash={tx}>View on explorer</TxLink>`
-- **`Ledger`** and **`LedgerRow`**: labelled figures joined by dotted leaders, as on a receipt. `total` emphasises the last row, `note` explains where a number comes from.
+- **`Ledger`** and **`LedgerRow`**: labelled figures joined by dotted leaders, as on a receipt. Each row is one `div` holding a `dt` (label plus leader) and `dd`s (value, then note), so axe's definition-list rules pass. Never put other elements directly inside `Ledger`. `total` emphasises the last row, `note` explains where a number comes from.
 - **`StatusMark`**: the one place pills are used. `tone="live" | "scheduled" | "ended" | "attention" | "neutral"`. Static, never pulses.
-- Formatters in `@/ui/format`: `formatTokenAmount`, `formatUsd`, `formatCount`, `formatPercent`, `formatDate`, `formatTime`, `formatEventWindow`, `shortAddress`, `shortHash`, `basisPointsToPercent`. Dates and times are always shown in IST and say so.
+- Formatters in `@/ui/format`: `plural(count, noun)` for every count followed by a noun, `formatTokenAmount`, `formatUsd` (non-zero under a cent shows `<$0.01`, zero is `$0.00`; lead with the token amount and give dollars second), `formatCount`, `formatPercent`, `formatDate`, `formatTime`, `formatEventWindow`, `shortAddress`, `shortHash`, `basisPointsToPercent`. Dates and times are always shown in IST and say so.
 
 ### Signature marks
 

@@ -5,13 +5,13 @@ import { AddressChip } from "@/ui/AddressChip";
 import { Button } from "@/ui/Button";
 import { cn } from "@/ui/cn";
 import { BlankStampMark } from "@/ui/EmptyState";
+import { Eyebrow } from "@/ui/Eyebrow";
 import { formatCount, formatDate } from "@/ui/format";
 import { Guilloche } from "@/ui/patterns/guilloche";
 import { createRng } from "@/ui/seed";
 import { Perforation } from "@/ui/Perforation";
 import { Sheet } from "@/ui/Sheet";
 import { Stamp } from "@/ui/stamp/Stamp";
-import { stampSpec } from "@/ui/stamp/stampSvg";
 import { TxLink } from "@/ui/TxLink";
 
 const STAMPS_PER_PAGE = 4;
@@ -72,7 +72,7 @@ function DataPage({ passport }: { passport: Passport }) {
         </div>
         <div className="relative flex flex-col gap-6">
           <div className="flex flex-col gap-1">
-            <p className="text-xs font-medium text-ink-soft">Showmark passport</p>
+            <Eyebrow>Showmark passport</Eyebrow>
             <h1 id="holder" className="font-display text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.02] text-ink break-words">
               {passport.qieName ?? "Unnamed holder"}
             </h1>
@@ -196,12 +196,10 @@ function StampPage({
         const jitter = createRng(`${holder}:${stamp.eventId}:place`);
         const left = slot.left + jitter.range(-3, 4);
         const top = slot.top + jitter.range(-3, 4);
-        const label = stampSpec({ ...stamp, holder }).label;
         return (
           <Link
             key={`${stamp.eventId}-${stamp.tx}`}
             href={`/e/${stamp.eventId}`}
-            aria-label={`${label}. Open the event`}
             className="absolute w-[40%] rounded-pill transition-transform duration-200 ease-out-quart hover:scale-[1.03] focus-visible:outline-offset-0"
             style={{ left: `${left}%`, top: `${top}%` }}
           >
@@ -215,6 +213,7 @@ function StampPage({
               idPrefix={`p${pageNumber}-${index}`}
               className="w-full"
             />
+            <span className="sr-only">. Open the event</span>
           </Link>
         );
       })}
