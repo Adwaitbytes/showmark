@@ -22,19 +22,19 @@ No component library is used. Import primitives by path (`@/ui/Button`, `@/ui/st
 | Token | Paper (light) | Night desk | Use |
 |---|---|---|---|
 | `--paper` | #F3EFE6 | #12110F | Page background, the desk |
-| `--sheet` | #FAF7F0 | #1A1916 | Documents lying on the desk |
-| `--paper-deep` | #E9E3D6 | #23211D | Insets, slips, chips, skeletons |
+| `--sheet` | #FAF7F0 | #201E1A | Documents lying on the desk (night adds a faint light edge) |
+| `--paper-deep` | #E9E3D6 | #2B2823 | Insets, slips, chips |
 | `--ink` | #141311 | #EDE7DB | Text, rules, primary marks |
 | `--ink-soft` | #4A4640 | #A9A296 | Secondary text |
-| `--ink-faint` | #67615A | #938C80 | Tertiary text, footnotes |
+| `--ink-faint` | #67615A | #9A9387 | Tertiary text, footnotes |
 | `--vermilion` | #E4442B | #EB5A40 | The one accent: primary action, the check-in stamp |
-| `--vermilion-ink` | #B33822 | #EB5A40 | Vermilion at text sizes (errors, small labels) |
+| `--vermilion-ink` | #B33822 | #F0664D | Vermilion at text sizes (errors, small labels) |
 | `--on-vermilion` | #141311 | #12110F | Text on a vermilion fill |
 | `--stamp-blue` | #2B4BD9 | #8DA0FF | Secondary marks, links on data, focus ring |
 | `--ledger-green` | #1F6B45 | #58B987 | Success |
-| `--rule` | #8A8378 | #757064 | Control borders (3:1) |
+| `--rule` | #8A8378 | #7D776B | Control borders (3:1) |
 | `--rule-soft` | ink at 13% | ink at 12% | Decorative hairlines |
-| `--chart-1` / `--chart-2` | #2B4BD9 / #E4442B | #7489F2 / #EB5A40 | Two-series charts, validated for colour-blind separation |
+| `--chart-1` / `--chart-2` | #2B4BD9 / #1E7A4C | #7489F2 / #52A77A | Check-ins and settlements; validated for colour-blind separation, and vermilion stays out of charts |
 | `--night` | #12110F | #12110F | Constant |
 
 Type: Instrument Serif (display, `font-display`), Geist (interface, `font-sans`), Geist Mono (`font-mono`), all loaded with `next/font/google` in the root layout.
@@ -62,16 +62,16 @@ Every text pair passes AA (4.5:1 for normal text). Pairs below 4.5 are used only
 
 | Text on background | Paper | Night desk |
 |---|---|---|
-| ink on paper / sheet / paper-deep | 16.18 / 17.35 / 14.52 | 15.33 / 14.28 / 13.05 |
-| ink-soft on paper / sheet / paper-deep | 8.17 / 8.76 / 7.33 | 7.45 / 6.94 / 6.35 |
-| ink-faint on paper / sheet / paper-deep | 5.33 / 5.72 / 4.78 | 5.66 / 5.28 / 4.82 |
-| stamp-blue on paper / sheet / paper-deep | 5.88 / 6.31 / 5.28 | 7.73 / 7.20 / 6.58 |
-| ledger-green on paper / sheet | 5.64 / 6.04 | 7.82 / 7.29 |
-| vermilion-ink on paper / sheet / paper-deep | 5.22 / 5.60 / 4.69 | 5.45 / 5.08 / 4.64 |
+| ink on paper / sheet / paper-deep | 16.18 / 17.35 / 14.52 | 15.33 / 13.51 / 11.92 |
+| ink-soft on paper / sheet / paper-deep | 8.17 / 8.76 / 7.33 | 7.45 / 6.57 / 5.80 |
+| ink-faint on paper / sheet / paper-deep | 5.33 / 5.72 / 4.78 | 6.20 / 5.47 / 4.82 |
+| stamp-blue on paper / sheet / paper-deep | 5.88 / 6.31 / 5.28 | 7.73 / 6.82 / 6.02 |
+| ledger-green on paper / sheet | 5.64 / 6.04 | 7.82 / 6.90 |
+| vermilion-ink on paper / sheet / paper-deep | 5.22 / 5.60 / 4.69 | 6.03 / 5.32 / 4.69 |
 | on-vermilion on vermilion (primary button) | 4.56 | 5.45 |
 | paper on ink (secondary button, hover ink-soft) | 16.18 (8.17) | 15.33 (7.45) |
 | vermilion on paper (display text 48 px and up, fills only) | 3.55 | 5.45 |
-| rule on paper / sheet (control borders, non-text) | 3.27 / 3.51 | 3.83 / 3.56 |
+| rule on paper / sheet (control borders, non-text) | 3.27 / 3.51 | 4.24 / 3.74 |
 
 QR codes inside `<QrFrame>` are always #141311 on #FAF7F0 (17.35:1) in both themes, because many phone cameras fail on inverted codes.
 
@@ -117,11 +117,12 @@ QR codes inside `<QrFrame>` are always #141311 on #FAF7F0 (17.35:1) in both them
   `<Stamp eventId={id} eventName={name} city={city} at={at} mode={mode} holder={pass} className="w-40" />`
 - **`StampPress`** and **`pressHaptic()`** (client, `@/ui/stamp/StampPress`): replays the 180 ms press whenever `pressKey` changes and fires a 14 ms vibration where supported (Android Chrome; iOS ignores it). Call `pressHaptic()` inside the tap handler, because browsers only vibrate after a user gesture.
   `<StampPress pressKey={txHash}><Stamp {...stamp} /></StampPress>`
+- **`RubberMark`** (`@/ui/stamp/RubberMark`) and **`markSvg(params)`**: a framed office mark in the same inks and ink bleed, for states rather than events. `<RubberMark lines={["Awaiting", "first check-in"]} seed="traction" className="w-72" />`. The traction empty state and the 404 use it.
 - **`QrFrame`**: registration corners and a quiet zone for door codes and attendee codes. Draw the QR modules in `currentColor`. `<QrFrame label="Door code for Campus meetup" caption="Scan with your phone camera" status="New code in 12 s">{svg}</QrFrame>`
 
 ### States
 
-- **`Skeleton`**, **`SkeletonText`**, **`SkeletonStamp`**, wrapped in **`LoadingRegion label="Loading the event"`** so assistive tech hears one message.
+- **`Skeleton`** (ink at 10%, visible on both themes), **`SkeletonText`**, **`SkeletonStamp`**, wrapped in **`LoadingRegion label="Loading the event"`** so assistive tech hears one message.
 - **`EmptyState`**: a blank stamp ring, a serif title, one or two sentences and the next action. `as="h1" | "h2" | "h3"` to fit the outline.
 - **`ErrorState`**: a struck-through ring, what happened, what to do, an optional `reference` (error digest) and the recovery action.
 - **`Notice`**: an inline slip with `tone="info" | "success" | "warning" | "danger"`; the tone is spoken, not only coloured.
