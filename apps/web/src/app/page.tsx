@@ -37,7 +37,7 @@ const steps = [
   },
   {
     role: "Attendee",
-    title: "Checks in and gets stamped",
+    title: "Checks in, gets stamped",
     body: "Scan the door code with a phone camera. The phone signs with a pass key it made for you, our relayer pays the gas, and a stamp lands in your passport in seconds. No wallet and no QIE needed to start.",
     code: "ShowmarkRegistry.checkIn",
   },
@@ -142,7 +142,7 @@ function Hero() {
             <p className="text-sm text-ink-soft">Bengaluru, rotating door code</p>
           </SheetSection>
           <Perforation />
-          <SheetSection className="grid grid-cols-[auto_1fr] items-center gap-5 pt-4 pb-8 sm:gap-6 sm:pb-9">
+          <SheetSection className="grid grid-cols-1 items-center gap-5 pt-4 pb-8 min-[420px]:grid-cols-[auto_1fr] sm:gap-6 sm:pb-9">
             <HeroStamp
               stamp={{
                 eventId: "1",
@@ -173,7 +173,7 @@ function Hero() {
 
 function HowItWorks() {
   return (
-    <section aria-labelledby="how-it-works" className="scroll-mt-24 py-16 sm:py-20">
+    <section aria-labelledby="how-it-works" className="scroll-mt-24 py-12 sm:py-20">
       <Container className="flex flex-col gap-12">
         <SectionHeading id="how-it-works" title="Four steps, and each one is a transaction you can open">
           Every claim a sponsor used to take on trust, like headcount and real humans, becomes a record on the QIE
@@ -216,7 +216,7 @@ function JudgesDesk() {
   const eventId = judgesDeskEventId();
   const live = isDeployed() && eventId !== null;
   return (
-    <section aria-labelledby="judges-desk" className="scroll-mt-24 py-16 sm:py-20">
+    <section aria-labelledby="judges-desk" className="scroll-mt-24 py-12 sm:py-20">
       <Container>
         <Sheet as="div">
           <div className="flex flex-col lg:flex-row">
@@ -286,17 +286,20 @@ function JudgesDesk() {
 
 function Integrations() {
   return (
-    <section aria-labelledby="integrations" className="py-16 sm:py-20">
+    <section aria-labelledby="integrations" className="py-12 sm:py-20">
       <Container className="flex flex-col gap-12">
         <SectionHeading id="integrations" title="Built on QIE, with each part doing a job">
           Six pieces of the QIE ecosystem, each one there because the product needs it.
         </SectionHeading>
-        <dl className="grid grid-cols-1 border-t border-ink md:grid-cols-2 md:gap-x-12">
+        <dl className="border-t border-ink">
           {integrations.map((item) => (
-            <div key={item.name} className="flex flex-col gap-2 border-b border-rule-soft py-6 sm:py-7">
+            <div
+              key={item.name}
+              className="grid grid-cols-1 gap-x-10 gap-y-1.5 border-b border-rule-soft py-5 md:grid-cols-[12rem_minmax(0,1fr)_14rem] md:items-baseline md:py-6"
+            >
               <dt className="font-display text-xl text-ink">{item.name}</dt>
-              <dd className="text-base text-ink-soft">{item.job}</dd>
-              <dd className="font-mono text-xs text-ink-faint">{item.where}</dd>
+              <dd className="max-w-[40rem] text-base text-ink-soft">{item.job}</dd>
+              <dd className="font-mono text-xs text-ink-faint md:text-right">{item.where}</dd>
             </div>
           ))}
         </dl>
@@ -307,7 +310,7 @@ function Integrations() {
 
 function Honesty() {
   return (
-    <section aria-labelledby="honesty" className="py-16 sm:py-20">
+    <section aria-labelledby="honesty" className="py-12 sm:py-20">
       <Container className="flex flex-col gap-12">
         <SectionHeading id="honesty" title="What the chain enforces, and what it cannot">
           Sponsors are trusting us with money, so here is exactly where the guarantees stop.

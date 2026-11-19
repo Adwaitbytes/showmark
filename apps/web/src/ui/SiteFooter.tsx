@@ -36,7 +36,7 @@ const columns: { title: string; links: { href: string; label: string; external?:
 
 function FooterLink({ href, label, external }: { href: string; label: string; external?: boolean }) {
   const className =
-    "inline-flex min-h-10 items-center text-base text-ink-soft underline decoration-transparent underline-offset-4 transition-colors hover:text-ink hover:decoration-current";
+    "inline-flex min-h-10 items-center text-base whitespace-nowrap text-ink-soft underline decoration-transparent underline-offset-4 transition-colors hover:text-ink hover:decoration-current";
   return external ? (
     <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
       {label}
@@ -59,7 +59,7 @@ export function SiteFooter() {
   ];
 
   return (
-    <footer className="mt-24 border-t border-rule-soft sm:mt-32">
+    <footer className="mt-16 border-t border-rule-soft sm:mt-24">
       <Container className="grid grid-cols-1 gap-12 py-14 md:grid-cols-[1.3fr_2fr] md:gap-16 md:py-16">
         <div className="flex max-w-sm flex-col gap-4">
           <Link href="/" className="inline-flex w-fit min-h-11 items-center text-[1.75rem]" aria-label="Showmark, home">

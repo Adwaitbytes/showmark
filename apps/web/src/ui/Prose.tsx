@@ -23,7 +23,7 @@ export function Prose({ children, className }: { children: ReactNode; className?
         "[&_pre]:mt-5 [&_pre]:overflow-x-auto [&_pre]:rounded-doc [&_pre]:bg-paper-deep [&_pre]:px-5 [&_pre]:py-4 [&_pre]:font-mono [&_pre]:text-sm [&_pre]:leading-[1.65] [&_pre]:text-ink [&_pre]:shadow-[inset_0_0_0_1px_var(--rule-soft)]",
         "[&_table]:mt-5 [&_table]:w-full [&_table]:text-left [&_table]:text-sm",
         "[&_th]:border-b [&_th]:border-ink [&_th]:py-2.5 [&_th]:pr-4 [&_th]:font-medium [&_th]:text-ink",
-        "[&_td]:border-b [&_td]:border-rule-soft [&_td]:py-2.5 [&_td]:pr-4 [&_td]:align-top",
+        "[&_td]:border-b [&_td]:border-rule-soft [&_td]:py-2.5 [&_td]:pr-4 [&_td]:align-top sm:[&_td:first-child]:whitespace-nowrap",
         "[&_hr]:my-12 [&_hr]:border-rule-soft",
         className,
       )}

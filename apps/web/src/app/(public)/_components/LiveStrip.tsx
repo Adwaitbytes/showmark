@@ -24,7 +24,7 @@ function Cell({ label, value, note }: { label: string; value: string; note: stri
   return (
     <div className="flex flex-col gap-1.5 px-5 py-5 sm:px-6">
       <dt className="text-sm text-ink-soft">{label}</dt>
-      <dd className="text-2xl font-medium tracking-[-0.01em] text-ink">{value}</dd>
+      <dd className="font-display text-3xl leading-none text-ink">{value}</dd>
       <dd className="text-sm text-ink-faint">{note}</dd>
     </div>
   );

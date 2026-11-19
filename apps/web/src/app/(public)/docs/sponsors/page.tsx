@@ -76,7 +76,8 @@ export default function SponsorGuide() {
         <p>For every verified person at an eligible event, the vault computes, in this order:</p>
         <pre>
           {`gross        = price of one person, in the token
-fee          = gross * fee rate      (fixed when the campaign is created, at most 5%)
+fee          = gross * fee rate
+               (the rate is fixed when the campaign is created, at most 5%)
 net          = gross - fee
 to attendee  = net * attendee share
 to organizer = net - to attendee`}
