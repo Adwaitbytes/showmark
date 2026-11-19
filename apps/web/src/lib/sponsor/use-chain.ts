@@ -20,13 +20,10 @@ export interface OraclePrice {
 
 /** Latest QIE/USD round. Re-read every minute. */
 export function useOraclePrice(): Read<OraclePrice> & { reload: () => void } {
-  const [state, setState] = useState<Read<OraclePrice>>({ status: "loading" });
+  const [state, setState] = useState<Read<OraclePrice>>(() => (addresses.qieUsdOracle === zeroAddress ? { status: "error" } : { status: "loading" }));
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
-    if (addresses.qieUsdOracle === zeroAddress) {
-      setState({ status: "error" });
-      return;
-    }
+    if (addresses.qieUsdOracle === zeroAddress) return;
     let live = true;
     async function read() {
       try {
@@ -57,12 +54,9 @@ export interface VaultConfig {
 
 /** The fee new campaigns snapshot, and the oldest oracle price the vault accepts. */
 export function useVaultConfig(): Read<VaultConfig> {
-  const [state, setState] = useState<Read<VaultConfig>>({ status: "loading" });
+  const [state, setState] = useState<Read<VaultConfig>>(() => (addresses.vault === zeroAddress ? { status: "error" } : { status: "loading" }));
   useEffect(() => {
-    if (addresses.vault === zeroAddress) {
-      setState({ status: "error" });
-      return;
-    }
+    if (addresses.vault === zeroAddress) return;
     let live = true;
     Promise.all([
       publicClient.readContract({ address: addresses.vault, abi: vaultSponsorAbi, functionName: "feeBps" }),
@@ -140,13 +134,11 @@ export interface OnChainCampaign {
 
 /** The vault's own record of a campaign: the source of truth for balance, end time and caps. */
 export function useOnChainCampaign(id: string): Read<OnChainCampaign> & { reload: () => void } {
+  const readable = addresses.vault !== zeroAddress && /^\d+$/.test(id);
   const [state, setState] = useState<Read<OnChainCampaign>>({ status: "loading" });
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
-    if (addresses.vault === zeroAddress || !/^\d+$/.test(id)) {
-      setState({ status: "error" });
-      return;
-    }
+    if (!readable) return;
     let live = true;
     publicClient
       .readContract({ address: addresses.vault, abi: vaultSponsorAbi, functionName: "campaign", args: [BigInt(id)] })
@@ -167,9 +159,9 @@ export function useOnChainCampaign(id: string): Read<OnChainCampaign> & { reload
     return () => {
       live = false;
     };
-  }, [id, nonce]);
+  }, [id, nonce, readable]);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
-  return { ...state, reload };
+  return readable ? { ...state, reload } : { status: "error", reload };
 }
 
 /** Current unix time in seconds, ticking every `everyMs`. */

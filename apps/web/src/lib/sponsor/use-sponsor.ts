@@ -53,7 +53,7 @@ export function useSponsorIdentity(): SponsorIdentity {
   useEffect(() => {
     if (safe !== null || !account) return;
     let live = true;
-    setSession({ ...EMPTY, account, checking: true });
+    // While this read is in flight, session.account still names the previous account, which reads as "checking".
     readSession()
       .then((current) => {
         if (!live) return;

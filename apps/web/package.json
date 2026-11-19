@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "1.2.1",
+    "@safe-global/safe-apps-sdk": "9.1.0",
     "@showmark/mcp": "workspace:*",
     "@showmark/sdk": "workspace:*",
     "@upstash/ratelimit": "2.2.1",
