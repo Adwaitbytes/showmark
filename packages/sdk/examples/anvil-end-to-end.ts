@@ -1,4 +1,4 @@
-// End to end on a local chain: deploy the real ShowmarkRegistry to anvil, run both proof modes and a wallet link
+// End to end on a local chain: deploy the real ShowmarkRegistry and PresenceLens to anvil, run both proof modes and a wallet link
 // through the SDK, and read the results back with ShowmarkClient. Needs Foundry (anvil and forge) on PATH.
 //
 //   pnpm --filter @showmark/sdk build && node examples/anvil-end-to-end.ts
@@ -7,7 +7,7 @@
 // before sending it, like the real one, but it has no rate limits, batching or settlement.
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -33,24 +33,23 @@ import {
   decodeAttendeeCode,
   doorPassUrl,
   encodeAttendeeCode,
+  presenceAbi,
   registryAbi,
   signLinkWallet,
 } from "@showmark/sdk";
 
 const sdkRoot = fileURLToPath(new URL("../", import.meta.url));
-const artifactPath = `${sdkRoot}.forge-out/out/ShowmarkRegistry.sol/ShowmarkRegistry.json`;
 
-function registryBytecode(): Hex {
-  if (!existsSync(artifactPath)) {
-    const contractsRoot = fileURLToPath(new URL("../../contracts/", import.meta.url));
-    const build = spawnSync(
-      "forge",
-      ["build", "--root", contractsRoot, "--out", `${sdkRoot}.forge-out/out`, "--cache-path", `${sdkRoot}.forge-out/cache`, "--skip", "test", "--skip", "script"],
-      { stdio: "inherit" },
-    );
-    if (build.status !== 0) throw new Error("forge build failed; install Foundry from https://getfoundry.sh");
-  }
-  const artifact = JSON.parse(readFileSync(artifactPath, "utf8")) as { bytecode: { object: Hex } };
+/** Creation bytecode from a fresh (incremental) forge build of packages/contracts, so the run uses current sources. */
+function bytecodeOf(name: "ShowmarkRegistry" | "PresenceLens"): Hex {
+  const contractsRoot = fileURLToPath(new URL("../../contracts/", import.meta.url));
+  const build = spawnSync(
+    "forge",
+    ["build", "--root", contractsRoot, "--out", `${sdkRoot}.forge-out/out`, "--cache-path", `${sdkRoot}.forge-out/cache`, "--skip", "test", "--skip", "script"],
+    { stdio: "ignore" },
+  );
+  if (build.status !== 0) throw new Error("forge build failed; install Foundry from https://getfoundry.sh");
+  const artifact = JSON.parse(readFileSync(`${sdkRoot}.forge-out/out/${name}.sol/${name}.json`, "utf8")) as { bytecode: { object: Hex } };
   return artifact.bytecode.object;
 }
 
@@ -153,10 +152,14 @@ export interface EndToEndResult {
   streak: { current: number; best: number };
   checkedIn: number;
   walletAttended: boolean;
+  /** Through PresenceLens: the wallet resolves to attendee A's pass. */
+  walletPresenceKey: Address;
+  walletAttendedCount: number;
 }
 
 export async function runEndToEnd(): Promise<EndToEndResult> {
-  const bytecode = registryBytecode();
+  const registryCode = bytecodeOf("ShowmarkRegistry");
+  const lensCode = bytecodeOf("PresenceLens");
   const anvil = await startAnvil();
   let relayer: Server | null = null;
   try {
@@ -172,12 +175,17 @@ export async function runEndToEnd(): Promise<EndToEndResult> {
     // 1. Deploy the registry and open a one-event series, the way the organizer console does.
     const deployHash = await organizerWallet.deployContract({
       abi: registryAbi,
-      bytecode,
+      bytecode: registryCode,
       args: [organizer.address, "https://showmark.example/api/stamp/"],
     });
     const deployed = (await reader.waitForTransactionReceipt({ hash: deployHash })).contractAddress;
     if (!deployed) throw new Error("registry deployment returned no address");
     const registry = getAddress(deployed);
+    const lensReceipt = await reader.waitForTransactionReceipt({
+      hash: await organizerWallet.deployContract({ abi: presenceAbi, bytecode: lensCode, args: [registry] }),
+    });
+    if (!lensReceipt.contractAddress) throw new Error("lens deployment returned no address");
+    const lens = getAddress(lensReceipt.contractAddress);
     const send = async (hash: Hex): Promise<void> => {
       const receipt = await reader.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error(`transaction ${hash} reverted`);
@@ -202,7 +210,7 @@ export async function runEndToEnd(): Promise<EndToEndResult> {
 
     const local = await startLocalRelayer(anvil.rpcUrl, registry, keys.relayer);
     relayer = local.server;
-    const showmark = new ShowmarkClient({ chain: foundry, rpcUrls: [anvil.rpcUrl], addresses: { registry }, relayUrl: local.url });
+    const showmark = new ShowmarkClient({ chain: foundry, rpcUrls: [anvil.rpcUrl], addresses: { registry, lens }, relayUrl: local.url });
     const domain = { chainId: foundry.id, registry };
 
     // 2. Mode 1: the door screen shows a signed pass, the attendee's phone opens the URL and checks in.
@@ -242,9 +250,11 @@ export async function runEndToEnd(): Promise<EndToEndResult> {
       wallet: wallet.address,
       modeOne: { attended: await showmark.hasAttended(eventId, attendeeA.address), mode: a.mode },
       modeTwo: { attended: await showmark.hasAttended(eventId, attendeeB.address), mode: b.mode },
-      streak: await showmark.streakOf(seriesId, attendeeA.address),
+      streak: await showmark.streakOf(seriesId, wallet.address),
       checkedIn: event?.checkedIn ?? 0,
       walletAttended: await showmark.hasAttended(eventId, wallet.address),
+      walletPresenceKey: await showmark.presenceKeyOf(wallet.address),
+      walletAttendedCount: await showmark.attendedCount(wallet.address, [eventId, eventId + 1n]),
     };
   } finally {
     relayer?.close();
@@ -260,4 +270,5 @@ if (import.meta.main) {
   console.log(`mode 2        ${result.attendeeB} attended=${result.modeTwo.attended} mode=${result.modeTwo.mode}`);
   console.log(`streak        current=${result.streak.current} best=${result.streak.best}`);
   console.log(`linked wallet ${result.wallet} attended=${result.walletAttended}`);
+  console.log(`lens          wallet resolves to ${result.walletPresenceKey}, attended ${result.walletAttendedCount} of 2 listed events`);
 }

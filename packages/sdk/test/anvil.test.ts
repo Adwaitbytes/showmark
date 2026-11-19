@@ -14,5 +14,7 @@ describe.skipIf(!hasFoundry)("against ShowmarkRegistry on anvil", () => {
     expect(result.checkedIn).toBe(2);
     expect(result.streak).toEqual({ current: 1, best: 1 });
     expect(result.walletAttended).toBe(true);
+    expect(result.walletPresenceKey).toBe(result.attendeeA);
+    expect(result.walletAttendedCount).toBe(1);
   });
 });
