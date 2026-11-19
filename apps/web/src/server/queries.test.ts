@@ -26,7 +26,9 @@ beforeAll(async () => {
   const kv = new MemoryStore();
   // The index is already current and the explorer figure is known, so no test reaches the network.
   await kv.set(`idx:fresh:${FIXTURE_CHAIN_ID}`, "1", { px: 600_000 });
-  await kv.set(`traction:chain-today:${FIXTURE_CHAIN_ID}`, "1000", { px: 600_000 });
+  // The explorer's latest complete day is the fixture's day, so the share compares the same window.
+  const fixtureDay = new Date(Number(startsAt) * 1000).toISOString().slice(0, 10);
+  await kv.set(`traction:chain-day:${FIXTURE_CHAIN_ID}`, JSON.stringify({ date: fixtureDay, transactions: 1000 }), { px: 600_000 });
   setStore(kv);
   const client = fakeChainClient({
     [vault]: {
@@ -179,7 +181,6 @@ describe("traction", () => {
     });
     expect(traction.daily).toHaveLength(30);
     expect(traction.daily.reduce((sum, d) => sum + d.checkIns, 0)).toBe(2);
-    const fixtureIsToday = new Date(Number(startsAt) * 1000).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
-    expect(traction.shareOfChainDaily).toBeCloseTo(fixtureIsToday ? 0.011 : 0);
+    expect(traction.shareOfChainDaily).toBeCloseTo(0.011);
   });
 });

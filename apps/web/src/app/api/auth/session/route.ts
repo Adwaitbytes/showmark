@@ -1,19 +1,24 @@
 import type { NextRequest } from "next/server";
-import type { Session } from "@/lib/api/types";
+import type { Session, SessionResponse } from "@/lib/api/types";
 import { clearSessionCookieHeader, SESSION_COOKIE, sessionCookieHeader, signSession, slide, verifySession } from "@/server/auth/session";
 import { sessionSecret } from "@/server/env";
-import { AppError, AUTH_ERRORS } from "@/server/errors";
 import { CACHE, handle, json } from "@/server/http";
 import { log } from "@/server/log";
 import { nameOf } from "@/server/qie/names";
 
-/** The current session. Each call slides the idle expiry forward by 15 minutes, up to 12 hours after sign in. */
+/**
+ * The current session, or null when signed out (200 either way). Each call slides the idle expiry forward by
+ * 15 minutes, up to 12 hours after sign in. A stale or forged cookie is cleared.
+ */
 export async function GET(request: NextRequest): Promise<Response> {
   return handle("auth.session", async () => {
     const secret = sessionSecret();
     const now = Math.floor(Date.now() / 1000);
     const current = await verifySession(request.cookies.get(SESSION_COOKIE)?.value, secret, now);
-    if (!current) throw new AppError(401, AUTH_ERRORS.unauthorized, { headers: { "set-cookie": clearSessionCookieHeader() } });
+    if (!current) {
+      const stale = request.cookies.has(SESSION_COOKIE);
+      return json(null satisfies SessionResponse, { cache: CACHE.private, headers: stale ? { "set-cookie": clearSessionCookieHeader() } : {} });
+    }
     const next = slide(current, now);
     let qieName: string | null = null;
     try {

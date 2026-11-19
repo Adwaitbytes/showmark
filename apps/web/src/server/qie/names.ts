@@ -3,6 +3,7 @@ import { chainContext, type ChainContext } from "../chain";
 import { AppError, COMMON_ERRORS } from "../errors";
 import { cacheStore, type KeyValueStore } from "../kv";
 import { log } from "../log";
+import { withTimeout } from "../timeout";
 
 // QIE ID names, read from the QIE ID root registry (mainnet 0x1D69...f62e, an ERC1967 proxy), verified against
 // mainnet on 19 Nov 2026:
@@ -63,13 +64,13 @@ async function resolveIn(ctx: ChainContext, registry: Address, name: QieName): P
   if (registry === zeroAddress) return null;
   let owner: Address;
   try {
-    [, owner] = await ctx.client.readContract({ address: registry, abi: nameRegistryAbi, functionName: "resolver", args: [name.fqn] });
+    [, owner] = await withTimeout(ctx.client.readContract({ address: registry, abi: nameRegistryAbi, functionName: "resolver", args: [name.fqn] }), "names.resolver");
   } catch (error) {
     if (!isRevert(error)) throw upstream(error);
     // The testnet stand-in registry has `ownerOfName(label)` instead of `resolver(fqn)`.
     if (name.parent !== "qie") return null;
     try {
-      owner = await ctx.client.readContract({ address: registry, abi: nameRegistryAbi, functionName: "ownerOfName", args: [name.label] });
+      owner = await withTimeout(ctx.client.readContract({ address: registry, abi: nameRegistryAbi, functionName: "ownerOfName", args: [name.label] }), "names.ownerOfName");
     } catch (fallbackError) {
       if (isRevert(fallbackError)) return null;
       throw upstream(fallbackError);
@@ -81,7 +82,7 @@ async function resolveIn(ctx: ChainContext, registry: Address, name: QieName): P
 async function userDomain(ctx: ChainContext, address: Address): Promise<string> {
   if (ctx.nameRegistry === zeroAddress) return "";
   try {
-    return await ctx.client.readContract({ address: ctx.nameRegistry, abi: nameRegistryAbi, functionName: "userDomain", args: [address] });
+    return await withTimeout(ctx.client.readContract({ address: ctx.nameRegistry, abi: nameRegistryAbi, functionName: "userDomain", args: [address] }), "names.userDomain");
   } catch (error) {
     if (isRevert(error)) return "";
     throw upstream(error);

@@ -157,3 +157,6 @@ export interface Session {
   qieName: string | null;
   expiresAt: string;
 }
+
+/** GET /api/auth/session answers 200 with null when nobody is signed in; being signed out is not an error. */
+export type SessionResponse = Session | null;

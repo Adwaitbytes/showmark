@@ -9,6 +9,7 @@ import { AppError } from "../errors";
 import { getStore, type KeyValueStore } from "../kv";
 import { tryLock } from "../lock";
 import { log } from "../log";
+import { isTimeout, withTimeout } from "../timeout";
 import { vaultAbi } from "@/lib/chain/abi";
 import { buildStatements, syncStateStatement, type CampaignTerms } from "./apply";
 import { decodeShowmarkLogs } from "./decode";
@@ -153,17 +154,28 @@ export async function ensureFresh(options: { kv?: KeyValueStore; deps?: SyncDeps
   if (await kv.get(freshKey)) return;
   const lock = await tryLock(kv, `idx:lock:${deps.ctx.chainId}`, LOCK_MS);
   if (!lock) return;
+  // The sync keeps running (and keeps the lock) if it overruns; this request stops waiting and serves what is
+  // already indexed, so a slow RPC never holds a page past the read budget.
+  const sync = (async () => {
+    try {
+      const result = await syncOnce({ maxChunks: 3, budgetMs: 4_000 }, deps);
+      if (result.caughtUp) await kv.set(freshKey, "1", { px: FRESH_MS });
+    } finally {
+      await lock.release();
+    }
+  })();
   try {
-    const result = await syncOnce({ maxChunks: 3, budgetMs: 4_000 }, deps);
-    if (result.caughtUp) await kv.set(freshKey, "1", { px: FRESH_MS });
+    await withTimeout(sync, "indexer.catch_up", CATCH_UP_WAIT_MS);
   } catch (error) {
-    if (error instanceof AppError) throw error;
-    log.warn("indexer.catch_up_failed", { error });
-  } finally {
-    await lock.release();
+    if (isTimeout(error)) log.warn("indexer.catch_up_slow", { waitedMs: CATCH_UP_WAIT_MS });
+    else if (error instanceof AppError) throw error;
+    else log.warn("indexer.catch_up_failed", { error });
   }
   scheduleProfileRefresh(kv, deps);
 }
+
+/** How long a page waits for catch-up before it renders the indexed data it already has. */
+export const CATCH_UP_WAIT_MS = 2_500;
 
 const PROFILE_REFRESH_EVERY_MS = 60_000;
 

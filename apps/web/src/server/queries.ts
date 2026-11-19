@@ -25,9 +25,10 @@ import { ensureFresh } from "./indexer/sync";
 import { cacheStore } from "./kv";
 import { log } from "./log";
 import { attendeeShare, campaignEligibleFor, pendingFor, SETTLE_GRACE_MS } from "./payouts";
-import { chainTransactionsToday } from "./qie/blockscout";
+import { chainLatestDay, type ChainDay } from "./qie/blockscout";
 import { addressOf, holdsQieId, looksLikeName, nameOf } from "./qie/names";
 import { qieUsdPrice } from "./qie/price";
+import { chainSlow, withTimeout } from "./timeout";
 
 // Server components call these directly. Client components use the matching /api/* routes, which call the same
 // functions. Every function returns real data from the indexer, or a real empty result when the contracts are not
@@ -54,6 +55,8 @@ export interface CampaignFilter {
 
 /** Check-in opens this long before an event starts and closes this long after it ends. */
 const CHECK_IN_MARGIN_MS = 60 * 60_000;
+/** CampaignVault REVIEW_PERIOD: sponsors may challenge for this long after settlement closes. */
+const REVIEW_PERIOD_MS = 7 * 24 * 60 * 60_000;
 const RECENT_CHECK_INS = 20;
 const CAMPAIGN_SETTLEMENTS = 200;
 const TRACTION_DAYS = 30;
@@ -245,8 +248,10 @@ export async function getEvent(id: string | bigint): Promise<EventDetail | null>
     )
     .orderBy(asc(t.campaigns.id));
 
+  // USD-priced campaigns are quoted live, all at once under the read deadline.
+  const quotes = await Promise.all(campaignRows.map((c) => (c.pricing === 1 ? quoteGross(ctx, c.id) : Promise.resolve(c.amountPerPresence))));
   const campaigns: CampaignPaying[] = [];
-  for (const c of campaignRows) {
+  for (const [i, c] of campaignRows.entries()) {
     const symbol = tokenSymbol(ctx, c.token);
     if (!symbol) {
       log.warn("queries.unsupported_token", { campaignId: c.id, token: c.token });
@@ -254,7 +259,8 @@ export async function getEvent(id: string | bigint): Promise<EventDetail | null>
     }
     const balance = BigInt(c.funded ?? "0") - BigInt(c.settled ?? "0") - BigInt(c.refunded ?? "0");
     if (balance <= 0n) continue;
-    const gross = c.pricing === 1 ? await quoteGross(ctx, c.id) : c.amountPerPresence;
+    const gross = quotes[i];
+    if (gross === null) continue;
     campaigns.push({
       id: c.id.toString(),
       name: c.name,
@@ -283,13 +289,17 @@ export async function getEvent(id: string | bigint): Promise<EventDetail | null>
   };
 }
 
-/** What one presence pays right now, in token base units, from the vault (USD campaigns depend on the oracle). */
-async function quoteGross(ctx: ChainContext, campaignId: bigint): Promise<bigint> {
+/**
+ * What one presence pays right now, in token base units, from the vault (USD campaigns depend on the oracle).
+ * Null when the chain does not answer in time: the event page then lists the campaigns it can price.
+ */
+async function quoteGross(ctx: ChainContext, campaignId: bigint): Promise<bigint | null> {
   try {
-    const [amount] = await ctx.client.readContract({ address: ctx.vault, abi: vaultAbi, functionName: "quote", args: [campaignId] });
+    const [amount] = await withTimeout(ctx.client.readContract({ address: ctx.vault, abi: vaultAbi, functionName: "quote", args: [campaignId] }), "vault.quote");
     return amount;
   } catch (error) {
-    throw new AppError(503, { code: "quote_unavailable", message: "Showmark could not read the current reward amount.", action: "Try again in a few seconds." }, { cause: error });
+    log.warn("queries.quote_unavailable", { campaignId, error });
+    return null;
   }
 }
 
@@ -298,7 +308,7 @@ async function quoteGross(ctx: ChainContext, campaignId: bigint): Promise<bigint
 export async function getPassport(addressOrName: string): Promise<Passport | null> {
   let address: Address;
   if (looksLikeName(addressOrName)) {
-    const owner = await addressOf(addressOrName);
+    const owner = await ownerOfName(addressOrName);
     if (!owner) return null;
     address = owner;
   } else if (isAddress(addressOrName, { strict: false })) {
@@ -310,7 +320,7 @@ export async function getPassport(addressOrName: string): Promise<Passport | nul
   const r = await ready();
   const ctx = r?.ctx ?? chainContext();
   if (!r) {
-    const [qieName, holds] = await Promise.all([nameOf(address), holdsQieId(address)]);
+    const [qieName, holds] = await Promise.all([nameOf(address).catch(() => null), holdsQieId(address).catch(() => false)]);
     return { pass: null, wallet: address, qieName, holdsQieId: holds, stamps: [], streaks: [], claimable: [], pending: [] };
   }
   const { db } = r;
@@ -363,10 +373,11 @@ export async function getPassport(addressOrName: string): Promise<Passport | nul
   const seriesNames = seriesIds.length ? await db.select({ id: t.series.id, name: t.series.name }).from(t.series).where(inArray(t.series.id, seriesIds)) : [];
   const tokens = [zeroAddress, ...(ctx.qusdc !== zeroAddress ? [ctx.qusdc] : [])];
 
-  let streakValues: (readonly [number, number])[];
-  let claimableValues: bigint[];
-  try {
-    [streakValues, claimableValues] = await Promise.all([
+  // Live values from the chain, with one deadline for the balances and one for the name, run side by side. When
+  // the chain is slow the indexed equivalents are shown instead (they trail the chain by at most a few blocks), so
+  // the passport always renders.
+  const balances = withTimeout(
+    Promise.all([
       Promise.all(
         seriesIds.map((id) =>
           passAddress
@@ -375,12 +386,23 @@ export async function getPassport(addressOrName: string): Promise<Passport | nul
         ),
       ),
       Promise.all(tokens.map((token) => ctx.client.readContract({ address: ctx.vault, abi: vaultAbi, functionName: "claimable", args: [token, holder] }))),
-    ]);
-  } catch (error) {
-    throw new AppError(503, { code: "chain_read_failed", message: "Showmark could not read balances from the network.", action: "Try again in a few seconds." }, { cause: error });
-  }
-
-  const [qieName, holds] = await Promise.all([nameOf(walletAddress ?? address), walletAddress ? holdsQieId(walletAddress) : Promise.resolve(false)]);
+    ]),
+    "passport.balances",
+  ).catch(async (error: unknown) => {
+    log.warn("queries.passport_indexed_fallback", { address: holder, error });
+    const streaks = pass ? await indexedStreaks(db, pass, seriesIds) : seriesIds.map(() => [0, 0] as const);
+    return [streaks, await indexedClaimable(db, holder.toLowerCase(), tokens)] as const;
+  });
+  const nameHolder = walletAddress ?? address;
+  const identity = withTimeout(
+    Promise.all([nameOf(nameHolder), walletAddress ? holdsQieId(walletAddress) : Promise.resolve(false)]),
+    "passport.name",
+  ).catch(async (error: unknown) => {
+    log.warn("queries.name_fallback", { address: nameHolder, error });
+    const [profile] = await db.select().from(t.profiles).where(eq(t.profiles.address, nameHolder.toLowerCase())).limit(1);
+    return [profile?.qieName ?? null, walletAddress ? (profile?.holdsQieId ?? false) : false] as const;
+  });
+  const [[streakValues, claimableValues], [qieName, holds]] = await Promise.all([balances, identity]);
 
   return {
     pass: passAddress,
@@ -397,6 +419,58 @@ export async function getPassport(addressOrName: string): Promise<Passport | nul
     claimable: tokens.map((token, i) => ({ token, symbol: token === zeroAddress ? "QIE" : "QUSDC", amount: claimableValues[i].toString() })),
     pending: pass ? await pendingFor(db, pass) : [],
   };
+}
+
+/** A name's owner from the registry; if the chain is slow, from indexed profiles; otherwise a typed chain_slow error. */
+async function ownerOfName(name: string): Promise<Address | null> {
+  try {
+    return await addressOf(name);
+  } catch (error) {
+    if (!(error instanceof AppError) || error.status !== 503) throw error;
+    const fqn = name.trim().toLowerCase().endsWith(".qie") ? name.trim().toLowerCase() : `${name.trim().toLowerCase()}.qie`;
+    const ctx = chainContext();
+    if (contractsDeployed(ctx)) {
+      const [row] = await getDatabase().db.select({ address: t.profiles.address }).from(t.profiles).where(eq(t.profiles.qieName, fqn)).limit(1);
+      if (row) return checksum(row.address);
+    }
+    throw chainSlow(error);
+  }
+}
+
+/** Streaks from indexed presences: the streak recorded at the latest attended index, and the best seen. */
+async function indexedStreaks(db: Db, pass: string, seriesIds: bigint[]): Promise<(readonly [number, number])[]> {
+  const rows = await db
+    .select({ seriesId: t.events.seriesId, seriesIndex: t.events.seriesIndex, streak: t.presences.streak })
+    .from(t.presences)
+    .innerJoin(t.events, eq(t.events.id, t.presences.eventId))
+    .where(and(eq(t.presences.attendee, pass), inArray(t.events.seriesId, seriesIds.length ? seriesIds : [0n])));
+  return seriesIds.map((id) => {
+    const mine = rows.filter((r) => r.seriesId === id).sort((a, b) => b.seriesIndex - a.seriesIndex);
+    return [mine[0]?.streak ?? 0, Math.max(0, ...mine.map((r) => r.streak))] as const;
+  });
+}
+
+/** Claimable per token from vault logs: credited as attendee and as organizer, minus withdrawals. */
+async function indexedClaimable(db: Db, account: string, tokens: Address[]): Promise<bigint[]> {
+  const credited = await db
+    .select({
+      token: t.campaigns.token,
+      amount: sql<string>`sum(case when ${t.settlements.attendee} = ${account} then ${t.settlements.toAttendee} else 0 end + case when ${t.settlements.organizer} = ${account} then ${t.settlements.toOrganizer} else 0 end)`,
+    })
+    .from(t.settlements)
+    .innerJoin(t.campaigns, eq(t.campaigns.id, t.settlements.campaignId))
+    .where(or(eq(t.settlements.attendee, account), eq(t.settlements.organizer, account)))
+    .groupBy(t.campaigns.token);
+  const withdrawn = await db
+    .select({ token: t.withdrawals.token, amount: sql<string>`sum(${t.withdrawals.amount})` })
+    .from(t.withdrawals)
+    .where(eq(t.withdrawals.account, account))
+    .groupBy(t.withdrawals.token);
+  return tokens.map((token) => {
+    const key = token.toLowerCase();
+    const owed = BigInt(credited.find((c) => c.token === key)?.amount ?? "0") - BigInt(withdrawn.find((w) => w.token === key)?.amount ?? "0");
+    return owed > 0n ? owed : 0n;
+  });
 }
 
 // ------------------------------------------------------------------------------------------- campaigns
@@ -467,20 +541,11 @@ async function selectCampaigns(r: Ready, where: SQL | undefined, limit: number, 
       maxTotal: c.maxTotal,
       openToBonded: c.openToBonded,
       minBond: c.minBond.toString(),
-      challengeDeadline: c.openToBonded ? await challengeDeadline(ctx, c.id) : null,
+      // vault.challengeDeadline is endsAt + SETTLE_GRACE + REVIEW_PERIOD; endsAt is indexed (CampaignClosed included).
+      challengeDeadline: c.openToBonded ? new Date(c.endsAt.getTime() + SETTLE_GRACE_MS + REVIEW_PERIOD_MS).toISOString() : null,
     });
   }
   return out;
-}
-
-/** Read live: closing a campaign early moves its challenge deadline. */
-async function challengeDeadline(ctx: ChainContext, campaignId: bigint): Promise<string> {
-  try {
-    const at = await ctx.client.readContract({ address: ctx.vault, abi: vaultAbi, functionName: "challengeDeadline", args: [campaignId] });
-    return new Date(Number(at) * 1000).toISOString();
-  } catch (error) {
-    throw new AppError(503, { code: "chain_read_failed", message: "Showmark could not read the campaign's challenge window.", action: "Try again in a few seconds." }, { cause: error });
-  }
 }
 
 export async function listCampaigns(filter: CampaignFilter = {}): Promise<CampaignSummary[]> {
@@ -559,17 +624,20 @@ export async function getCampaign(id: string | bigint, options: CampaignDetailOp
 
 // -------------------------------------------------------------------------------------------- traction
 
-const CHAIN_STATS_KEY = "traction:chain-today";
+const CHAIN_STATS_KEY = "traction:chain-day";
 const CHAIN_STATS_MS = 5 * 60_000;
+/** A chain day whose end is older than this is not shown. */
+const CHAIN_DAY_MAX_AGE_MS = 36 * 60 * 60_000;
+const DAY_MS = 86_400_000;
 
-async function chainToday(chainId: number): Promise<number | null> {
+async function chainDay(chainId: number): Promise<ChainDay | null> {
   const kv = cacheStore();
   const key = `${CHAIN_STATS_KEY}:${chainId}`;
   const cached = await kv.get(key);
-  if (cached !== null) return cached === "" ? null : Number(cached);
+  if (cached !== null) return cached === "" ? null : (JSON.parse(cached) as ChainDay);
   try {
-    const value = await chainTransactionsToday();
-    await kv.set(key, value === null ? "" : String(value), { px: CHAIN_STATS_MS });
+    const value = await chainLatestDay();
+    await kv.set(key, value === null ? "" : JSON.stringify(value), { px: CHAIN_STATS_MS });
     return value;
   } catch (error) {
     // The explorer stat is context, not a Showmark number: show "unknown" rather than fail the page.
@@ -585,7 +653,7 @@ export async function getTraction(): Promise<Traction> {
 
   const attendeesWithPresence = db.selectDistinct({ attendee: t.presences.attendee }).from(t.presences);
 
-  const [[presenceStats], [organizerStats], sponsorRows, settledRows, [walletStats], [linkStats], [repeatStats], [txStats], [txToday], dailyCheckIns, dailySettlements] =
+  const [[presenceStats], [organizerStats], sponsorRows, settledRows, [walletStats], [linkStats], [repeatStats], [txStats], dailyCheckIns, dailySettlements] =
     await Promise.all([
       db.select({ attendees: countDistinct(t.presences.attendee), events: countDistinct(t.presences.eventId) }).from(t.presences),
       db
@@ -619,7 +687,6 @@ export async function getTraction(): Promise<Traction> {
             .as("repeat"),
         ),
       db.select({ n: count() }).from(t.transactions),
-      db.select({ n: count() }).from(t.transactions).where(gte(t.transactions.at, sql`date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)),
       db
         .select({ day: sql<string>`to_char(${t.presences.at} at time zone 'utc', 'YYYY-MM-DD')`, n: sql<number>`count(*)::int` })
         .from(t.presences)
@@ -632,7 +699,32 @@ export async function getTraction(): Promise<Traction> {
         .groupBy(sql`1`),
     ]);
 
-  const [price, chainDaily] = await Promise.all([qieUsdPrice(ctx), chainToday(ctx.chainId)]);
+  const [price, chainDailyStats] = await Promise.all([
+    qieUsdPrice(ctx).catch((error: unknown) => {
+      // The USD figure is shown with its own "price unavailable" state; the counts above stand on their own.
+      log.warn("traction.price_unavailable", { error });
+      return null;
+    }),
+    chainDay(ctx.chainId),
+  ]);
+
+  // Share of the chain's day: Showmark's transactions in exactly the explorer's window (its latest complete UTC
+  // day). Not shown when the explorer figure is missing, stale, or smaller than ours (which would be a bad count).
+  let chainDaily: number | null = null;
+  let shareOfChainDaily: number | null = null;
+  if (chainDailyStats) {
+    const start = new Date(`${chainDailyStats.date}T00:00:00.000Z`);
+    const end = new Date(start.getTime() + DAY_MS);
+    if (Date.now() - end.getTime() <= CHAIN_DAY_MAX_AGE_MS) {
+      const [{ n: ours }] = await db
+        .select({ n: count() })
+        .from(t.transactions)
+        .where(and(gte(t.transactions.at, start), sql`${t.transactions.at} < ${end}`));
+      chainDaily = chainDailyStats.transactions;
+      shareOfChainDaily = chainDaily > 0 && chainDaily >= ours ? ours / chainDaily : null;
+      if (chainDaily < ours) log.warn("traction.chain_day_below_showmark", { date: chainDailyStats.date, chain: chainDaily, showmark: ours });
+    }
+  }
 
   const settledByToken = new Map<string, { symbol: TokenSymbol; teamFunded: bigint; external: bigint }>();
   const usd = { teamFunded: 0, external: 0 };
@@ -680,7 +772,7 @@ export async function getTraction(): Promise<Traction> {
     repeatAttendees: repeatStats?.n ?? 0,
     showmarkTransactions: txStats?.n ?? 0,
     chainDailyTransactions: chainDaily,
-    shareOfChainDaily: chainDaily ? (txToday?.n ?? 0) / chainDaily : null,
+    shareOfChainDaily,
     daily: [...days].map(([date, v]) => ({ date, ...v })),
   };
 }

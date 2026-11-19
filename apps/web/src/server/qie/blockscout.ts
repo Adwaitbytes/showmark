@@ -1,6 +1,7 @@
 import type { Address } from "viem";
 import { z } from "zod";
 import { activeChain } from "@/lib/chain/chains";
+import { READ_TIMEOUT_MS } from "../timeout";
 
 // Blockscout REST API (v2) on the QIE explorers. Verified on 19 Nov 2026:
 // - GET /api/v2/stats returns `transactions_today` as a decimal string.
@@ -8,7 +9,8 @@ import { activeChain } from "@/lib/chain/chains";
 //   as query parameters. Passing `block_number=N&index=0` therefore returns only items strictly before block N,
 //   which answers "did this address do anything before its first Showmark interaction" in one request per list.
 
-const TIMEOUT_MS = 8_000;
+// The same deadline as chain reads on the page path.
+const TIMEOUT_MS = READ_TIMEOUT_MS;
 
 export function explorerApiBase(): string {
   const url = activeChain.blockExplorers?.default.url;
@@ -22,15 +24,25 @@ async function getJson(url: string, fetchImpl: typeof fetch): Promise<unknown> {
   return response.json();
 }
 
-const statsSchema = z.object({ transactions_today: z.union([z.string(), z.number()]).nullable().optional() });
+const chartSchema = z.object({ chart_data: z.array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), transaction_count: z.union([z.number(), z.string()]) })) });
 const pageSchema = z.object({ items: z.array(z.unknown()) });
 
-/** Transactions the whole chain processed today, as the explorer reports it. Null when the explorer has no number. */
-export async function chainTransactionsToday(fetchImpl: typeof fetch = fetch, base = explorerApiBase()): Promise<number | null> {
-  const stats = statsSchema.parse(await getJson(`${base}/stats`, fetchImpl));
-  if (stats.transactions_today === null || stats.transactions_today === undefined) return null;
-  const n = Number(stats.transactions_today);
-  return Number.isFinite(n) ? n : null;
+export interface ChainDay {
+  /** UTC date, YYYY-MM-DD. */
+  date: string;
+  transactions: number;
+}
+
+/**
+ * The chain's transaction count for its latest complete UTC day, from /api/v2/stats/charts/transactions.
+ * (The `transactions_today` field of /api/v2/stats repeats this same last complete day, not today.)
+ */
+export async function chainLatestDay(fetchImpl: typeof fetch = fetch, base = explorerApiBase()): Promise<ChainDay | null> {
+  const chart = chartSchema.parse(await getJson(`${base}/stats/charts/transactions`, fetchImpl));
+  const latest = [...chart.chart_data].sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (!latest) return null;
+  const transactions = Number(latest.transaction_count);
+  return Number.isFinite(transactions) ? { date: latest.date, transactions } : null;
 }
 
 /**

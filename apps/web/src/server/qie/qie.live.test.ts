@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { qieMainnet } from "@/lib/chain/chains";
 import { MAINNET_QIE_NAME_REGISTRY, MAINNET_QIE_PAID_NAME_REGISTRY, type ChainContext } from "../chain";
 import { MemoryStore } from "../kv";
-import { chainTransactionsToday, hadActivityBefore } from "./blockscout";
+import { chainLatestDay, hadActivityBefore } from "./blockscout";
 import { dexQuote, dexQuoteQuerySchema } from "./dex";
 import { addressOf, holdsQieId, nameOf } from "./names";
 
@@ -44,7 +44,9 @@ describe.skipIf(!live)("QIE mainnet (live)", () => {
   it("reads explorer activity before a block and the daily transaction count", async () => {
     expect(await hadActivityBefore(holder, 12_005_798n, fetch, explorer)).toBe(false);
     expect(await hadActivityBefore(holder, 12_006_015n, fetch, explorer)).toBe(true);
-    expect(await chainTransactionsToday(fetch, explorer)).toBeGreaterThan(0);
+    const day = await chainLatestDay(fetch, explorer);
+    expect(day?.transactions).toBeGreaterThan(0);
+    expect(day?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("quotes QIE to QUSDC through the QIEDEX proxy", async () => {

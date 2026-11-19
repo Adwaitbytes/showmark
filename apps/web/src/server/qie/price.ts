@@ -2,6 +2,7 @@ import { zeroAddress } from "viem";
 import { aggregatorAbi } from "@/lib/chain/abi";
 import { chainContext, type ChainContext } from "../chain";
 import { AppError, COMMON_ERRORS } from "../errors";
+import { withTimeout } from "../timeout";
 
 export interface QiePrice {
   /** USD per QIE. */
@@ -22,10 +23,13 @@ export async function qieUsdPrice(ctx: ChainContext = chainContext()): Promise<Q
   if (ctx.oracle === zeroAddress) return null;
   let value: QiePrice | null;
   try {
-    const [round, decimals] = await Promise.all([
-      ctx.client.readContract({ address: ctx.oracle, abi: aggregatorAbi, functionName: "latestRoundData" }),
-      ctx.client.readContract({ address: ctx.oracle, abi: aggregatorAbi, functionName: "decimals" }),
-    ]);
+    const [round, decimals] = await withTimeout(
+      Promise.all([
+        ctx.client.readContract({ address: ctx.oracle, abi: aggregatorAbi, functionName: "latestRoundData" }),
+        ctx.client.readContract({ address: ctx.oracle, abi: aggregatorAbi, functionName: "decimals" }),
+      ]),
+      "oracle.latestRoundData",
+    );
     const [, answer, , updatedAt] = round;
     value = answer > 0n ? { usd: Number(answer) / 10 ** decimals, updatedAt: new Date(Number(updatedAt) * 1000) } : null;
   } catch (error) {
