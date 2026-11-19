@@ -223,7 +223,7 @@ function DemoSlide() {
     >
       <div className="flex flex-col gap-[4vh]">
         <h1 className={h1}>Check in now, from your own phone</h1>
-        <p className={body}>Point your camera at the code, tap once, and the stamp lands in a few seconds.</p>
+        <p className={body}>Point your phone camera at the code and open the link. The check-in starts by itself and the stamp lands in a few seconds.</p>
         <Suspense fallback={<Skeleton className="h-16 w-full max-w-md" />}>
           <DeskFacts />
         </Suspense>
