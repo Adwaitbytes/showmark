@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
 import { getEvent, getTxStatus, postCheckIn, type CheckInEvent } from "@/lib/checkin/api";
 import { problemCopy } from "@/lib/checkin/copy";
-import type { Dictionary, Locale } from "@/lib/checkin/i18n";
+import type { Dictionary, ErrorTables } from "@/lib/checkin/i18n";
 import {
   dismissLinkPrompt,
   linkPromptDismissed,
@@ -17,9 +17,9 @@ import {
 } from "@/lib/checkin/local-records";
 import { useLocale } from "@/lib/checkin/locale";
 import { createWaiter, runCheckIn, type CheckInDeps, type CheckInPhase } from "@/lib/checkin/machine";
-import { signCheckIn, type CheckInRequest } from "@/lib/checkin/sign";
+import type { SignResult } from "@/lib/checkin/pass-signer";
+import type { CheckInRequest } from "@/lib/checkin/sign";
 import { decodeDoorPass } from "@/lib/qr/payload";
-import { ensurePass, PassUnavailableError } from "@/lib/wallet/pass";
 import { Amount } from "@/ui/Amount";
 import { Button } from "@/ui/Button";
 import { ErrorState } from "@/ui/ErrorState";
@@ -47,6 +47,9 @@ interface PriorStamp {
 
 const CHECK_IN_MARGIN_MS = 60 * 60_000;
 
+// Start fetching the signing code as soon as this module runs in the browser, alongside hydration.
+const signer = typeof window === "undefined" ? null : import("@/lib/checkin/pass-signer");
+
 function decodeToken(raw: string | string[] | undefined) {
   if (typeof raw !== "string") return null;
   try {
@@ -65,7 +68,7 @@ export function CheckInScreen() {
   const params = useParams<{ token: string }>();
   const door = useMemo(() => decodeToken(params.token), [params.token]);
   const eventId = door ? door.eventId.toString() : null;
-  const { locale, t } = useLocale();
+  const { t, errors } = useLocale();
 
   const [phase, setPhase] = useState<ScreenPhase>(() => (door ? { kind: "starting" } : { kind: "invalid" }));
   const [event, setEvent] = useState<EventState>({ status: "loading" });
@@ -120,19 +123,28 @@ export function CheckInScreen() {
       if (!door) return;
       let request = requestRef.current;
       if (!request) {
+        let signed: SignResult;
         try {
-          const account = ensurePass();
-          setPass(account.address);
-          request = await signCheckIn(account, door);
-          requestRef.current = request;
-        } catch (error) {
-          finishedRef.current = true;
-          setPhase(error instanceof PassUnavailableError ? { kind: "storage" } : { kind: "failed", problem: { kind: "rejected", code: "sign_failed", retryable: false } });
+          const { passAndSign } = await (signer ?? import("@/lib/checkin/pass-signer"));
+          signed = await passAndSign(door);
+        } catch {
+          // The signing code did not download: same as the relay being out of reach.
+          signed = { ok: false, reason: "sign" };
+        }
+        if (signal.aborted) return;
+        if (!signed.ok) {
+          finishedRef.current = signed.reason === "storage";
+          setPhase(
+            signed.reason === "storage"
+              ? { kind: "storage" }
+              : { kind: "failed", problem: { kind: "relay", code: "sign_failed", retryable: true } },
+          );
           return;
         }
-      } else {
-        setPass(request.attendee);
+        request = signed.request;
+        requestRef.current = request;
       }
+      setPass(request.attendee);
       const final = await runCheckIn(request, deps, setPhase, signal);
       if (final && !(final.kind === "failed" && final.problem.retryable)) finishedRef.current = true;
     }
@@ -219,7 +231,7 @@ export function CheckInScreen() {
                 <h1 id="check-in-status" className="font-display text-2xl text-ink">
                   {headline(phase, t)}
                 </h1>
-                <p className="text-base text-ink-soft">{hint(phase, t, locale, now)}</p>
+                <p className="text-base text-ink-soft">{hint(phase, t, errors, now)}</p>
               </div>
               {phase.kind === "waiting" ? (
                 <Button variant="quiet" onClick={() => waiter.wake()} leading={<RetryIcon className="size-4" />}>
@@ -273,7 +285,7 @@ export function CheckInScreen() {
 }
 
 function FailedState({ phase, eventStartsAt, onRetry }: { phase: ScreenPhase; eventStartsAt: string | null; onRetry: () => void }) {
-  const { locale, t } = useLocale();
+  const { t, errors } = useLocale();
   const [shownAt] = useState(Date.now);
   if (phase.kind === "invalid" || phase.kind === "storage") {
     const copy = phase.kind === "invalid" ? t.errors.invalidCode : t.errors.storage;
@@ -295,7 +307,7 @@ function FailedState({ phase, eventStartsAt, onRetry }: { phase: ScreenPhase; ev
   }
   if (phase.kind !== "failed") return null;
   const { problem } = phase;
-  const copy = problemCopy(problem, locale, t);
+  const copy = problemCopy(problem, t, errors);
   const opensAt =
     problem.kind === "window" && eventStartsAt && Date.parse(eventStartsAt) - CHECK_IN_MARGIN_MS > shownAt
       ? new Date(Date.parse(eventStartsAt) - CHECK_IN_MARGIN_MS).toISOString()
@@ -347,13 +359,13 @@ function headline(phase: ScreenPhase, t: Dictionary): string {
   }
 }
 
-function hint(phase: ScreenPhase, t: Dictionary, locale: Locale, now: number): string {
+function hint(phase: ScreenPhase, t: Dictionary, errors: ErrorTables | null, now: number): string {
   switch (phase.kind) {
     case "starting":
     case "sending":
       return t.checkIn.sendingHint;
     case "waiting": {
-      const copy = problemCopy(phase.problem, locale, t);
+      const copy = problemCopy(phase.problem, t, errors);
       const countdown = phase.retryAt === null ? "" : ` ${t.errors.retryIn(Math.max(1, Math.ceil((phase.retryAt - now) / 1000)))}`;
       return `${copy.message} ${copy.action}${countdown}`;
     }

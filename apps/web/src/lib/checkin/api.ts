@@ -1,10 +1,10 @@
-import * as z from "zod/mini";
 import type { Hex } from "viem";
 import type { CheckInRequest } from "./sign";
 
 // Typed client for the /api routes the check-in screen calls. Kept to the check-in path on purpose:
 // this module ships in the /c/[token] bundle, so passport and wallet routes live in api-passport.ts.
-// Responses are validated with zod/mini (a few kB) because a malformed body must never reach the UI.
+// Every response is validated before it reaches the UI. The guards here are written by hand because
+// zod costs about 23 kB gzipped on the door route; api-passport.ts, loaded later, uses zod/mini.
 
 export type FailureKind = "api" | "network" | "timeout" | "malformed";
 
@@ -23,12 +23,22 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; failure: ApiFail
 
 export type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
-const apiErrorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string(), action: z.string() }),
-});
+/** Turns an unknown JSON body into T, or null when it does not have the expected shape. */
+export type Parser<T> = (body: unknown) => T | null;
 
-const hexSchema = z.custom<Hex>((value) => typeof value === "string" && /^0x[0-9a-fA-F]+$/.test(value));
-const digitsSchema = z.string().check(z.regex(/^\d+$/));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const isString = (value: unknown): value is string => typeof value === "string";
+const isHex = (value: unknown): value is Hex => isString(value) && /^0x[0-9a-fA-F]+$/.test(value);
+const isDigits = (value: unknown): value is string => isString(value) && /^\d+$/.test(value);
+
+function parseApiError(body: unknown): { code: string; message: string; action: string } | null {
+  if (!isRecord(body) || !isRecord(body.error)) return null;
+  const { code, message, action } = body.error;
+  return isString(code) && isString(message) && isString(action) ? { code, message, action } : null;
+}
 
 export interface RequestOptions {
   fetch?: Fetcher;
@@ -42,7 +52,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export async function apiRequest<T>(
   path: string,
   init: RequestInit,
-  schema: z.ZodMiniType<T>,
+  parse: Parser<T>,
   options: RequestOptions = {},
 ): Promise<ApiResult<T>> {
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
@@ -69,16 +79,14 @@ export async function apiRequest<T>(
       body = null;
     }
     if (!response.ok) {
-      const parsed = apiErrorSchema.safeParse(body);
+      const error = parseApiError(body);
       return {
         ok: false,
-        failure: parsed.success
-          ? { kind: "api", status: response.status, ...parsed.data.error }
-          : { kind: "api", status: response.status, code: `http_${response.status}` },
+        failure: error ? { kind: "api", status: response.status, ...error } : { kind: "api", status: response.status, code: `http_${response.status}` },
       };
     }
-    const parsed = schema.safeParse(body);
-    return parsed.success ? { ok: true, data: parsed.data } : { ok: false, failure: { kind: "malformed", code: "malformed" } };
+    const data = parse(body);
+    return data === null ? { ok: false, failure: { kind: "malformed", code: "malformed" } } : { ok: true, data };
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", onAbort);
@@ -92,48 +100,78 @@ export function postJson(body: unknown): RequestInit {
 
 // ------------------------------------------------------------------------------------------- relay
 
-const submittedSchema = z.object({ txHash: hexSchema, status: z.literal("submitted") });
-export type Submitted = z.infer<typeof submittedSchema>;
-
-export function postCheckIn(request: CheckInRequest, options?: RequestOptions): Promise<ApiResult<Submitted>> {
-  return apiRequest("/api/relay/check-in", postJson(request), submittedSchema, options);
+export interface Submitted {
+  txHash: Hex;
+  status: "submitted";
 }
 
-const txStatusSchema = z.object({
-  status: z.enum(["pending", "success", "reverted"]),
-  blockNumber: z.optional(z.string()),
-});
-export type TxState = z.infer<typeof txStatusSchema>;
+export const parseSubmitted: Parser<Submitted> = (body) =>
+  isRecord(body) && isHex(body.txHash) && body.txHash.length === 66 && body.status === "submitted" ? { txHash: body.txHash, status: "submitted" } : null;
+
+export function postCheckIn(request: CheckInRequest, options?: RequestOptions): Promise<ApiResult<Submitted>> {
+  return apiRequest("/api/relay/check-in", postJson(request), parseSubmitted, options);
+}
+
+export interface TxState {
+  status: "pending" | "success" | "reverted";
+  blockNumber?: string;
+}
+
+export const parseTxState: Parser<TxState> = (body) => {
+  if (!isRecord(body)) return null;
+  const { status, blockNumber } = body;
+  if (status !== "pending" && status !== "success" && status !== "reverted") return null;
+  if (blockNumber !== undefined && !isDigits(blockNumber)) return null;
+  return blockNumber === undefined ? { status } : { status, blockNumber };
+};
 
 export function getTxStatus(hash: Hex, options?: RequestOptions): Promise<ApiResult<TxState>> {
-  return apiRequest(`/api/tx/${hash}`, { method: "GET", cache: "no-store" }, txStatusSchema, { timeoutMs: 8_000, ...options });
+  return apiRequest(`/api/tx/${hash}`, { method: "GET", cache: "no-store" }, parseTxState, { timeoutMs: 8_000, ...options });
 }
 
 // ------------------------------------------------------------------------------------------- event
 
-const campaignPayingSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  sponsorName: z.string(),
-  tokenSymbol: z.enum(["QIE", "QUSDC"]),
-  attendeeAmount: digitsSchema,
-  requireQieId: z.boolean(),
-  minProofMode: z.union([z.literal(1), z.literal(2)]),
-});
-
-const eventSchema = z.object({
-  id: z.string(),
-  startsAt: z.string(),
-  endsAt: z.string(),
-  capacity: z.number(),
-  checkedIn: z.number(),
-  metadata: z.object({ name: z.string(), venue: z.string(), city: z.string() }),
-  campaigns: z.array(campaignPayingSchema),
-});
+export interface CampaignPayingBrief {
+  id: string;
+  name: string;
+  sponsorName: string;
+  tokenSymbol: "QIE" | "QUSDC";
+  attendeeAmount: string;
+  requireQieId: boolean;
+  minProofMode: 1 | 2;
+}
 
 /** The parts of EventDetail (src/lib/api/types.ts) the attendee screens read. */
-export type CheckInEvent = z.infer<typeof eventSchema>;
+export interface CheckInEvent {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+  checkedIn: number;
+  metadata: { name: string; venue: string; city: string };
+  campaigns: CampaignPayingBrief[];
+}
+
+function parseCampaign(value: unknown): CampaignPayingBrief | null {
+  if (!isRecord(value)) return null;
+  const { id, name, sponsorName, tokenSymbol, attendeeAmount, requireQieId, minProofMode } = value;
+  if (!isString(id) || !isString(name) || !isString(sponsorName) || !isDigits(attendeeAmount) || typeof requireQieId !== "boolean") return null;
+  if (tokenSymbol !== "QIE" && tokenSymbol !== "QUSDC") return null;
+  if (minProofMode !== 1 && minProofMode !== 2) return null;
+  return { id, name, sponsorName, tokenSymbol, attendeeAmount, requireQieId, minProofMode };
+}
+
+export const parseEvent: Parser<CheckInEvent> = (body) => {
+  if (!isRecord(body) || !isRecord(body.metadata) || !Array.isArray(body.campaigns)) return null;
+  const { id, startsAt, endsAt, capacity, checkedIn } = body;
+  const { name, venue, city } = body.metadata;
+  if (!isString(id) || !isString(startsAt) || !isString(endsAt) || typeof capacity !== "number" || typeof checkedIn !== "number") return null;
+  if (!isString(name) || !isString(venue) || !isString(city)) return null;
+  const campaigns = body.campaigns.map(parseCampaign);
+  if (campaigns.some((c) => c === null)) return null;
+  return { id, startsAt, endsAt, capacity, checkedIn, metadata: { name, venue, city }, campaigns: campaigns.filter((c) => c !== null) };
+};
 
 export function getEvent(id: string, options?: RequestOptions): Promise<ApiResult<CheckInEvent>> {
-  return apiRequest(`/api/events/${encodeURIComponent(id)}`, { method: "GET" }, eventSchema, options);
+  return apiRequest(`/api/events/${encodeURIComponent(id)}`, { method: "GET" }, parseEvent, options);
 }

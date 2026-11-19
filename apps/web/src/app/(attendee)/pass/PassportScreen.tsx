@@ -38,7 +38,7 @@ type Load =
   | { status: "failed"; pass: Address; message: string; action: string };
 
 export function PassportScreen() {
-  const { locale, t } = useLocale();
+  const { t, errors } = useLocale();
   const hydrated = useHydrated();
   const [fetched, setFetched] = useState<Fetched | null>(null);
   const [deadlines, setDeadlines] = useState<Record<string, string>>({});
@@ -70,11 +70,11 @@ export function PassportScreen() {
         message: result.failure.message ?? t.pass.loadFailed.message,
         action: result.failure.action ?? t.pass.loadFailed.action,
       };
-      const copy = result.failure.kind === "api" && result.failure.message ? localizedError(locale, result.failure.code, english) : t.pass.loadFailed;
+      const copy = result.failure.kind === "api" && result.failure.message ? localizedError(result.failure.code, english, errors?.api ?? null) : t.pass.loadFailed;
       setFetched({ status: "failed", ...copy });
     });
     return () => controller.abort();
-  }, [passAddress, reloadKey, locale, t]);
+  }, [passAddress, reloadKey, errors, t]);
 
   const load = useMemo<Load>(() => {
     if (!hydrated) return { status: "loading" };

@@ -29,7 +29,7 @@ type RowState =
   | { kind: "error"; copy: Copy; txHash?: Hex };
 
 export function Withdraw() {
-  const { locale, t } = useLocale();
+  const { t, errors } = useLocale();
   const hydrated = useHydrated();
   const pass = useMemo(() => (hydrated ? (loadPass()?.address ?? null) : null), [hydrated]);
   const [load, setLoad] = useState<Load>({ status: "loading" });
@@ -44,11 +44,11 @@ export function Withdraw() {
       if (result.ok) setLoad({ status: "ready", passport: result.data });
       else {
         const english = result.failure.message && result.failure.action ? { message: result.failure.message, action: result.failure.action } : t.pass.loadFailed;
-        setLoad({ status: "failed", copy: localizedError(locale, result.failure.code, english) });
+        setLoad({ status: "failed", copy: localizedError(result.failure.code, english, errors?.api ?? null) });
       }
     });
     return () => controller.abort();
-  }, [pass, reloadKey, locale, t]);
+  }, [pass, reloadKey, errors, t]);
 
   if (hydrated && !pass) {
     return (
@@ -116,7 +116,7 @@ export function Withdraw() {
     const result = await postWithdraw({ token, account });
     if (!result.ok) {
       const english = result.failure.message && result.failure.action ? { message: result.failure.message, action: result.failure.action } : t.withdraw.failed;
-      setRows((r) => ({ ...r, [token]: { kind: "error", copy: localizedError(locale, result.failure.code, english) } }));
+      setRows((r) => ({ ...r, [token]: { kind: "error", copy: localizedError(result.failure.code, english, errors?.api ?? null) } }));
       return;
     }
     const { txHash } = result.data;

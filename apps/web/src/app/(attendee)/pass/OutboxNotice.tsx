@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getTxStatus, postCheckIn } from "@/lib/checkin/api";
 import { problemCopy } from "@/lib/checkin/copy";
 import { recordLocalStamp, removeFromOutbox, type OutboxEntry } from "@/lib/checkin/local-records";
@@ -16,15 +16,18 @@ import { Notice } from "@/ui/Notice";
  * meantime comes back as such, and the notice says to scan the current code.
  */
 export function OutboxNotice({ entry, onSettled }: { entry: OutboxEntry; onSettled: () => void }) {
-  const { locale, t } = useLocale();
+  const { t, errors } = useLocale();
   const [phase, setPhase] = useState<CheckInPhase | null>(null);
-  const [controller] = useState(() => new AbortController());
+  const controllerRef = useRef<AbortController | null>(null);
   const waiter = useMemo(() => createWaiter(), []);
   const eventName = entry.eventName ?? t.common.eventFallback(entry.request.eventId);
 
-  useEffect(() => () => controller.abort(), [controller]);
+  useEffect(() => () => controllerRef.current?.abort(), []);
 
   async function send() {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
     const final = await runCheckIn(
       entry.request,
       {
@@ -55,7 +58,7 @@ export function OutboxNotice({ entry, onSettled }: { entry: OutboxEntry; onSettl
   }
 
   const busy = phase?.kind === "sending" || phase?.kind === "confirming";
-  const failure = phase?.kind === "failed" ? problemCopy(phase.problem, locale, t) : null;
+  const failure = phase?.kind === "failed" ? problemCopy(phase.problem, t, errors) : null;
   const finalFailure = phase?.kind === "failed" && !phase.problem.retryable;
 
   return (

@@ -46,6 +46,7 @@ const TEMPORARY_CODES = new Set([
   "internal_error",
   "database_not_configured",
   "queue_not_configured",
+  "redis_not_configured",
   "relayer_not_configured",
 ]);
 

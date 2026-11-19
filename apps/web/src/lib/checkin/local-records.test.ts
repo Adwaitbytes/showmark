@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Stamp } from "@/lib/api/types";
 import type { PassStorage } from "@/lib/wallet/pass";
-import { dictionaries, hiApiErrors, localizedError } from "./i18n";
+import { checkInStatusCopy, COMMON_ERRORS, RELAY_ERRORS } from "@/server/errors";
+import { en, localizedError } from "./i18n";
+import { hi, hiApiErrors, hiWalletErrors } from "./i18n-hi";
 import { mergeStamps, outboxEntries, recentEvents, rememberEvent, removeFromOutbox, saveToOutbox } from "./local-records";
 import type { CheckInRequest } from "./sign";
 
@@ -76,10 +78,16 @@ describe("mergeStamps", () => {
 });
 
 describe("i18n", () => {
-  it("has a Hindi string for every English one", () => {
+  it("has a Hindi string for every English one, and Hindi for every API error code", () => {
     const shape = (value: unknown): unknown =>
       typeof value === "object" && value !== null ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shape(v)])) : typeof value;
-    expect(shape(dictionaries.hi)).toEqual(shape(dictionaries.en));
+    expect(shape(hi)).toEqual(shape(en));
+    const codes = [
+      ...Array.from({ length: 10 }, (_, i) => checkInStatusCopy(i + 1).code),
+      ...Object.values(COMMON_ERRORS).map((c) => c.code),
+      ...Object.values(RELAY_ERRORS).map((c) => c.code),
+    ];
+    for (const code of codes) expect(hiApiErrors[code], code).toBeDefined();
   });
 
   it("follows the copy rules in both languages", () => {
@@ -89,8 +97,10 @@ describe("i18n", () => {
       else if (typeof value === "function") strings.push(String(value(2, 3)), String(value("x")));
       else if (typeof value === "object" && value !== null) Object.values(value).forEach(collect);
     };
-    collect(dictionaries);
+    collect(en);
+    collect(hi);
     collect(hiApiErrors);
+    collect(hiWalletErrors);
     const banned = /seamless|revolutioni[sz]e|unlock|empower|leverage|cutting-edge|next-generation|game-changing|effortless|supercharge|reimagine/i;
     for (const s of strings) {
       expect(s, s).not.toMatch(/[–—!]/);
@@ -100,8 +110,8 @@ describe("i18n", () => {
 
   it("uses the API's own words in English and Hindi copy when it knows the code", () => {
     const english = { message: "This event is full.", action: "Ask the organizer." };
-    expect(localizedError("en", "at_capacity", english)).toBe(english);
-    expect(localizedError("hi", "at_capacity", english)).toBe(hiApiErrors.at_capacity);
-    expect(localizedError("hi", "some_new_code", english)).toBe(english);
+    expect(localizedError("at_capacity", english, null)).toBe(english);
+    expect(localizedError("at_capacity", english, hiApiErrors)).toBe(hiApiErrors.at_capacity);
+    expect(localizedError("some_new_code", english, hiApiErrors)).toBe(english);
   });
 });

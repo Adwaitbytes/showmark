@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { Address, Hex } from "viem";
 import { getPassport, linkedWalletOf, postLinkWallet, waitForTx, type PassportData } from "@/lib/checkin/api-passport";
-import { hiWalletErrors, localizedError, type Copy } from "@/lib/checkin/i18n";
+import { localizedError, type Copy } from "@/lib/checkin/i18n";
 import { useLocale } from "@/lib/checkin/locale";
 import { linkDeadlineFromNow, linkWalletTypedData } from "@/lib/checkin/sign";
 import { connect, useWallet, walletClient } from "@/lib/wallet/use-wallet";
@@ -35,7 +35,7 @@ type PassportLoad = { status: "loading" } | { status: "ready"; passport: Passpor
 type WalletCheck = { wallet: Address; status: "free" | "taken" | "failed" };
 
 export function LinkWallet() {
-  const { locale, t } = useLocale();
+  const { t, errors } = useLocale();
   const hydrated = useHydrated();
   const wallet = useWallet();
   const checkboxId = useId();
@@ -141,7 +141,7 @@ export function LinkWallet() {
       walletSig = await client.signTypedData({ account: connected, ...typed });
     } catch (error) {
       const e = toWalletError(error);
-      setStep({ kind: "error", copy: localizedError(locale, e.code, e, hiWalletErrors) });
+      setStep({ kind: "error", copy: localizedError(e.code, e, errors?.wallet ?? null) });
       return;
     }
     setStep({ kind: "submitting" });
@@ -155,7 +155,7 @@ export function LinkWallet() {
     });
     if (!result.ok) {
       const english = result.failure.message && result.failure.action ? { message: result.failure.message, action: result.failure.action } : t.link.checkFailed;
-      setStep({ kind: "error", copy: localizedError(locale, result.failure.code, english) });
+      setStep({ kind: "error", copy: localizedError(result.failure.code, english, errors?.api ?? null) });
       return;
     }
     const { txHash } = result.data;
@@ -165,7 +165,7 @@ export function LinkWallet() {
     else setStep({ kind: "error", copy: outcome === "reverted" ? t.link.reverted : t.link.slow, txHash });
   }
 
-  const walletError = wallet.error ? localizedError(locale, wallet.error.code, wallet.error, hiWalletErrors) : null;
+  const walletError = wallet.error ? localizedError(wallet.error.code, wallet.error, errors?.wallet ?? null) : null;
   const busy = step.kind === "signing" || step.kind === "submitting" || step.kind === "confirming";
 
   return (
