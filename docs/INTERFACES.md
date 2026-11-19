@@ -321,3 +321,13 @@ verified attendees (distinct passes with presence), events with at least one che
 ## 7. Copy rules
 
 Plain words, sentence case, specific numbers. No em or en dashes, no emoji, no exclamation marks, no clipped fragments. Banned: seamless, revolutionize, unlock, empower, leverage, cutting-edge, next-generation, game-changing, effortless, supercharge, reimagine, "the future of", "Web3 made simple", "in today's world". Every error says what happened and what to do next.
+
+## 8. QR payloads (`apps/web/src/lib/qr/payload.ts`, mirrored by the SDK)
+
+- Door pass (mode 1): `{origin}/c/{eventId}.{issuedAt}.{doorSig base64url}`. Any phone camera opens it straight into the attendee app at `/c/[token]`. The door screen re-signs every 15 seconds.
+- Attendee code (mode 2): `SM2.{eventId}.{attendee}.{attendeeSig base64url}`, shown in the attendee app and scanned by the door app.
+- Signatures are 65 bytes. Decoders return null on any malformed input and never throw.
+
+## 9. Server query functions
+
+Server components call `apps/web/src/server/queries.ts` directly (owned by B) instead of going through HTTP. Each function returns the matching type in `src/lib/api/types.ts`: `getTraction()`, `listEvents(filter)`, `getEvent(id)`, `getPassport(addressOrName)`, `listCampaigns(filter)`, `getCampaign(id)`. Client components use the `/api/*` routes.
