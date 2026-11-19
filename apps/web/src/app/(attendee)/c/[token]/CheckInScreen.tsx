@@ -244,7 +244,7 @@ export function CheckInScreen() {
                 </Button>
               ) : null}
               {done ? (
-                <Button href="/pass" variant="secondary" size="lg" block className="max-w-[20rem]">
+                <Button href="/pass" prefetch={false} variant="secondary" size="lg" block className="max-w-[20rem]">
                   {t.checkIn.openPassport}
                 </Button>
               ) : null}
@@ -265,7 +265,7 @@ export function CheckInScreen() {
           title={t.checkIn.linkPromptTitle}
           action={
             <div className="flex flex-wrap gap-3">
-              <Button href="/pass/link" variant="secondary">
+              <Button href="/pass/link" prefetch={false} variant="secondary">
                 {t.checkIn.linkNow}
               </Button>
               <Button
@@ -301,7 +301,7 @@ function FailedState({ phase, eventStartsAt, onRetry }: { phase: ScreenPhase; ev
         title={copy.message}
         action={
           phase.kind !== "storage" ? (
-            <Button href="/scan" variant="primary">
+            <Button href="/scan" prefetch={false} variant="primary">
               {t.checkIn.scanAgain}
             </Button>
           ) : null
@@ -329,11 +329,11 @@ function FailedState({ phase, eventStartsAt, onRetry }: { phase: ScreenPhase; ev
               {t.common.retry}
             </Button>
           ) : problem.kind === "unconfirmed" || problem.kind === "capacity" || problem.kind === "window" ? (
-            <Button href="/pass" variant="secondary">
+            <Button href="/pass" prefetch={false} variant="secondary">
               {t.checkIn.openPassport}
             </Button>
           ) : (
-            <Button href="/scan" variant="primary">
+            <Button href="/scan" prefetch={false} variant="primary">
               {t.checkIn.scanAgain}
             </Button>
           )}
