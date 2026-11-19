@@ -3164,7 +3164,7 @@ export const bondAbi = [
             "internalType": "bool"
           },
           {
-            "name": "locked",
+            "name": "claim",
             "type": "uint256",
             "internalType": "uint256"
           },
@@ -3184,6 +3184,25 @@ export const bondAbi = [
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimedOf",
+    "inputs": [
+      {
+        "name": "organizer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -3482,6 +3501,37 @@ export const bondAbi = [
   },
   {
     "type": "event",
+    "name": "ClaimFiled",
+    "inputs": [
+      {
+        "name": "challengeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "organizer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "claim",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "deposit",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DepositAwarded",
     "inputs": [
       {
@@ -3595,37 +3645,6 @@ export const bondAbi = [
   },
   {
     "type": "event",
-    "name": "StakeLocked",
-    "inputs": [
-      {
-        "name": "challengeId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "organizer",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "locked",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "deposit",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "UnbondRequested",
     "inputs": [
       {
@@ -3729,6 +3748,11 @@ export const bondAbi = [
   },
   {
     "type": "error",
+    "name": "NoBondClaim",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotCampaignSponsor",
     "inputs": []
   },
@@ -3740,11 +3764,6 @@ export const bondAbi = [
   {
     "type": "error",
     "name": "NothingToClaim",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "OrganizerNotPaid",
     "inputs": []
   },
   {
@@ -3786,7 +3805,7 @@ export const bondAbi = [
   },
   {
     "type": "error",
-    "name": "SlashExceedsLock",
+    "name": "SlashExceedsClaim",
     "inputs": []
   },
   {
