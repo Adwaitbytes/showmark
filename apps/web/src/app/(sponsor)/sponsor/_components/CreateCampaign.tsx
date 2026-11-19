@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { addresses } from "@/lib/chain/addresses";
+import { addresses, isDeployed } from "@/lib/chain/addresses";
 import { activeChain, activeChainId } from "@/lib/chain/chains";
 import {
   buildMetadata,
@@ -90,7 +90,19 @@ interface Preview {
   covered: bigint | null;
 }
 
-function Receipt({ values, preview, symbol, errors }: { values: CampaignFormValues; preview: Preview; symbol: "QIE" | "QUSDC"; errors: FormErrors }) {
+function Receipt({
+  values,
+  preview,
+  symbol,
+  errors,
+  feeUnreadable,
+}: {
+  values: CampaignFormValues;
+  preview: Preview;
+  symbol: "QIE" | "QUSDC";
+  errors: FormErrors;
+  feeUnreadable: boolean;
+}) {
   const deposit = parseAmount(values.deposit, TOKEN_DECIMALS[symbol]);
   const split = preview.gross !== null && preview.feeBps !== null ? splitPayout(preview.gross, preview.feeBps, values.attendeeShareBps) : null;
   const t = (v: bigint) => `${formatTokenAmount(v.toString(), symbol, symbol === "QIE" ? 6 : 6)} ${symbol}`;
@@ -140,7 +152,11 @@ function Receipt({ values, preview, symbol, errors }: { values: CampaignFormValu
             </>
           ) : (
             <p className="py-2 text-sm text-ink-soft">
-              {preview.feeBps === null ? "Reading the protocol fee from the vault." : "Fill in the amount per person to see the split."}
+              {preview.feeBps === null
+                ? feeUnreadable
+                  ? "The protocol fee could not be read from the vault, so the split cannot be shown yet."
+                  : "Reading the protocol fee from the vault."
+                : "Fill in the amount per person to see the split."}
             </p>
           )}
         </Ledger>
@@ -477,7 +493,13 @@ function Form({ seat }: { seat: SponsorSeat }) {
                       : "Each step opens QIE Wallet once. Nothing moves until you confirm there."}
                   </p>
                 </div>
-                <FundingSteps draft={draft} seat={seat} onCreated={(id, hash) => setCreated({ id, hash })} />
+                {isDeployed() ? (
+                  <FundingSteps draft={draft} seat={seat} onCreated={(id, hash) => setCreated({ id, hash })} />
+                ) : (
+                  <Notice tone="warning" title={`Showmark is not deployed on ${activeChain.name} yet`}>
+                    The form checks out, but there is no vault to deposit into on this network. Nothing was sent.
+                  </Notice>
+                )}
               </SheetSection>
             </Sheet>
           </div>
@@ -485,7 +507,7 @@ function Form({ seat }: { seat: SponsorSeat }) {
       </form>
 
       <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="Campaign summary">
-        <Receipt values={values} preview={preview} symbol={symbol} errors={errors} />
+        <Receipt values={values} preview={preview} symbol={symbol} errors={errors} feeUnreadable={vault.status === "error"} />
       </aside>
     </div>
   );
