@@ -181,7 +181,7 @@ function Console({ account, name, onSignOut }: { account: Address; name: string 
         </Button>
       </header>
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <section aria-labelledby="events-title" className="flex flex-col gap-4">
           <h2 id="events-title" className="sr-only">
             Events

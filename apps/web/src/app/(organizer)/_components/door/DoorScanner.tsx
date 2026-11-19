@@ -251,7 +251,7 @@ export function DoorScanner() {
   return (
     <DoorFrame bar={bar}>
       <DoorWarnings setup={setup} wake={wake} />
-      <div className="mx-auto grid w-full max-w-6xl flex-1 gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10 lg:py-8">
+      <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10 lg:py-8">
         <section aria-labelledby="scan-title" className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -260,7 +260,7 @@ export function DoorScanner() {
               </h1>
               <p className="text-base text-ink-soft">Scan each attendee’s passport code. Their check-in is signed by this device and tied to that person.</p>
             </div>
-            <p className="font-mono text-base text-ink-soft" data-testid="scanner-count">
+            <p className="text-base text-ink-soft" data-testid="scanner-count">
               <span className="font-display text-3xl text-ink">{formatCount(setup.event.checkedIn)}</span> checked in
             </p>
           </div>

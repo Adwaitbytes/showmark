@@ -24,7 +24,7 @@ export function SignInCard({ state }: { state: SessionState }) {
   const label = state.walletName ? "Sign in with QIE ID" : "Sign in with QIE Wallet";
   return (
     <Container className="py-12 sm:py-20">
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-center lg:gap-20">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-center lg:gap-20">
         <div className="flex flex-col gap-6">
           <p className="text-sm font-medium tracking-[0.12em] text-ink-soft uppercase">Organizer console</p>
           <h1 className="font-display text-4xl text-balance text-ink sm:text-5xl">Run check-in at your event</h1>

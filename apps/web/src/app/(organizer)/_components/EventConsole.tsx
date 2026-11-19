@@ -479,7 +479,7 @@ function ConsoleBody({ eventId, account }: { eventId: string; account: Address }
         </Notice>
       ) : null}
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
         <div className="flex flex-col gap-10">
           <Attendees detail={event} ledger={ledger.data} ledgerLoading={ledger.loading} ledgerFailed={Boolean(ledger.error)} onRetryLedger={ledger.refresh} />
           <Payouts detail={event} ledger={ledger.data} ledgerLoading={ledger.loading} />

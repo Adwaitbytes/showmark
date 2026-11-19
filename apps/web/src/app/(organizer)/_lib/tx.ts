@@ -177,7 +177,7 @@ export function describeTxError(error: unknown, account: Address | null): TxErro
   return {
     code: "tx_failed",
     message: "The transaction could not be sent.",
-    action: "Check that QIE Wallet is unlocked and on the right network, then try again.",
+    action: "Open QIE Wallet, sign in to it, check it is on the right network, then try again.",
   };
 }
 

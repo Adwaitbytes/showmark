@@ -187,7 +187,7 @@ function Form({ account }: { account: Address }) {
         </p>
       </div>
 
-      <form ref={formRef} onSubmit={submit} noValidate className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+      <form ref={formRef} onSubmit={submit} noValidate className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
         <div className="flex flex-col gap-8">
           <Sheet as="section" aria-labelledby="about-title">
             <SheetSection className="flex flex-col gap-5">

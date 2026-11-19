@@ -105,7 +105,7 @@ export function DoorScreen() {
           </p>
         </div>
 
-        <div className="mx-auto w-full max-w-[min(88vw,52vh)] landscape:col-start-1 landscape:row-span-2 landscape:row-start-1 landscape:max-w-[min(48vw,80vh)] landscape:self-center">
+        <div className="mx-auto w-full max-w-[min(88vw,52vh)] landscape:col-start-1 landscape:row-span-2 landscape:row-start-1 landscape:w-[min(46vw,68vh)] landscape:max-w-none landscape:self-center">
           {checkIn === "open" ? (
             <RotatingCode doorKey={doorKey} eventId={eventId} registry={addresses.registry} clock={setup.clock.clock} />
           ) : (
