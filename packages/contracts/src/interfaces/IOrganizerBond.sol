@@ -11,7 +11,7 @@ interface IOrganizerBond {
         address organizer;
         uint256 campaignId;
         bool resolved;
-        uint256 locked; // organizer stake held back from unbonding while open; the most resolve can slash
+        uint256 claim; // exposure the bond backed for the campaign when filed; resolve slashes at most min(claim, stake)
         uint256 deposit; // challenger's deposit, returned on a slash, forfeited to the organizer on dismissal
     }
 
@@ -53,12 +53,12 @@ interface IOrganizerBond {
     /// @param recipient Receiver of the slashed amount.
     event Resolved(uint256 indexed challengeId, address indexed organizer, uint256 slashed, address recipient);
 
-    /// @notice Emitted with every challenge: the stake it locks and the deposit it posted.
+    /// @notice Emitted with every challenge: the claim it files on the organizer's stake and the deposit it posted.
     /// @param challengeId The challenge.
     /// @param organizer The challenged organizer.
-    /// @param locked Stake held back from unbonding while the challenge is open.
+    /// @param claim The campaign's bonded exposure for the organizer when the challenge was filed.
     /// @param deposit Deposit paid by the challenger.
-    event StakeLocked(uint256 indexed challengeId, address indexed organizer, uint256 locked, uint256 deposit);
+    event ClaimFiled(uint256 indexed challengeId, address indexed organizer, uint256 claim, uint256 deposit);
 
     /// @notice Emitted at resolution: who the challenge deposit is owed to.
     /// @param challengeId The challenge.
@@ -95,14 +95,14 @@ interface IOrganizerBond {
     error ReasonTooLong();
     /// @notice Unknown or already resolved challenge.
     error ChallengeNotOpen();
-    /// @notice Slash amount exceeds the stake the challenge locked.
-    error SlashExceedsLock();
+    /// @notice Slash amount exceeds min(the challenge's claim, the organizer's current stake).
+    error SlashExceedsClaim();
     /// @notice msg.value is not exactly the challenge deposit.
     error BadChallengeDeposit();
     /// @notice No deposit is owed to the caller.
     error NothingToClaim();
-    /// @notice The campaign has never paid for a presence at this organizer's events.
-    error OrganizerNotPaid();
+    /// @notice The campaign is not open to bonded organizers, or the bond backed nothing for this organizer in it.
+    error NoBondClaim();
     /// @notice This campaign already has an open challenge against this organizer.
     error DuplicateChallenge();
 
@@ -113,13 +113,14 @@ interface IOrganizerBond {
     /// @param amount Amount to unbond.
     function requestUnbond(uint256 amount) external;
 
-    /// @notice Pays the pending unbond to the caller after the delay, except the part open challenges lock.
+    /// @notice Pays the pending unbond to the caller after the delay, except what open claims need:
+    /// min(stake, sum of open claims), covered by the bonded stake first.
     function completeUnbond() external;
 
     /// @notice Opens a challenge against an organizer. Sponsor of `campaignId` only, with exactly `challengeDeposit`
-    /// in msg.value; the campaign must have paid for at least one presence at the organizer's events, and at most one
-    /// challenge per (campaign, organizer) may be open. Locks min(what the campaign paid, unlocked stake); a token
-    /// campaign's payout is not comparable with a QIE stake, so it locks the whole unlocked stake.
+    /// in msg.value. The campaign must be open to bonded organizers and the bond must have backed payouts for the
+    /// organizer in it (`vault.exposureOf > 0`); that exposure becomes the challenge's claim. At most one challenge per
+    /// (campaign, organizer) may be open.
     /// @param organizer The organizer challenged.
     /// @param campaignId The caller's campaign the challenge concerns.
     /// @param reason Free-form reason, at most 2,048 bytes.
@@ -131,8 +132,8 @@ interface IOrganizerBond {
 
     /// @notice Closes a challenge and slashes the organizer. Arbitrator (owner) only.
     /// @param challengeId The challenge.
-    /// @param slashAmount Amount to slash from bonded, then pending unbond, at most the challenge's lock; 0 dismisses
-    /// the challenge and forfeits the deposit to the organizer.
+    /// @param slashAmount Amount to slash from bonded, then pending unbond, at most min(claim, current stake); 0
+    /// dismisses the challenge and forfeits the deposit to the organizer. Other open claims keep their hold.
     /// @param recipient Receiver of the slashed amount.
     function resolve(uint256 challengeId, uint256 slashAmount, address recipient) external;
 

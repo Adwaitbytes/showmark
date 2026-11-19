@@ -24,8 +24,7 @@ contract OrganizerBondTest is Test {
         vm.warp(1_790_000_000);
         bondC = new OrganizerBond(arbitrator, DEPOSIT);
         vault = new MockSponsorVault();
-        vault.setSponsor(CAMPAIGN, sponsor);
-        vault.setPaid(CAMPAIGN, organizer, 1 ether);
+        _openCampaign(CAMPAIGN, sponsor, 1 ether);
         vm.prank(arbitrator);
         bondC.setVault(address(vault));
         vm.deal(organizer, 100 ether);
@@ -185,29 +184,38 @@ contract OrganizerBondTest is Test {
         vm.stopPrank();
     }
 
-    function test_challenge_requiresTheCampaignToHavePaidTheOrganizer() public {
+    function test_challenge_requiresABondClaim() public {
+        // no exposure for this organizer in the campaign
         vm.prank(sponsor);
-        vm.expectRevert(IOrganizerBond.OrganizerNotPaid.selector);
+        vm.expectRevert(IOrganizerBond.NoBondClaim.selector);
         bondC.challenge{value: DEPOSIT}(makeAddr("unrelated organizer"), CAMPAIGN, "never worked together");
+
+        // a campaign that is not open to bonded organizers has no claim on any bond (re-review N2-02)
+        vault.setSponsor(CAMPAIGN + 1, sponsor);
+        vault.setExposure(CAMPAIGN + 1, organizer, 1 ether);
+        vm.prank(sponsor);
+        vm.expectRevert(IOrganizerBond.NoBondClaim.selector);
+        bondC.challenge{value: DEPOSIT}(organizer, CAMPAIGN + 1, "approved event only");
     }
 
-    function test_challenge_recordsLocksAndEmits() public {
+    function test_challenge_recordsTheClaimAndEmits() public {
         _bond(5 ether);
         vm.expectEmit(address(bondC));
         emit IOrganizerBond.Challenged(1, organizer, CAMPAIGN, sponsor, "fake headcount");
         vm.expectEmit(address(bondC));
-        emit IOrganizerBond.StakeLocked(1, organizer, 1 ether, DEPOSIT);
+        emit IOrganizerBond.ClaimFiled(1, organizer, 1 ether, DEPOSIT);
         uint256 id = _challenge(CAMPAIGN);
         assertEq(id, 1);
         assertEq(bondC.openChallenges(organizer), 1);
-        assertEq(bondC.lockedOf(organizer), 1 ether, "locks what the campaign paid, not the whole stake");
+        assertEq(bondC.claimedOf(organizer), 1 ether, "the claim is what the bond backed for the campaign");
+        assertEq(bondC.lockedOf(organizer), 1 ether);
         assertTrue(bondC.hasOpenChallenge(CAMPAIGN, organizer));
 
         IOrganizerBond.Challenge memory c = bondC.challengeOf(id);
         assertEq(c.sponsor, sponsor);
         assertEq(c.organizer, organizer);
         assertEq(c.campaignId, CAMPAIGN);
-        assertEq(c.locked, 1 ether);
+        assertEq(c.claim, 1 ether);
         assertEq(c.deposit, DEPOSIT);
         assertFalse(c.resolved);
         assertEq(address(bondC).balance, 5 ether + DEPOSIT);
@@ -217,28 +225,66 @@ contract OrganizerBondTest is Test {
         vm.expectRevert(IOrganizerBond.DuplicateChallenge.selector);
         bondC.challenge{value: DEPOSIT}(organizer, CAMPAIGN, "again");
 
-        // another campaign that also paid this organizer may challenge too
-        vault.setSponsor(CAMPAIGN + 1, sponsor);
-        vault.setPaid(CAMPAIGN + 1, organizer, 10 ether);
+        // claims are not capped by the stake when filed; the lock is
+        _openCampaign(CAMPAIGN + 1, sponsor, 10 ether);
         assertEq(_challenge(CAMPAIGN + 1), 2);
-        assertEq(bondC.lockedOf(organizer), 5 ether, "locks never exceed the stake");
-        assertEq(bondC.challengeOf(2).locked, 4 ether);
+        assertEq(bondC.claimedOf(organizer), 11 ether);
+        assertEq(bondC.lockedOf(organizer), 5 ether, "locked = min(stake, open claims)");
+        assertEq(bondC.challengeOf(2).claim, 10 ether);
         assertEq(bondC.nextChallengeId(), 3);
 
         // once resolved, the campaign may challenge again
         vm.prank(arbitrator);
         bondC.resolve(id, 0, address(0));
         assertFalse(bondC.hasOpenChallenge(CAMPAIGN, organizer));
+        assertEq(bondC.claimedOf(organizer), 10 ether);
         assertEq(_challenge(CAMPAIGN), 3);
     }
 
-    function test_challenge_onErc20CampaignLocksTheAvailableStake() public {
+    /// Re-review N2-01: dismissing one challenge never frees stake that another open claim still needs, whatever
+    /// order the challenges were filed or resolved in.
+    function test_dismissalKeepsStakeForOtherOpenClaims() public {
+        _bond(10 ether);
+        vm.prank(organizer);
+        bondC.requestUnbond(10 ether);
+        _openCampaign(CAMPAIGN, makeAddr("sock"), 10 ether);
+        uint256 sockChallenge = _challenge(CAMPAIGN); // filed first, covers the whole stake
+        _openCampaign(CAMPAIGN + 1, sponsor, 6 ether);
+        uint256 honest = _challenge(CAMPAIGN + 1);
+        assertEq(bondC.lockedOf(organizer), 10 ether);
+
+        vm.prank(arbitrator);
+        bondC.resolve(sockChallenge, 0, address(0));
+        assertEq(bondC.lockedOf(organizer), 6 ether, "the honest claim still holds its share");
+
+        vm.warp(block.timestamp + 7 days);
+        uint256 before = organizer.balance;
+        vm.prank(organizer);
+        bondC.completeUnbond();
+        assertEq(organizer.balance - before, 4 ether, "only stake above the open claims leaves");
+
+        vm.prank(arbitrator);
+        bondC.resolve(honest, 6 ether, victim);
+        assertEq(victim.balance, 6 ether, "the honest claim is slashed in full");
+        assertEq(address(bondC).balance, 2 * DEPOSIT);
+    }
+
+    function test_resolve_slashIsCappedByTheCurrentStake() public {
         _bond(5 ether);
-        vault.setSponsor(CAMPAIGN + 1, sponsor);
-        vault.setToken(CAMPAIGN + 1, makeAddr("qusdc"));
-        vault.setPaid(CAMPAIGN + 1, organizer, 3e6); // 3 QUSDC, not comparable with a QIE stake
-        _challenge(CAMPAIGN + 1);
-        assertEq(bondC.lockedOf(organizer), 5 ether);
+        _openCampaign(CAMPAIGN, sponsor, 4 ether);
+        uint256 a = _challenge(CAMPAIGN);
+        _openCampaign(CAMPAIGN + 1, sponsor, 4 ether);
+        uint256 b = _challenge(CAMPAIGN + 1);
+
+        vm.startPrank(arbitrator);
+        bondC.resolve(a, 4 ether, victim); // 1 QIE stake left
+        vm.expectRevert(IOrganizerBond.SlashExceedsClaim.selector);
+        bondC.resolve(b, 1 ether + 1, victim);
+        bondC.resolve(b, 1 ether, victim);
+        vm.stopPrank();
+        assertEq(victim.balance, 5 ether);
+        assertEq(bondC.claimedOf(organizer), 0);
+        assertEq(bondC.lockedOf(organizer), 0);
     }
 
     function test_challenge_guards() public {
@@ -358,7 +404,7 @@ contract OrganizerBondTest is Test {
         vm.startPrank(arbitrator);
         vm.expectRevert(IOrganizerBond.ChallengeNotOpen.selector);
         bondC.resolve(99, 0, victim);
-        vm.expectRevert(IOrganizerBond.SlashExceedsLock.selector);
+        vm.expectRevert(IOrganizerBond.SlashExceedsClaim.selector);
         bondC.resolve(id, 1 ether + 1, victim);
         vm.expectRevert(IOrganizerBond.ZeroAddress.selector);
         bondC.resolve(id, 1, address(0));
@@ -368,7 +414,7 @@ contract OrganizerBondTest is Test {
         vm.stopPrank();
     }
 
-    /// Re-review N-02: spam now locks only what each spam campaign paid and costs a deposit per challenge, which
+    /// Re-review N-02: spam now locks only what the bond backed for each spam campaign and costs a deposit per challenge, which
     /// the organizer collects when the Safe dismisses it.
     function test_challengeSpamLocksDustAndPaysTheOrganizer() public {
         _bond(1 ether);
@@ -379,12 +425,12 @@ contract OrganizerBondTest is Test {
         uint256[] memory ids = new uint256[](10);
         for (uint256 i; i < 10; ++i) {
             uint256 cid = 100 + i;
-            vault.setSponsor(cid, griefer);
-            vault.setPaid(cid, organizer, 1); // one wei per spam campaign
+            _openCampaign(cid, griefer, 1); // one wei of bonded exposure per campaign
             vm.prank(griefer);
             ids[i] = bondC.challenge{value: DEPOSIT}(organizer, cid, "");
         }
         assertEq(bondC.lockedOf(organizer), 10);
+        assertEq(bondC.claimedOf(organizer), 10);
 
         vm.warp(block.timestamp + 7 days);
         uint256 before = organizer.balance;
@@ -411,7 +457,7 @@ contract OrganizerBondTest is Test {
         unbondAmt = uint96(bound(unbondAmt, 0, bondAmt));
         paid = uint96(bound(paid, 1, type(uint96).max));
         vm.deal(organizer, bondAmt);
-        vault.setPaid(CAMPAIGN, organizer, paid);
+        vault.setExposure(CAMPAIGN, organizer, paid);
 
         _bond(bondAmt);
         if (unbondAmt > 0) {
@@ -420,6 +466,7 @@ contract OrganizerBondTest is Test {
         }
         uint256 id = _challenge(CAMPAIGN);
         uint256 locked = bondC.lockedOf(organizer);
+        assertEq(bondC.claimedOf(organizer), paid);
         assertEq(locked, paid < bondAmt ? paid : bondAmt);
 
         vm.warp(block.timestamp + 7 days);
@@ -453,7 +500,16 @@ contract OrganizerBondTest is Test {
             address(bondC).balance,
             bondC.bondOf(organizer) + pending + openDeposits + bondC.depositOwed(organizer) + bondC.depositOwed(sponsor)
         );
-        assertLe(bondC.lockedOf(organizer), bondC.bondOf(organizer) + pending);
+        uint256 stake = bondC.bondOf(organizer) + pending;
+        uint256 claimed = bondC.claimedOf(organizer);
+        assertEq(bondC.lockedOf(organizer), claimed < stake ? claimed : stake, "locked == min(stake, open claims)");
+    }
+
+    function _openCampaign(uint256 campaignId, address campaignSponsor, uint256 exposure) internal {
+        vault.setSponsor(campaignId, campaignSponsor);
+        vault.setOpen(campaignId, true);
+        vault.setExposure(campaignId, organizer, exposure);
+        vm.deal(campaignSponsor, campaignSponsor.balance + 10 * DEPOSIT);
     }
 
     function _bond(uint256 amount) internal {

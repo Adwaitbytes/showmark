@@ -171,12 +171,13 @@ contract AuditPoCTest is ProtocolFixture {
         bond.requestUnbond(1 ether);
         vm.prank(sponsor);
         uint256 cid = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, a, "sybil event");
-        // a's own payouts are what the challenge locks; b's sponsor would challenge for b's share
-        uint256 lockedForA = bond.challengeOf(cid).locked;
-        assertEq(lockedForA, vault.paidForOrganizer(a, rogue));
+        // each challenge claims what the bond backed for its campaign
+        uint256 lockedForA = bond.challengeOf(cid).claim;
+        assertEq(lockedForA, vault.exposureOf(a, rogue));
         vm.prank(sponsor);
         uint256 cid2 = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, b, "sybil event");
-        assertEq(lockedForA + bond.challengeOf(cid2).locked, drained, "the whole drained amount is locked");
+        assertEq(lockedForA + bond.challengeOf(cid2).claim, drained, "the whole drained amount is claimed");
+        assertEq(bond.lockedOf(rogue), drained);
         vm.startPrank(owner);
         bond.resolve(cid, lockedForA, sponsor);
         bond.resolve(cid2, drained - lockedForA, sponsor);
@@ -236,24 +237,29 @@ contract AuditPoCTest is ProtocolFixture {
 
     function test_L03_challengeSpamIsRefused() public {
         vm.deal(organizer, 1 ether);
-        vm.startPrank(organizer);
+        vm.prank(organizer);
         bond.bond{value: 1 ether}();
-        bond.requestUnbond(1 ether);
-        vm.stopPrank();
 
-        // a zero-deposit campaign that never paid this organizer cannot challenge it
+        // a zero-deposit campaign the bond never backed cannot challenge it
         address griefer = makeAddr("griefer");
         vm.startPrank(griefer);
         uint256 cid = vault.createCampaign(_params(NATIVE), 0);
         vm.deal(griefer, CHALLENGE_DEPOSIT);
-        vm.expectRevert(IOrganizerBond.OrganizerNotPaid.selector);
+        vm.expectRevert(IOrganizerBond.NoBondClaim.selector);
         bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, cid, "");
         vm.stopPrank();
 
-        // a sponsor that did pay may open exactly one
-        uint256 paidCampaign = _createApproved(_params(NATIVE), 1 ether);
+        // a sponsor whose open campaign the bond backed may open exactly one
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1;
+        p.amountPerPresence = 0.5 ether;
+        uint256 paidCampaign = _create(p, 1 ether);
+        _optIn(paidCampaign);
         _checkInNow(eventId, attendeePk);
         vault.settle(paidCampaign, eventId, attendee);
+        vm.prank(organizer);
+        bond.requestUnbond(1 ether);
         vm.startPrank(sponsor);
         uint256 challengeId = bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, paidCampaign, "first");
         vm.expectRevert(IOrganizerBond.DuplicateChallenge.selector);

@@ -6,8 +6,9 @@ import {ICampaignVault} from "../../src/interfaces/ICampaignVault.sol";
 import {IOrganizerBond} from "../../src/interfaces/IOrganizerBond.sol";
 import {ProtocolFixture} from "../utils/ProtocolFixture.sol";
 
-/// @notice Second re-review of the N-01 and N-02 fixes (docs/AUDIT.md, "Second re-review"). N2-* tests pass while
-/// the issue exists; T-* tests pin down attacks on the new code that fail.
+/// @notice Second re-review of the N-01 and N-02 fixes (docs/AUDIT.md, "Second re-review"). The N2-* tests began as
+/// proofs of concept and now assert each attack fails under claim-based locks; T-* tests pin down attacks on the new
+/// code that fail.
 contract SecondReReviewPoCTest is ProtocolFixture {
     address internal rogue = makeAddr("rogue");
     address internal sock = makeAddr("sock");
@@ -37,27 +38,28 @@ contract SecondReReviewPoCTest is ProtocolFixture {
         id = _create(p, deposit);
     }
 
-    // ------------------------------------------------------------------ N2-01
+    // ------------------------------------------------------------------ N2-01 (fixed: claims, not first-come locks)
 
-    /// Locks are taken first come and never recomputed. A rogue organizer drains an honest open campaign, then has a
-    /// sock-puppet sponsor (its own approved-event campaign, paying its own passes, so the money comes back) open the
-    /// first challenge, which locks the whole stake. The honest sponsor's challenge then locks 0. When the Safe
-    /// dismisses the sock challenge (the deposit goes back to the rogue as organizer), the stake is free, the rogue
-    /// unbonds all of it, and the honest challenge can slash nothing.
-    function test_N2_01_sockChallengeShieldsStakeFromHonestChallenge() public {
+    function _drain(uint256 campaignId, uint256 n, uint256 seed) internal {
+        ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](n);
+        for (uint256 i; i < n; ++i) {
+            items[i] = ICampaignVault.SettleItem(campaignId, rogueEvent, _presence(seed + i));
+        }
+        vault.settleBatch(items);
+    }
+
+    /// The sock-puppet's approved-event campaign never drew on the bond, so it has no claim and cannot challenge.
+    /// The honest sponsor's claim covers what the bond backed, and the rogue cannot unbond it.
+    function test_N2_01_sockChallengeWithoutBondClaimIsRefused() public {
         uint256 honest = _openCampaign(20 ether);
         vm.prank(rogue);
         vault.optInOpenCampaign(honest);
-        ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](10);
-        for (uint256 i; i < 10; ++i) {
-            items[i] = ICampaignVault.SettleItem(honest, rogueEvent, _presence(0x5B11 + i));
-        }
-        vault.settleBatch(items);
+        _drain(honest, 10, 0x5B11);
         assertEq(vault.bondedExposure(rogue), 10 ether, "drained up to the bond");
         vm.prank(rogue);
         bond.requestUnbond(10 ether);
 
-        // sock-puppet campaign: approves the rogue's event and pays the rogue's own pass
+        address roguePass = _presence(0x5C00);
         vm.deal(sock, 20 ether);
         vm.startPrank(sock);
         ICampaignVault.CampaignParams memory p = _params(NATIVE);
@@ -66,36 +68,70 @@ contract SecondReReviewPoCTest is ProtocolFixture {
         uint256[] memory ids = new uint256[](1);
         ids[0] = rogueEvent;
         vault.approveEvents(sockCampaign, ids);
-        vault.settle(sockCampaign, rogueEvent, items[0].attendee);
-        uint256 sockChallenge = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, sockCampaign, "");
+        vault.settle(sockCampaign, rogueEvent, roguePass);
+        vm.expectRevert(IOrganizerBond.NoBondClaim.selector);
+        bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, sockCampaign, "");
         vm.stopPrank();
-        assertEq(bond.lockedOf(rogue), 10 ether, "sock locks the whole stake");
 
         vm.prank(sponsor);
         uint256 honestChallenge = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, honest, "sybil event");
-        assertEq(bond.challengeOf(honestChallenge).locked, 0, "honest challenge locks nothing");
+        assertEq(bond.challengeOf(honestChallenge).claim, 10 ether);
+        assertEq(bond.lockedOf(rogue), 10 ether);
 
-        // the Safe dismisses the obviously frivolous sock challenge
+        vm.warp(block.timestamp + 7 days);
+        vm.prank(rogue);
+        vm.expectRevert(IOrganizerBond.ChallengeOpen.selector);
+        bond.completeUnbond();
+
+        vm.prank(owner);
+        bond.resolve(honestChallenge, 10 ether, sponsor);
+        assertEq(bond.depositOwed(sponsor), CHALLENGE_DEPOSIT);
+    }
+
+    /// Even a sock campaign the rogue opted into, filed first and dismissed first, frees only its own claim: the
+    /// honest claim keeps its share of the stake and is slashed in full.
+    function test_N2_01_dismissingAFirstSockClaimNeverFreesTheHonestShare() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1 ether;
+        vm.deal(sock, 20 ether);
+        vm.prank(sock);
+        uint256 sockCampaign = vault.createCampaign{value: 10 ether}(p, 10 ether);
+        uint256 honest = _openCampaign(20 ether);
+        vm.startPrank(rogue);
+        vault.optInOpenCampaign(sockCampaign);
+        vault.optInOpenCampaign(honest);
+        vm.stopPrank();
+        _drain(sockCampaign, 4, 0x5D00);
+        _drain(honest, 6, 0x5E00);
+        vm.prank(rogue);
+        bond.requestUnbond(10 ether);
+
+        vm.prank(sock);
+        uint256 sockChallenge = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, sockCampaign, "");
+        vm.prank(sponsor);
+        uint256 honestChallenge = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, honest, "sybil event");
+        assertEq(bond.claimedOf(rogue), 10 ether);
+
         vm.prank(owner);
         bond.resolve(sockChallenge, 0, address(0));
-        assertEq(bond.depositOwed(rogue), CHALLENGE_DEPOSIT, "deposit forfeited to the rogue");
+        assertEq(bond.lockedOf(rogue), 6 ether, "the honest claim still holds its share");
 
         vm.warp(block.timestamp + 7 days);
         uint256 before = rogue.balance;
         vm.prank(rogue);
         bond.completeUnbond();
-        assertEq(rogue.balance - before, 10 ether, "whole stake leaves while the honest challenge is open");
+        assertEq(rogue.balance - before, 4 ether, "only stake beyond the open claims leaves");
 
+        uint256 sponsorBefore = sponsor.balance;
         vm.prank(owner);
-        vm.expectRevert(IOrganizerBond.SlashExceedsLock.selector);
-        bond.resolve(honestChallenge, 1, sponsor);
+        bond.resolve(honestChallenge, 6 ether, sponsor);
+        assertEq(sponsor.balance - sponsorBefore, 6 ether, "honest claim slashed in full");
     }
 
-    // ------------------------------------------------------------------ N2-02
+    // ------------------------------------------------------------------ N2-02 (fixed: token campaigns have no claim)
 
-    /// A token campaign locks the organizer's whole unlocked stake for one deposit. A 1-unit QUSDC campaign that
-    /// settled a stranger's presence freezes any bond, whatever its size, until the Safe acts.
-    function test_N2_02_oneUnitTokenCampaignFreezesWholeStake() public {
+    function test_N2_02_tokenCampaignHasNoBondClaim() public {
         address stranger = _presence(0x5A5A);
         vm.prank(rogue);
         bond.requestUnbond(10 ether);
@@ -112,14 +148,16 @@ contract SecondReReviewPoCTest is ProtocolFixture {
         ids[0] = rogueEvent;
         vault.approveEvents(cid, ids);
         vault.settle(cid, rogueEvent, stranger);
+        vm.expectRevert(IOrganizerBond.NoBondClaim.selector);
         bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, cid, "");
         vm.stopPrank();
 
-        assertEq(bond.lockedOf(rogue), 10 ether);
+        assertEq(bond.lockedOf(rogue), 0);
         vm.warp(block.timestamp + 7 days);
+        uint256 before = rogue.balance;
         vm.prank(rogue);
-        vm.expectRevert(IOrganizerBond.ChallengeOpen.selector);
         bond.completeUnbond();
+        assertEq(rogue.balance - before, 10 ether, "the whole stake leaves");
     }
 
     // ------------------------------------------------------------------ T-*: attempted attacks that fail
@@ -173,20 +211,21 @@ contract SecondReReviewPoCTest is ProtocolFixture {
         vault.settle(c, rogueEvent, pass);
     }
 
-    /// Proportional locks: a native campaign that paid 1 wei locks 1 wei; partial unbond pays everything else, and
-    /// bond holdings always equal bonded + pending + deposits held.
-    function test_T04_proportionalLockAndAccounting() public {
-        address pass = _presence(0x7401);
+    /// Proportional claims: an opted-in open campaign that paid 1 wei through the bond claims 1 wei; the unbond pays
+    /// everything else, and bond holdings always equal bonded + pending + deposits held.
+    function test_T04_proportionalClaimAndAccounting() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1;
+        p.amountPerPresence = 1;
+        uint256 cid = _create(p, 1);
+        vm.prank(rogue);
+        vault.optInOpenCampaign(cid);
+        vault.settle(cid, rogueEvent, _presence(0x7401));
         vm.prank(rogue);
         bond.requestUnbond(10 ether);
-        ICampaignVault.CampaignParams memory p = _params(NATIVE);
-        p.amountPerPresence = 1;
+
         vm.startPrank(sponsor);
-        uint256 cid = vault.createCampaign{value: 1}(p, 1);
-        uint256[] memory ids = new uint256[](1);
-        ids[0] = rogueEvent;
-        vault.approveEvents(cid, ids);
-        vault.settle(cid, rogueEvent, pass);
         uint256 ch = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, cid, "");
         vm.expectRevert(IOrganizerBond.BadChallengeDeposit.selector);
         bond.challenge{value: 1}(rogue, cid, "");
@@ -203,7 +242,7 @@ contract SecondReReviewPoCTest is ProtocolFixture {
         assertEq(address(bond).balance, pendingLeft + CHALLENGE_DEPOSIT);
 
         vm.prank(owner);
-        vm.expectRevert(IOrganizerBond.SlashExceedsLock.selector);
+        vm.expectRevert(IOrganizerBond.SlashExceedsClaim.selector);
         bond.resolve(ch, 2, sponsor);
         vm.prank(owner);
         bond.resolve(ch, 1, sponsor);

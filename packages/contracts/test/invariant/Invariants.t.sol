@@ -106,8 +106,20 @@ contract InvariantsTest is Test {
         bondCode = address(bond).codehash;
         stampCode = address(stamp).codehash;
 
-        bytes4[] memory selectors = new bytes4[](22);
+        bytes4[] memory selectors = new bytes4[](34);
+        selectors[30] = ShowmarkHandler.settleBonded.selector;
+        selectors[31] = ShowmarkHandler.settleBonded.selector;
+        selectors[32] = ShowmarkHandler.challengeOrg.selector;
+        selectors[33] = ShowmarkHandler.challengeOrg.selector;
+        selectors[27] = ShowmarkHandler.releaseOrgExposure.selector;
+        selectors[28] = ShowmarkHandler.bondOrganizer.selector;
+        selectors[29] = ShowmarkHandler.settleBonded.selector;
+        selectors[25] = ShowmarkHandler.settleBonded.selector;
+        selectors[26] = ShowmarkHandler.challengeOrg.selector;
         selectors[21] = ShowmarkHandler.optIn.selector;
+        selectors[22] = ShowmarkHandler.challengeOrg.selector;
+        selectors[23] = ShowmarkHandler.resolveChallenge.selector;
+        selectors[24] = ShowmarkHandler.unbondOrg.selector;
         selectors[20] = ShowmarkHandler.warpPastGrace.selector;
         selectors[0] = ShowmarkHandler.checkIn.selector;
         selectors[1] = ShowmarkHandler.checkIn.selector; // weighted: check-ins and settlement are the hot paths
@@ -240,9 +252,19 @@ contract InvariantsTest is Test {
     }
 
     /// Bond holdings stay equal to bonded plus pending.
-    function invariant_bondAccounting() public view {
-        (uint256 pending,) = bond.pendingUnbond(handler.org());
-        assertEq(address(bond).balance, bond.bondOf(handler.org()) + pending);
+    /// Bond holdings equal stake plus every deposit posted, open claims match the ghost sum, the unbond lock is
+    /// min(stake, sum of open claims), and no completed unbond ever paid out stake those claims needed.
+    function invariant_bondClaims() public view {
+        address org = handler.org();
+        (uint256 pending,) = bond.pendingUnbond(org);
+        uint256 stake = bond.bondOf(org) + pending;
+        assertEq(address(bond).balance, stake + handler.ghostDeposits(), "bond holdings");
+        assertEq(bond.claimedOf(org), handler.ghostOpenClaims(), "open claims");
+        uint256 claims = handler.ghostOpenClaims();
+        assertEq(bond.lockedOf(org), claims < stake ? claims : stake, "locked == min(stake, open claims)");
+        assertEq(bond.openChallenges(org), handler.openChallengeCount());
+        assertFalse(handler.overUnbond(), "unbond paid out claimed stake");
+        assertFalse(handler.releasedWhileChallenged(), "exposure released while its challenge was open");
     }
 
     /// Adds this run's activity to running totals kept in process env vars (test-only instrumentation) and logs
@@ -257,6 +279,12 @@ contract InvariantsTest is Test {
         line = _acc(line, "withdrawals", handler.withdrawals());
         line = _acc(line, "refunds", handler.refunds());
         line = _acc(line, "exitsWhilePaused", handler.pausedExits());
+        line = _acc(line, "optIns", handler.optIns());
+        line = _acc(line, "bondedPayouts", handler.bondedPayouts());
+        line = _acc(line, "challenges", handler.challengesFiled());
+        line = _acc(line, "releases", handler.releases());
+        line = _acc(line, "resolutions", handler.challengesResolved());
+        line = _acc(line, "unbonds", handler.unbondsCompleted());
         console2.log(line);
     }
 

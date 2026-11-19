@@ -333,6 +333,13 @@ interface ICampaignVault {
     /// @return The cumulative gross paid, in the campaign's token.
     function paidForOrganizer(uint256 campaignId, address organizer) external view returns (uint256);
 
+    /// @notice Gross a campaign paid at an organizer's events through the organizer's bond (open-to-bonded
+    /// eligibility), not yet released. OrganizerBond uses it as the size of a challenge's claim.
+    /// @param campaignId The campaign.
+    /// @param organizer The organizer.
+    /// @return The exposure, in native wei.
+    function exposureOf(uint256 campaignId, address organizer) external view returns (uint256);
+
     /// @notice Sum of campaign balances plus claimables for a token.
     /// @param token The token, address(0) for native QIE.
     /// @return The total owed by the vault in that token.

@@ -83,6 +83,19 @@ contract ShowmarkHandler is Test {
     uint256 public withdrawals;
     uint256 public pausedExits;
     uint256 public refunds;
+    uint256 public challengesFiled;
+    uint256 public bondedPayouts;
+    uint256 public releases;
+    bool public releasedWhileChallenged;
+    uint256 public optIns;
+    uint256 public challengesResolved;
+    uint256 public unbondsCompleted;
+
+    // bond ghosts: open claims and every deposit ever posted (none are claimed in the run)
+    uint256[] internal openChallengeIds;
+    uint256 public ghostOpenClaims;
+    uint256 public ghostDeposits;
+    bool public overUnbond;
 
     constructor(Deployment memory d, uint256[] memory events_) {
         registry = d.registry;
@@ -118,6 +131,11 @@ contract ShowmarkHandler is Test {
 
         vm.prank(sponsor);
         qusdc.approve(address(vault), type(uint256).max);
+
+        // the organizer starts bonded so open campaigns can pay through its bond from the first call
+        vm.deal(org, 5 ether);
+        vm.prank(org);
+        bond.bond{value: 5 ether}();
     }
 
     // ================================================================== registry actions
@@ -241,7 +259,13 @@ contract ShowmarkHandler is Test {
         p.maxPerEvent = uint32((h >> 80) % 4);
         p.maxTotal = uint32((h >> 96) % 6);
         p.openToBonded = p.token == NATIVE && (h >> 112) % 3 == 0; // a QIE bond only backs native payouts
-        p.minBond = p.openToBonded ? uint128(bound(h >> 128, 1, 3 ether)) : 0;
+        p.minBond = p.openToBonded ? uint128(bound(h >> 128, 1, 1 ether)) : 0;
+        if (p.openToBonded) {
+            p.startsAt = 1; // covers every presence recorded so far, so bonded payouts are reachable
+            if (p.pricing == ICampaignVault.Pricing.Token) {
+                p.amountPerPresence = uint128(bound(p.amountPerPresence, 1, 0.5 ether)); // fits inside the bond
+            }
+        }
         p.metadata = "{}";
         uint256 dep = p.token == NATIVE ? bound(deposit, 0, 40 ether) : bound(deposit, 0, 400e6);
 
@@ -258,7 +282,15 @@ contract ShowmarkHandler is Test {
             id = vault.createCampaign{value: p.token == NATIVE ? dep : 0}(p, dep);
         }
         campaignIds.push(id);
-        if ((h >> 200) % 3 != 0) _asSponsor(id, abi.encodeCall(CampaignVault.approveEvents, (id, eventIds)));
+        // open campaigns pay through the bond, so they are left unapproved and usually accepted by the organizer
+        if (!p.openToBonded && (h >> 200) % 3 != 0) {
+            _asSponsor(id, abi.encodeCall(CampaignVault.approveEvents, (id, eventIds)));
+        }
+        if (p.openToBonded && (h >> 210) % 3 != 0) {
+            vm.prank(org);
+            vault.optInOpenCampaign(id);
+            optIns += 1;
+        }
     }
 
     function topUp(uint256 campaignSeed, uint96 amount) external {
@@ -302,6 +334,7 @@ contract ShowmarkHandler is Test {
         ICampaignVault.Campaign memory c = vault.campaign(id);
         (bool fresh, uint256 expectedUsdGross) = _oracleModel(c.amountPerPresence);
         uint256 feeBefore = vault.claimable(c.token, feeRecipient);
+        uint256 exposureBefore = vault.bondedExposure(org);
 
         bool ok;
         vm.prank(relayer);
@@ -321,6 +354,7 @@ contract ShowmarkHandler is Test {
         if (!ok) return;
 
         settlements += 1;
+        if (vault.bondedExposure(org) > exposureBefore) bondedPayouts += 1;
         uint256 gross = c.balance - vault.campaign(id).balance;
         if (c.pricing == ICampaignVault.Pricing.UsdInNative) {
             if (!fresh) stalePriceSettled = true;
@@ -413,6 +447,7 @@ contract ShowmarkHandler is Test {
         bytes memory call = leave
             ? abi.encodeCall(CampaignVault.optOutOpenCampaign, (id))
             : abi.encodeCall(CampaignVault.optInOpenCampaign, (id));
+        if (!leave) optIns += 1;
         if (viaAttacker) {
             attacker.exec(address(vault), call);
         } else {
@@ -420,6 +455,119 @@ contract ShowmarkHandler is Test {
             (bool ok,) = address(vault).call(call);
             require(ok, "opt-in");
         }
+    }
+
+    /// A campaign's sponsor challenges the organizer for what the bond backed in that campaign.
+    function challengeOrg(uint256 campaignSeed) external {
+        uint256 n = campaignIds.length;
+        uint256 id;
+        uint256 claim;
+        for (uint256 k; k < n && claim == 0; ++k) {
+            id = campaignIds[(campaignSeed % n + k) % n];
+            if (!bond.hasOpenChallenge(id, org)) claim = vault.exposureOf(id, org);
+        }
+        if (claim == 0) return;
+        ICampaignVault.Campaign memory c = vault.campaign(id);
+        uint256 deposit = bond.challengeDeposit();
+        bytes memory call = abi.encodeCall(OrganizerBond.challenge, (org, id, "handler"));
+        bytes memory ret;
+        if (c.sponsor == address(attacker)) {
+            vm.deal(address(this), address(this).balance + deposit);
+            ret = attacker.exec{value: deposit}(address(bond), call);
+        } else {
+            vm.deal(c.sponsor, c.sponsor.balance + deposit);
+            vm.prank(c.sponsor);
+            bool ok;
+            (ok, ret) = address(bond).call{value: deposit}(call);
+            require(ok, "challenge");
+        }
+        openChallengeIds.push(abi.decode(ret, (uint256)));
+        ghostOpenClaims += claim;
+        ghostDeposits += deposit;
+        challengesFiled += 1;
+    }
+
+    /// Pays a presence at one of the organizer's events through the bond, from the newest accepted open campaign.
+    function settleBonded(uint256 recordSeed) external {
+        if (records.length == 0 || vault.paused()) return;
+        uint256 id;
+        for (uint256 k = campaignIds.length; k > 0; --k) {
+            uint256 cand = campaignIds[k - 1];
+            if (vault.optedIn(cand, org)) {
+                id = cand;
+                break;
+            }
+        }
+        if (id == 0) return;
+        for (uint256 k; k < records.length; ++k) {
+            IShowmarkRegistry.CheckInData storage r = records[(recordSeed % records.length + k) % records.length];
+            if (registry.eventInfo(r.eventId).organizer != org || vault.isSettled(id, r.eventId, r.attendee)) continue;
+            uint256 before = vault.bondedExposure(org);
+            ICampaignVault.SettleItem[] memory items = new ICampaignVault.SettleItem[](1);
+            items[0] = ICampaignVault.SettleItem(id, r.eventId, r.attendee);
+            if (vault.settleBatch(items)[0] == 0) {
+                settlements += 1;
+                if (vault.bondedExposure(org) > before) bondedPayouts += 1;
+            }
+            return;
+        }
+    }
+
+    /// Anyone releases a finished campaign's exposure; it must never succeed while that campaign's challenge is open.
+    function releaseOrgExposure(uint256 campaignSeed) external {
+        uint256 n = campaignIds.length;
+        for (uint256 k; k < n; ++k) {
+            uint256 id = campaignIds[(campaignSeed % n + k) % n];
+            if (vault.exposureOf(id, org) == 0) continue;
+            bool open = bond.hasOpenChallenge(id, org);
+            try vault.releaseExposure(id, org) {
+                if (open) releasedWhileChallenged = true;
+                releases += 1;
+            } catch {}
+            return;
+        }
+    }
+
+    /// The Safe resolves an open challenge with any slash it is allowed: at most min(claim, current stake).
+    function resolveChallenge(uint256 seed, uint256 slashSeed) external {
+        if (openChallengeIds.length == 0) return;
+        uint256 k = seed % openChallengeIds.length;
+        uint256 id = openChallengeIds[k];
+        uint256 claim = bond.challengeOf(id).claim;
+        (uint256 pending,) = bond.pendingUnbond(org);
+        uint256 stake = bond.bondOf(org) + pending;
+        uint256 slash = bound(slashSeed, 0, Math.min(claim, stake));
+        vm.prank(owner);
+        bond.resolve(id, slash, slash == 0 ? address(0) : address(0x51A5));
+        openChallengeIds[k] = openChallengeIds[openChallengeIds.length - 1];
+        openChallengeIds.pop();
+        ghostOpenClaims -= claim;
+        challengesResolved += 1;
+    }
+
+    /// The organizer starts or completes an unbond; a completed unbond may never pay out stake open claims need.
+    function unbondOrg(uint256 amountSeed, bool complete) external {
+        uint256 bonded = bond.bondOf(org);
+        (uint256 pending, uint64 availableAt) = bond.pendingUnbond(org);
+        if (!complete) {
+            if (bonded == 0) return;
+            vm.prank(org);
+            bond.requestUnbond(bound(amountSeed, 1, bonded));
+            return;
+        }
+        if (pending == 0 || block.timestamp < availableAt) return;
+        uint256 stake = bonded + pending;
+        uint256 free = stake - Math.min(stake, ghostOpenClaims);
+        uint256 before = org.balance;
+        vm.prank(org);
+        try bond.completeUnbond() {
+            unbondsCompleted += 1;
+            if (org.balance - before > free) overUnbond = true;
+        } catch {}
+    }
+
+    function openChallengeCount() external view returns (uint256) {
+        return openChallengeIds.length;
     }
 
     function bondOrganizer(uint96 amount) external {

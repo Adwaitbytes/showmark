@@ -75,9 +75,9 @@ contract ReReviewPoCTest is ProtocolFixture {
 
     // ------------------------------------------------------------------ N-02 (fixed: proportional lock, deposit)
 
-    /// One-wei campaigns can still challenge, but each locks one wei, costs a deposit, and the organizer collects
-    /// every deposit when the Safe dismisses them. The unbond is no longer frozen.
-    function test_N02_oneWeiChallengesLockDustAndPayTheOrganizer() public {
+    /// One-wei campaigns that only approved the organizer's event have no claim on its bond, so the spam is refused
+    /// outright and the unbond completes in full (claims replaced locks in the second re-review).
+    function test_N02_oneWeiApprovedCampaignsCannotChallenge() public {
         _bondOrganizer(1 ether);
         vm.prank(organizer);
         bond.requestUnbond(1 ether);
@@ -89,30 +89,23 @@ contract ReReviewPoCTest is ProtocolFixture {
         p.amountPerPresence = 1;
         uint256[] memory ids = new uint256[](1);
         ids[0] = eventId;
-        uint256[] memory challenges = new uint256[](10);
         for (uint256 i; i < 10; ++i) {
             vm.startPrank(griefer);
             uint256 cid = vault.createCampaign{value: 1}(p, 1);
             vault.approveEvents(cid, ids);
             vault.settle(cid, eventId, attendee);
-            challenges[i] = bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, cid, "");
+            vm.expectRevert(IOrganizerBond.NoBondClaim.selector);
+            bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, cid, "");
             vm.stopPrank();
         }
-        assertEq(bond.openChallenges(organizer), 10);
-        assertEq(bond.lockedOf(organizer), 10, "ten wei locked in total");
+        assertEq(bond.openChallenges(organizer), 0);
+        assertEq(bond.lockedOf(organizer), 0);
 
         vm.warp(block.timestamp + 7 days);
         uint256 before = organizer.balance;
         vm.prank(organizer);
         bond.completeUnbond();
-        assertEq(organizer.balance - before, 1 ether - 10, "the organizer exits with everything but the dust");
-
-        vm.startPrank(owner);
-        for (uint256 i; i < 10; ++i) {
-            bond.resolve(challenges[i], 0, address(0));
-        }
-        vm.stopPrank();
-        assertEq(bond.depositOwed(organizer), 10 * CHALLENGE_DEPOSIT, "the griefer paid the organizer");
+        assertEq(organizer.balance - before, 1 ether, "the organizer exits with its whole stake");
     }
 
     // ------------------------------------------------------------------ S-*: attacks on the ticket design that fail

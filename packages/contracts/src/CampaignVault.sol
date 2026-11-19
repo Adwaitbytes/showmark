@@ -78,7 +78,7 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
     /// campaigns the organizer accepted and not yet released. It may never exceed the organizer's current bond, so
     /// one stake cannot back unbounded payouts (audit M-02). Payouts for explicitly approved events are not counted.
     mapping(address organizer => uint256) public bondedExposure;
-    /// @notice The part of `bondedExposure[organizer]` that one campaign contributed.
+    /// @inheritdoc ICampaignVault
     mapping(uint256 campaignId => mapping(address organizer => uint256)) public exposureOf;
     /// @notice Whether the organizer accepted the open-to-bonded campaign (re-review N-01).
     mapping(uint256 campaignId => mapping(address organizer => bool)) public optedIn;
