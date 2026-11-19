@@ -15,9 +15,10 @@ import { log } from "../log";
 export const nameRegistryAbi = parseAbi([
   "function userDomain(address owner) view returns (string)",
   "function resolver(string fqn) view returns (uint256 tokenId, address owner)",
+  "function ownerOfName(string label) view returns (address)",
 ]);
 
-const LABEL = /^[a-z0-9][a-z0-9_-]{1,62}$/;
+const LABEL = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 const CACHE_MS = 10 * 60_000;
 
 export interface QieName {
@@ -58,15 +59,23 @@ function deps(partial?: Partial<NameDeps>): NameDeps {
 }
 
 /** Owner of `fqn` in one registry, or null when the registry has no such name (or no such function). */
-async function resolveIn(ctx: ChainContext, registry: Address, fqn: string): Promise<Address | null> {
+async function resolveIn(ctx: ChainContext, registry: Address, name: QieName): Promise<Address | null> {
   if (registry === zeroAddress) return null;
+  let owner: Address;
   try {
-    const [, owner] = await ctx.client.readContract({ address: registry, abi: nameRegistryAbi, functionName: "resolver", args: [fqn] });
-    return owner === zeroAddress ? null : getAddress(owner);
+    [, owner] = await ctx.client.readContract({ address: registry, abi: nameRegistryAbi, functionName: "resolver", args: [name.fqn] });
   } catch (error) {
-    if (isRevert(error)) return null;
-    throw upstream(error);
+    if (!isRevert(error)) throw upstream(error);
+    // The testnet stand-in registry has `ownerOfName(label)` instead of `resolver(fqn)`.
+    if (name.parent !== "qie") return null;
+    try {
+      owner = await ctx.client.readContract({ address: registry, abi: nameRegistryAbi, functionName: "ownerOfName", args: [name.label] });
+    } catch (fallbackError) {
+      if (isRevert(fallbackError)) return null;
+      throw upstream(fallbackError);
+    }
   }
+  return owner === zeroAddress ? null : getAddress(owner);
 }
 
 async function userDomain(ctx: ChainContext, address: Address): Promise<string> {
@@ -87,7 +96,7 @@ export async function addressOf(input: string, partial?: Partial<NameDeps>): Pro
   const key = `qie:addr:${ctx.chainId}:${name.fqn}`;
   const cached = await kv.get(key);
   if (cached !== null) return cached === "" ? null : getAddress(cached);
-  const owner = (await resolveIn(ctx, ctx.nameRegistry, name.fqn)) ?? (await resolveIn(ctx, ctx.paidNameRegistry, name.fqn));
+  const owner = (await resolveIn(ctx, ctx.nameRegistry, name)) ?? (await resolveIn(ctx, ctx.paidNameRegistry, name));
   await kv.set(key, owner ?? "", { px: CACHE_MS });
   return owner;
 }
@@ -103,7 +112,7 @@ export async function nameOf(address: Address, partial?: Partial<NameDeps>): Pro
   let verified: string | null = null;
   const name = normalizeName(await userDomain(ctx, address));
   if (name) {
-    const owner = await resolveIn(ctx, ctx.nameRegistry, name.fqn);
+    const owner = await resolveIn(ctx, ctx.nameRegistry, name);
     if (owner && isAddressEqual(owner, address)) verified = name.fqn;
     else log.info("qie.name_mismatch", { address, candidate: name.fqn });
   }
