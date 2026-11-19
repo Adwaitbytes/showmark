@@ -57,13 +57,16 @@ Higher value is stronger. A campaign's `minProofMode` decides which presences it
 ### 2.2 EIP-712 types (verifyingContract = ShowmarkRegistry)
 
 ```
-CheckIn(uint256 eventId,address attendee)                       signed by the attendee pass key
-DoorPass(uint256 eventId,uint64 issuedAt)                        signed by an authorized door key (mode 1)
+CheckIn(uint256 eventId,address attendee,uint8 mode)            signed by the attendee pass key (mode is bound, audit M-01)
+DoorPass(uint256 eventId,uint64 issuedAt,address ticket)         signed by an authorized door key (mode 1)
+Ticket(uint256 eventId,address attendee)                         signed by the ephemeral ticket key shown only inside the QR (mode 1)
 DoorAttest(uint256 eventId,address attendee,uint64 attestedAt)   signed by an authorized door key (mode 2)
 LinkWallet(address pass,address wallet,uint64 deadline)          signed by BOTH the pass key and the wallet (wallet may be ERC-1271)
 ```
 
 Replay: domain separator binds chain and contract; `eventId` binds the event; one presence per (event, attendee) makes a replayed CheckIn a no-op rejection.
+
+Ticket keys (audit C-01): every 15 s rotation the door screen generates a fresh throwaway key, signs its address inside `DoorPass`, and puts the ticket private key in the QR. A mode 1 check-in must carry a `Ticket` signature from that key over the specific attendee. Calldata only ever shows signatures, never the ticket private key, so a door pass read from the chain cannot admit anyone else. Seeing the QR is required, which leaves screen streaming as the documented residual risk.
 
 ### 2.3 ShowmarkRegistry
 
@@ -98,8 +101,10 @@ struct CheckInData {
   address attendee;
   uint8 mode;            // 1 or 2
   uint64 doorTime;       // issuedAt (mode 1) or attestedAt (mode 2)
-  bytes attendeeSig;     // CheckIn
+  address ticket;        // mode 1: ticket key address signed in DoorPass; mode 2: address(0)
+  bytes attendeeSig;     // CheckIn(eventId, attendee, mode)
   bytes doorSig;         // DoorPass or DoorAttest
+  bytes ticketSig;       // mode 1: Ticket(eventId, attendee) by the ticket key; mode 2: empty
 }
 
 // views
@@ -324,7 +329,7 @@ Plain words, sentence case, specific numbers. No em or en dashes, no emoji, no e
 
 ## 8. QR payloads (`apps/web/src/lib/qr/payload.ts`, mirrored by the SDK)
 
-- Door pass (mode 1): `{origin}/c/{eventId}.{issuedAt}.{doorSig base64url}`. Any phone camera opens it straight into the attendee app at `/c/[token]`. The door screen re-signs every 15 seconds.
+- Door pass (mode 1): `{origin}/c/{eventId}.{issuedAt}.{doorSig base64url}.{ticketKey base64url}` (ticketKey is the 32 byte ephemeral private key; its address is derived, not transmitted). Any phone camera opens it straight into the attendee app at `/c/[token]`. The door screen re-signs every 15 seconds.
 - Attendee code (mode 2): `SM2.{eventId}.{attendee}.{attendeeSig base64url}`, shown in the attendee app and scanned by the door app.
 - Signatures are 65 bytes. Decoders return null on any malformed input and never throw.
 

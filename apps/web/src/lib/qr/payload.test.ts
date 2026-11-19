@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest";
 import { decodeAttendeeCode, decodeDoorPass, doorPassUrl, encodeAttendeeCode, encodeDoorPass } from "./payload";
 
 const sig = `0x${"ab".repeat(64)}1b` as const;
+const ticketKey = `0x${"5c".repeat(32)}` as const;
 
 describe("door pass codec", () => {
   it("round-trips through the bare token and the full URL", () => {
-    const p = { eventId: 42n, issuedAt: 1795073006n, doorSig: sig };
+    const p = { eventId: 42n, issuedAt: 1795073006n, doorSig: sig, ticketKey };
     expect(decodeDoorPass(encodeDoorPass(p))).toEqual(p);
     expect(decodeDoorPass(doorPassUrl("https://showmark.example/", p))).toEqual(p);
   });
 
   it("rejects malformed input instead of throwing", () => {
-    for (const bad of ["", "1.2", "x.2.abc", "1.2.!!!", `1.2.${"A".repeat(10)}`, "https://x/c/1.2"]) {
+    for (const bad of ["", "1.2", "x.2.abc", "1.2.!!!", `1.2.${"A".repeat(10)}`, "https://x/c/1.2", `1.2.${"q".repeat(87)}`, `1.2.${"q".repeat(87)}.${"A".repeat(43)}`]) {
       expect(decodeDoorPass(bad)).toBeNull();
     }
   });
