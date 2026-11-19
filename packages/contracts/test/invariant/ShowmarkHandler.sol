@@ -566,6 +566,15 @@ contract ShowmarkHandler is Test {
         } catch {}
     }
 
+    /// Anyone raises an open claim to the campaign's live exposure.
+    function refreshOrgClaim(uint256 seed) external {
+        if (openChallengeIds.length == 0) return;
+        uint256 id = openChallengeIds[seed % openChallengeIds.length];
+        uint256 before = bond.challengeOf(id).claim;
+        bond.refreshClaim(id);
+        ghostOpenClaims += bond.challengeOf(id).claim - before;
+    }
+
     function openChallengeCount() external view returns (uint256) {
         return openChallengeIds.length;
     }

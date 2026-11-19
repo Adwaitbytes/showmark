@@ -60,6 +60,12 @@ interface IOrganizerBond {
     /// @param deposit Deposit paid by the challenger.
     event ClaimFiled(uint256 indexed challengeId, address indexed organizer, uint256 claim, uint256 deposit);
 
+    /// @notice Emitted when an open claim is raised to the campaign's current bonded exposure.
+    /// @param challengeId The challenge.
+    /// @param organizer The challenged organizer.
+    /// @param claim The claim after the raise.
+    event ClaimRefreshed(uint256 indexed challengeId, address indexed organizer, uint256 claim);
+
     /// @notice Emitted at resolution: who the challenge deposit is owed to.
     /// @param challengeId The challenge.
     /// @param to The challenger after a slash, the organizer after a dismissal.
@@ -130,7 +136,14 @@ interface IOrganizerBond {
         payable
         returns (uint256 challengeId);
 
-    /// @notice Closes a challenge and slashes the organizer. Arbitrator (owner) only.
+    /// @notice Raises an open challenge's claim to the campaign's current `vault.exposureOf`; never lowers it. Anyone
+    /// may call. Exposure can only grow while the challenge is open (release is blocked), so the claim keeps up with
+    /// payouts made after the challenge was filed (re-review N3-01).
+    /// @param challengeId An open challenge.
+    function refreshClaim(uint256 challengeId) external;
+
+    /// @notice Closes a challenge and slashes the organizer. Arbitrator (owner) only. Refreshes the claim first, so
+    /// the slash limit uses the live exposure.
     /// @param challengeId The challenge.
     /// @param slashAmount Amount to slash from bonded, then pending unbond, at most min(claim, current stake); 0
     /// dismisses the challenge and forfeits the deposit to the organizer. Other open claims keep their hold.

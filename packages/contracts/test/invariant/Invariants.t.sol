@@ -106,7 +106,8 @@ contract InvariantsTest is Test {
         bondCode = address(bond).codehash;
         stampCode = address(stamp).codehash;
 
-        bytes4[] memory selectors = new bytes4[](34);
+        bytes4[] memory selectors = new bytes4[](35);
+        selectors[34] = ShowmarkHandler.refreshOrgClaim.selector;
         selectors[30] = ShowmarkHandler.settleBonded.selector;
         selectors[31] = ShowmarkHandler.settleBonded.selector;
         selectors[32] = ShowmarkHandler.challengeOrg.selector;

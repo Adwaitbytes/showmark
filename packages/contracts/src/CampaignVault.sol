@@ -29,6 +29,9 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
     uint16 public constant MAX_FEE_BPS = 500;
     /// @notice Settlement stays open, and refund stays closed, until endsAt + SETTLE_GRACE.
     uint256 public constant SETTLE_GRACE = 3 days;
+    /// @notice Time after the settlement grace period during which a sponsor can still challenge before anyone may
+    /// release the campaign's bonded exposure (re-review N3-02).
+    uint256 public constant REVIEW_PERIOD = 7 days;
     /// @notice Largest campaign metadata accepted, in bytes.
     uint256 public constant MAX_METADATA_BYTES = 2048;
 
@@ -227,7 +230,7 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
     /// @inheritdoc ICampaignVault
     function releaseExposure(uint256 campaignId, address organizer) external {
         Campaign storage c = _existing(campaignId);
-        if (block.timestamp <= uint256(c.endsAt) + SETTLE_GRACE || bond.hasOpenChallenge(campaignId, organizer)) {
+        if (block.timestamp <= _challengeDeadline(c) || bond.hasOpenChallenge(campaignId, organizer)) {
             revert ReleaseNotAvailable();
         }
         uint256 amount = exposureOf[campaignId][organizer];
@@ -322,6 +325,11 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
     /// @inheritdoc ICampaignVault
     function quote(uint256 campaignId) external view returns (uint256 amountInToken, bool priceFresh) {
         (priceFresh, amountInToken,) = _quote(_existing(campaignId));
+    }
+
+    /// @inheritdoc ICampaignVault
+    function challengeDeadline(uint256 campaignId) external view returns (uint256) {
+        return _challengeDeadline(_existing(campaignId));
     }
 
     /// @inheritdoc ICampaignVault
@@ -507,6 +515,10 @@ contract CampaignVault is ICampaignVault, Ownable2StepNoRenounce, Pausable, Reen
         feeBps = bps;
         feeRecipient = recipient;
         emit FeeChanged(bps, recipient);
+    }
+
+    function _challengeDeadline(Campaign storage c) private view returns (uint256) {
+        return uint256(c.endsAt) + SETTLE_GRACE + REVIEW_PERIOD;
     }
 
     function _existing(uint256 campaignId) private view returns (Campaign storage c) {

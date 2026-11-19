@@ -197,7 +197,7 @@ interface ICampaignVault {
     error WithdrawNotAllowed();
     /// @notice The campaign is not open to bonded organizers.
     error NotOpenCampaign();
-    /// @notice Exposure can be released only after endsAt + SETTLE_GRACE, with no open challenge for the pair.
+    /// @notice Exposure can be released only after challengeDeadline, with no open challenge for the pair.
     error ReleaseNotAvailable();
     /// @notice The campaign holds no exposure for this organizer.
     error NothingToRelease();
@@ -285,11 +285,17 @@ interface ICampaignVault {
     function optOutOpenCampaign(uint256 campaignId) external;
 
     /// @notice Releases a finished campaign's contribution to the organizer's bonded exposure. Anyone may call once
-    /// the campaign can no longer pay (now > endsAt + SETTLE_GRACE) and its sponsor has no open challenge against the
-    /// organizer.
+    /// the campaign's review period has passed (now > endsAt + SETTLE_GRACE + REVIEW_PERIOD, see challengeDeadline)
+    /// and its sponsor has no open challenge against the organizer.
     /// @param campaignId The campaign.
     /// @param organizer The organizer.
     function releaseExposure(uint256 campaignId, address organizer) external;
+
+    /// @notice Last moment a sponsor can count on challenging an organizer over this campaign: after it, anyone may
+    /// release the campaign's bonded exposure, which leaves nothing to claim. endsAt + SETTLE_GRACE + REVIEW_PERIOD.
+    /// @param campaignId The campaign.
+    /// @return The deadline, unix seconds.
+    function challengeDeadline(uint256 campaignId) external view returns (uint256);
 
     /// @notice Sets the protocol fee for campaigns created from now on. Owner only.
     /// @param bps Fee in basis points, at most MAX_FEE_BPS.

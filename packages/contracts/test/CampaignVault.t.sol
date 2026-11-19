@@ -908,7 +908,14 @@ contract CampaignVaultTest is ProtocolFixture {
         vm.deal(sponsor, sponsor.balance + CHALLENGE_DEPOSIT);
         vm.prank(sponsor);
         uint256 cid = bond.challenge{value: CHALLENGE_DEPOSIT}(organizer, id, "check");
-        vm.warp(uint256(p.endsAt) + vault.SETTLE_GRACE() + 1);
+        // grace is over, but the sponsor's review period is not (re-review N3-02)
+        uint256 deadline = vault.challengeDeadline(id);
+        assertEq(deadline, uint256(p.endsAt) + vault.SETTLE_GRACE() + vault.REVIEW_PERIOD());
+        assertEq(vault.REVIEW_PERIOD(), 7 days);
+        vm.warp(deadline);
+        vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
+        vault.releaseExposure(id, organizer);
+        vm.warp(deadline + 1);
         vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
         vault.releaseExposure(id, organizer);
 
@@ -953,6 +960,30 @@ contract CampaignVaultTest is ProtocolFixture {
         _checkInNow(eventId, 0xA3);
         vm.expectRevert(ICampaignVault.EventNotEligible.selector);
         vault.settle(id, eventId, vm.addr(0xA3));
+    }
+
+    function test_challengeDeadline_unknownCampaign() public {
+        vm.expectRevert(ICampaignVault.UnknownCampaign.selector);
+        vault.challengeDeadline(42);
+    }
+
+    function test_releaseExposure_onlyAfterTheReviewPeriod() public {
+        ICampaignVault.CampaignParams memory p = _params(NATIVE);
+        p.openToBonded = true;
+        p.minBond = 1;
+        uint256 id = _create(p, 5 ether);
+        _bondOrganizer(2 ether);
+        _optIn(id);
+        _checkInNow(eventId, 0xA1);
+        vault.settle(id, eventId, vm.addr(0xA1));
+
+        vm.warp(uint256(p.endsAt) + vault.SETTLE_GRACE() + 1);
+        vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
+        vault.releaseExposure(id, organizer);
+
+        vm.warp(vault.challengeDeadline(id) + 1);
+        vault.releaseExposure(id, organizer);
+        assertEq(vault.exposureOf(id, organizer), 0);
     }
 
     function test_openToBondedIsNativeOnly() public {

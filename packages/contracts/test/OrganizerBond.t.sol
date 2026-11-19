@@ -269,6 +269,52 @@ contract OrganizerBondTest is Test {
         assertEq(address(bondC).balance, 2 * DEPOSIT);
     }
 
+    // ---------------------------------------------------------------- claim refresh (re-review N3-01)
+
+    function test_refreshClaim_raisesToLiveExposureOnly() public {
+        _bond(10 ether);
+        uint256 id = _challenge(CAMPAIGN); // claim 1 QIE
+        vault.setExposure(CAMPAIGN, organizer, 7 ether); // the campaign kept paying through the bond
+
+        vm.expectEmit(address(bondC));
+        emit IOrganizerBond.ClaimRefreshed(id, organizer, 7 ether);
+        vm.prank(makeAddr("anyone"));
+        bondC.refreshClaim(id);
+        assertEq(bondC.challengeOf(id).claim, 7 ether);
+        assertEq(bondC.claimedOf(organizer), 7 ether);
+        assertEq(bondC.lockedOf(organizer), 7 ether);
+
+        // never lowers, and a no-op emits nothing
+        vault.setExposure(CAMPAIGN, organizer, 2 ether);
+        vm.recordLogs();
+        bondC.refreshClaim(id);
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertEq(bondC.challengeOf(id).claim, 7 ether);
+        assertEq(bondC.claimedOf(organizer), 7 ether);
+    }
+
+    function test_refreshClaim_onlyOpenChallenges() public {
+        vm.expectRevert(IOrganizerBond.ChallengeNotOpen.selector);
+        bondC.refreshClaim(99);
+        _bond(1 ether);
+        uint256 id = _challenge(CAMPAIGN);
+        vm.prank(arbitrator);
+        bondC.resolve(id, 0, address(0));
+        vm.expectRevert(IOrganizerBond.ChallengeNotOpen.selector);
+        bondC.refreshClaim(id);
+    }
+
+    function test_resolve_usesLiveExposure() public {
+        _bond(10 ether);
+        uint256 id = _challenge(CAMPAIGN); // claim 1 QIE
+        vault.setExposure(CAMPAIGN, organizer, 6 ether);
+        vm.prank(arbitrator);
+        bondC.resolve(id, 6 ether, victim);
+        assertEq(victim.balance, 6 ether);
+        assertEq(bondC.claimedOf(organizer), 0);
+        assertEq(bondC.bondOf(organizer), 4 ether);
+    }
+
     function test_resolve_slashIsCappedByTheCurrentStake() public {
         _bond(5 ether);
         _openCampaign(CAMPAIGN, sponsor, 4 ether);

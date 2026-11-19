@@ -180,7 +180,7 @@ contract SecondReReviewPoCTest is ProtocolFixture {
         vault.settle(c, rogueEvent, _presence(0x7201));
         assertEq(vault.exposureOf(c, rogue), 1 ether);
 
-        uint256 due = uint256(vault.campaign(c).endsAt) + vault.SETTLE_GRACE();
+        uint256 due = vault.challengeDeadline(c); // endsAt + SETTLE_GRACE + REVIEW_PERIOD since N3-02
         vm.warp(due);
         vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
         vault.releaseExposure(c, rogue);

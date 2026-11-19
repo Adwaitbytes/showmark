@@ -6,8 +6,8 @@ import {ICampaignVault} from "../../src/interfaces/ICampaignVault.sol";
 import {IOrganizerBond} from "../../src/interfaces/IOrganizerBond.sol";
 import {ProtocolFixture} from "../utils/ProtocolFixture.sol";
 
-/// @notice Third re-review of the claim-based bond (docs/AUDIT.md, "Third re-review"). N3-* tests pass while the
-/// issue exists; U-* tests pin down attacks that fail.
+/// @notice Third re-review of the claim-based bond (docs/AUDIT.md, "Third re-review"). The N3-* tests began as
+/// proofs of concept and now assert each issue is fixed; U-* tests pin down attacks that fail.
 contract ThirdReReviewPoCTest is ProtocolFixture {
     address internal rogue = makeAddr("rogue");
     uint256 internal constant ROGUE_DOOR = 0xD0D0;
@@ -46,19 +46,17 @@ contract ThirdReReviewPoCTest is ProtocolFixture {
         }
     }
 
-    // ------------------------------------------------------------------ N3-01
+    // ------------------------------------------------------------------ N3-01 (fixed: claims follow live exposure)
 
-    /// The claim is a snapshot of exposureOf at filing. A sponsor who challenges at the first suspicious payout is
-    /// stuck with that small claim (a second challenge is a DuplicateChallenge) while the organizer keeps settling
-    /// presences already recorded and then unbonds everything above the snapshot.
-    function test_N3_01_claimSnapshotMissesLaterExposure() public {
+    /// A sponsor that challenges at the first suspicious payout is no longer stuck with that snapshot: anyone can
+    /// raise the open claim to the campaign's current exposure, and resolve uses the live exposure anyway.
+    function test_N3_01_earlyClaimFollowsLaterExposure() public {
         uint256 c = _openCampaignFrom(sponsor, 20 ether);
         _settleN(c, 0x5B00, 1);
         vm.prank(sponsor);
         uint256 ch = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, c, "first sybil payout");
         assertEq(bond.challengeOf(ch).claim, 1 ether);
 
-        // sponsor closes the campaign, but presences recorded before the close still settle during grace
         address[] memory queued = new address[](9);
         for (uint256 i; i < 9; ++i) {
             queued[i] = _presence(0x5C00 + i);
@@ -68,38 +66,60 @@ contract ThirdReReviewPoCTest is ProtocolFixture {
         for (uint256 i; i < 9; ++i) {
             vault.settle(c, rogueEvent, queued[i]);
         }
-        assertEq(vault.exposureOf(c, rogue), 10 ether, "exposure grew to the whole bond");
+        assertEq(vault.exposureOf(c, rogue), 10 ether);
 
-        vm.prank(sponsor);
-        vm.expectRevert(IOrganizerBond.DuplicateChallenge.selector);
-        bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, c, "the rest");
+        vm.prank(makeAddr("anyone"));
+        bond.refreshClaim(ch);
+        assertEq(bond.challengeOf(ch).claim, 10 ether);
+        assertEq(bond.lockedOf(rogue), 10 ether);
 
         vm.prank(rogue);
         bond.requestUnbond(10 ether);
         vm.warp(block.timestamp + 7 days);
-        uint256 before = rogue.balance;
         vm.prank(rogue);
+        vm.expectRevert(IOrganizerBond.ChallengeOpen.selector);
         bond.completeUnbond();
-        assertEq(rogue.balance - before, 9 ether, "9 of the 10 QIE drained leave the bond");
 
+        uint256 before = sponsor.balance;
         vm.prank(owner);
-        vm.expectRevert(IOrganizerBond.SlashExceedsClaim.selector);
-        bond.resolve(ch, 2 ether, sponsor);
+        bond.resolve(ch, 10 ether, sponsor);
+        assertEq(sponsor.balance - before, 10 ether, "the whole drained amount is slashed");
     }
 
-    // ------------------------------------------------------------------ N3-02
+    /// Even without an explicit refresh, resolve slashes against the live exposure.
+    function test_N3_01_resolveRefreshesTheClaim() public {
+        uint256 c = _openCampaignFrom(sponsor, 20 ether);
+        _settleN(c, 0x5B50, 1);
+        vm.prank(sponsor);
+        uint256 ch = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, c, "");
+        _settleN(c, 0x5B60, 4);
+        vm.prank(owner);
+        bond.resolve(ch, 5 ether, sponsor);
+        assertEq(bond.bondOf(rogue), 5 ether);
+        assertEq(bond.claimedOf(rogue), 0);
+    }
 
-    /// The sponsor's only recourse ends at endsAt + SETTLE_GRACE: from the next second anyone (the organizer) can
-    /// release the exposure, and a challenge filed after that, or front-run by the release, has no claim.
-    function test_N3_02_releaseClosesChallengeWindowAtGrace() public {
+    // ------------------------------------------------------------------ N3-02 (fixed: review period before release)
+
+    /// Release now waits REVIEW_PERIOD past grace, so a sponsor who finds the fraud on day 4 can still challenge.
+    function test_N3_02_reviewPeriodKeepsTheChallengeWindowOpen() public {
         uint256 c = _openCampaignFrom(sponsor, 20 ether);
         _settleN(c, 0x5D00, 5);
         vm.warp(uint256(vault.campaign(c).endsAt) + vault.SETTLE_GRACE() + 1);
         vm.prank(rogue);
+        vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
         vault.releaseExposure(c, rogue);
+
+        assertEq(vault.challengeDeadline(c), uint256(vault.campaign(c).endsAt) + 3 days + 7 days);
+        vm.warp(vault.challengeDeadline(c));
         vm.prank(sponsor);
-        vm.expectRevert(IOrganizerBond.NoBondClaim.selector);
-        bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, c, "found the sybils on day 4");
+        uint256 ch = bond.challenge{value: CHALLENGE_DEPOSIT}(rogue, c, "found the sybils on day 9");
+        assertEq(bond.challengeOf(ch).claim, 5 ether);
+
+        // and while it is open the exposure stays put
+        vm.warp(block.timestamp + 30 days);
+        vm.expectRevert(ICampaignVault.ReleaseNotAvailable.selector);
+        vault.releaseExposure(c, rogue);
     }
 
     // ------------------------------------------------------------------ U-*: attacks that fail

@@ -21,6 +21,8 @@ contract BondHandler is Test {
     uint256 public ghostDepositsHeld; // deposits posted and not yet claimed back out
     bool public overUnbond;
     bool public overSlash;
+    bool public badRefresh;
+    uint256 public refreshes;
     uint256 public resolutions;
     uint256 public maxOpen;
 
@@ -82,12 +84,35 @@ contract BondHandler is Test {
         if (open.length > maxOpen) maxOpen = open.length;
     }
 
+    /// The challenged campaign keeps paying through the bond (exposure can only grow while challenged).
+    function growExposure(uint256 seed, uint96 extra) external {
+        if (open.length == 0) return;
+        uint256 id = open[seed % open.length];
+        uint256 campaignId = bond.challengeOf(id).campaignId;
+        vault.setExposure(campaignId, organizer, vault.exposureOf(campaignId, organizer) + bound(extra, 1, 10 ether));
+    }
+
+    /// Anyone raises an open claim to the live exposure; the ghost follows the stored claim.
+    function refresh(uint256 seed) external {
+        if (open.length == 0) return;
+        uint256 id = open[seed % open.length];
+        uint256 before = bond.challengeOf(id).claim;
+        bond.refreshClaim(id);
+        uint256 afterRefresh = bond.challengeOf(id).claim;
+        uint256 live = vault.exposureOf(bond.challengeOf(id).campaignId, organizer);
+        if (afterRefresh != Math.max(before, live)) badRefresh = true;
+        ghostClaims += afterRefresh - before;
+        refreshes += 1;
+    }
+
     function resolve(uint256 seed, uint256 slashSeed, bool tryTooMuch) external {
         if (open.length == 0) return;
         uint256 k = seed % open.length;
         uint256 id = open[k];
-        uint256 claim = bond.challengeOf(id).claim;
-        uint256 cap = Math.min(claim, stake());
+        uint256 storedClaim = bond.challengeOf(id).claim;
+        // resolve refreshes first, so its limit uses the live exposure
+        uint256 liveClaim = Math.max(storedClaim, vault.exposureOf(bond.challengeOf(id).campaignId, organizer));
+        uint256 cap = Math.min(liveClaim, stake());
         if (tryTooMuch) {
             // the Safe can never slash beyond min(claim, current stake)
             vm.prank(arbitrator);
@@ -101,7 +126,7 @@ contract BondHandler is Test {
         bond.resolve(id, slash, slash == 0 ? address(0) : address(0x51A5));
         open[k] = open[open.length - 1];
         open.pop();
-        ghostClaims -= claim;
+        ghostClaims -= storedClaim;
         resolutions += 1;
     }
 
@@ -142,6 +167,7 @@ contract BondInvariantsTest is Test {
         assertEq(bond.openChallenges(org), handler.openCount());
         assertEq(address(bond).balance, stake + handler.ghostDepositsHeld(), "holdings");
         assertFalse(handler.overUnbond(), "unbond paid out claimed stake");
-        assertFalse(handler.overSlash(), "slash above min(claim, stake)");
+        assertFalse(handler.overSlash(), "slash above min(live claim, stake)");
+        assertFalse(handler.badRefresh(), "refresh did not set the claim to max(claim, live exposure)");
     }
 }

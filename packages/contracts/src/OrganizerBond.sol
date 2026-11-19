@@ -145,13 +145,12 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
 
     /// @inheritdoc IOrganizerBond
     function resolve(uint256 challengeId, uint256 slashAmount, address recipient) external onlyOwner nonReentrant {
-        Challenge storage c = _challenges[challengeId];
+        Challenge storage c = _openChallenge(challengeId);
         address organizer = c.organizer;
-        if (organizer == address(0) || c.resolved) revert ChallengeNotOpen();
+        uint256 claim = _refresh(challengeId, c);
 
         uint256 bonded = _bonded[organizer];
         uint256 pending = _pending[organizer].amount;
-        uint256 claim = c.claim;
         uint256 stake = bonded + pending;
         if (slashAmount > (claim < stake ? claim : stake)) revert SlashExceedsClaim();
         if (slashAmount != 0 && recipient == address(0)) revert ZeroAddress();
@@ -173,6 +172,28 @@ contract OrganizerBond is IOrganizerBond, Ownable2StepNoRenounce, ReentrancyGuar
         emit Resolved(challengeId, organizer, slashAmount, recipient);
         emit DepositAwarded(challengeId, awarded, c.deposit);
         if (slashAmount != 0) Address.sendValue(payable(recipient), slashAmount);
+    }
+
+    /// @inheritdoc IOrganizerBond
+    function refreshClaim(uint256 challengeId) external {
+        _refresh(challengeId, _openChallenge(challengeId));
+    }
+
+    /// @dev Raises the claim to the live exposure (it can only have grown: release is blocked while open).
+    function _refresh(uint256 challengeId, Challenge storage c) private returns (uint256 claim) {
+        claim = c.claim;
+        uint256 current = ICampaignVault(vault).exposureOf(c.campaignId, c.organizer);
+        if (current > claim) {
+            claimedOf[c.organizer] += current - claim;
+            c.claim = current;
+            claim = current;
+            emit ClaimRefreshed(challengeId, c.organizer, current);
+        }
+    }
+
+    function _openChallenge(uint256 challengeId) private view returns (Challenge storage c) {
+        c = _challenges[challengeId];
+        if (c.organizer == address(0) || c.resolved) revert ChallengeNotOpen();
     }
 
     /// @notice Pays the caller every challenge deposit awarded to it.
