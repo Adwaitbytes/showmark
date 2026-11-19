@@ -67,6 +67,7 @@ export const campaignSummarySchema = z.object({
   maxTotal: z.number().int().min(0),
   openToBonded: z.boolean(),
   minBond: uintString,
+  challengeDeadline: z.string().nullable(),
 }) satisfies z.ZodType<CampaignSummary>;
 
 export const settlementSchema = z.object({

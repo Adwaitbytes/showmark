@@ -159,6 +159,7 @@ export const CAMPAIGN_SUMMARY: CampaignSummary = {
   maxTotal: 0,
   openToBonded: false,
   minBond: "0",
+  challengeDeadline: null,
 };
 
 export const CAMPAIGNS: CampaignSummary[] = [
