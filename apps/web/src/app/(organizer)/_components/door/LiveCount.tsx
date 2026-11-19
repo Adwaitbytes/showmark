@@ -53,7 +53,7 @@ export function LiveCount({ value, capacity, stale, className }: Props) {
       <p
         data-testid="door-count"
         className="relative font-display leading-[0.82] tracking-[-0.03em] text-ink tabular-nums"
-        style={{ fontSize: "clamp(6rem, 26vmin, 22rem)" }}
+        style={{ fontSize: "clamp(5rem, 30vmin, 26rem)" }}
       >
         <span key={pressKey} className={cn("inline-block", pressKey > 0 && "animate-stamp-press")}>
           {formatCount(display)}
