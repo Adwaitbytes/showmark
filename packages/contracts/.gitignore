@@ -1,0 +1,4 @@
+# scratch output of test/Deploy.t.sol and local anvil runs; real testnet/mainnet files live in deployments/{chainId}.json
+deployments/test-tmp/
+deployments/anvil/
+broadcast/*/31337/
