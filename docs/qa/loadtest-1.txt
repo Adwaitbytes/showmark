@@ -1,0 +1,34 @@
+(node:23144) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/adwaitkeshari/Desktop/qie/apps/web/scripts/loadtest.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/adwaitkeshari/Desktop/qie/apps/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Load test: 500 check-ins to event 11 on chain 1983 at 1/s
+50/500 sent
+100/500 sent
+150/500 sent
+200/500 sent
+250/500 sent
+300/500 sent
+350/500 sent
+400/500 sent
+450/500 sent
+500/500 sent
+{
+  "requests": 500,
+  "succeeded": 389,
+  "failed": 111,
+  "failures": {
+    "0 TimeoutError": 81,
+    "0 TypeError": 30
+  },
+  "latencyMs": {
+    "p50": 4569,
+    "p90": 30001,
+    "p95": 30002,
+    "p99": 30003,
+    "max": 30005
+  },
+  "transactions": 133,
+  "checkInsPerTransaction": 2.92,
+  "wallSeconds": 505
+}
